@@ -1,0 +1,24 @@
+#
+# XXX: Need review.
+#
+XPASS: gcc.dg/attr-alloc_size-11.c
+XPASS: gcc.dg/tree-ssa/ssa-fre-3.c
+FAIL: gcc.dg/lto/save-temps
+FAIL: gcc.dg/pr90838.c
+FAIL: gcc.target/riscv/promote-type-for-libcall.c
+FAIL: g++.dg/contracts/contracts-tmpl-spec2.C
+FAIL: g++.dg/modules/xtreme-header-5_c.C
+#
+# We didn't define TARGET_HAVE_SPECULATION_SAFE_VALUE or
+# speculation_barrier pattern
+#
+FAIL: c-c++-common/spec-barrier-1.c
+#
+# Fix upstream (9fde76a) but no backport
+#
+FAIL: gcc.target/riscv/arch-19.c
+#
+# Fix upstream (77f3b3419d4) but no backport
+#
+UNRESOLVED: gcc.target/riscv/mcpu-6.c
+UNRESOLVED: gcc.target/riscv/mcpu-7.c
