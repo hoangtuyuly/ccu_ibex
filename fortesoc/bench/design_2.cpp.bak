@@ -1,0 +1,347 @@
+#include <verilated.h>          // Defines common routines
+#include "Vdesign_2_top.h"
+
+#include "verilated_vcd_c.h"
+#include <iostream>
+#include <string>
+#include <cstdlib>
+#include <cstdio>
+
+#include "Vdesign_2_top__Syms.h"
+Vdesign_2_top *uut;                     // Instantiation of module
+vluint64_t main_time = 0;       // Current simulation time
+
+
+double sc_time_stamp () {       // Called by $time in Verilog
+    return main_time;           // converts to double, to match
+    // what SystemC does
+}
+
+VerilatedVcdC* tfp = NULL;
+
+
+void advanceClock(int time){
+    for (int i = 0; i < time; i++)
+    {
+
+      	      uut->clk = uut->clk ? 0 : 1;       // Toggle clock
+              uut->eval();            // Evaluate model
+
+              if (tfp != NULL)
+              {
+                  tfp->dump (main_time);
+              }
+
+              main_time++;            // Time passes...
+    }
+}
+
+void saveToRam(unsigned int data, unsigned int address){
+  advanceClock(750000);
+  uut->start = 0;
+  uut->we_i = 1;
+  advanceClock(1000);
+
+  uut->address = address;
+  uut->data = data;
+  uut->start = 1;
+    while(uut->cont_2_uart_w_0_complete != 1)
+            advanceClock(10);
+
+  advanceClock(1500000);
+}
+
+unsigned int readFromRam(unsigned int address){
+  advanceClock(500000);
+  uut->start = 0;
+  uut->we_i = 0;
+  uut->address = address;
+  advanceClock(10);
+  uut->start = 1;
+  while(uut->cont_2_uart_w_0_complete != 1)
+          advanceClock(10);
+
+advanceClock(1500000);
+
+  return uut->cont_2_uart_w_0_read_data_o;
+}
+/*
+void write_instruction(unsigned int address, unsigned int inst){
+
+
+ uut->v->ram_0->dp_ram_i->writeByte ( address + 3, (inst >> 24) & 0xff);
+  printf("\n%x ", (inst >> 24) & 0xff);
+
+
+  uut->v->ram_0->dp_ram_i->writeByte ( address + 2, (inst >> 16) & 0xff );
+	 printf("%x", (inst >> 16) & 0xff);
+
+  uut->v->ram_0->dp_ram_i->writeByte ( address + 1,(inst >> 8) & 0xff );
+   printf("%x", (inst >> 8) & 0xff);
+
+	uut->v->ram_0->dp_ram_i->writeByte ( address, inst & 0xff );
+	printf("%x\n ", inst & 0xff);
+
+}
+*/
+
+int main(int argc, char** argv)
+{
+    // turn on trace or not?
+    bool vcdTrace = true;
+  //  VerilatedVcdC* tfp = NULL;
+
+    Verilated::commandArgs(argc, argv);   // Remember args
+    uut = new Vdesign_2_top;   // Create instance
+
+    uut->eval();
+
+	  uut->eval();
+
+
+	Verilated::internalsDump();
+    if (vcdTrace)
+    {
+        Verilated::traceEverOn(true);
+
+        tfp = new VerilatedVcdC;
+        uut->trace(tfp, 99);
+
+        std::string vcdname = argv[0];
+        vcdname += ".vcd";
+        std::cout << vcdname << std::endl;
+        tfp->open(vcdname.c_str());
+    }
+
+
+
+    uut->irq_id_i = 0;
+    uut->irq_i = 0;
+    uut->start_ibex = 0;
+    uut->clk = 0;
+    uut->reset = 1;
+    uut->debug_req_i = 0;
+    uut->start = 0;
+    uut->data = 0x1;
+    uut->address = 0;
+    uut->we_i = 0;
+
+  //  uut->eFPGA_operand_a_o = 0;
+  //  uut->eFPGA_operand_b_o = 0;
+    uut->eFPGA_result_a_i = 1;
+    uut->eFPGA_result_b_i = 2;
+    uut->eFPGA_result_c_i = 3;
+
+    advanceClock(10);
+    uut->reset = 0;
+    advanceClock(200000);
+
+
+    saveToRam(0x00400693, 0x80);
+    saveToRam(0x00200713, 0x84);
+    saveToRam(0x02000813, 0x88); //
+    saveToRam(0x07D7078B, 0x8c);//mul 0x02d707b3 // cus1 0x01d7078B // cus2
+    //13:12 result select
+    // 0x01d7 0[12] 7[8] 8[4] B[0]
+
+    saveToRam(0x08f82023, 0x90);
+    saveToRam(0xfedff06f, 0x94);
+//    saveToRam(0x00378793, 0x94);
+//    saveToRam(0x00D7078B, 0x98);
+//    saveToRam(0xfe5ff06f, 0x9c);
+
+
+readFromRam(0x80);
+printf("---test read %#X\n" , uut->cont_2_uart_w_0_read_data_o);
+
+
+readFromRam(0x84);
+printf("---test read %#X\n" , uut->cont_2_uart_w_0_read_data_o);
+
+
+
+readFromRam(0x0);
+printf("---test read %#X\n" , uut->cont_2_uart_w_0_read_data_o);
+
+    saveToRam(0xDEADBEEF, 0x100);
+
+
+    readFromRam(0x100);
+    printf("---test read %#X\n" , uut->cont_2_uart_w_0_read_data_o);
+
+//  advanceClock(200000);
+  uut->start_ibex = 1;
+  advanceClock(200000);
+  uut->start_ibex = 0;
+  advanceClock(10);
+
+  readFromRam(0x98);
+  printf("---eFPGA result %#X\n" , uut->cont_2_uart_w_0_read_data_o);
+
+  readFromRam(0xA0);
+  printf("---eFPGA result %#X\n" , uut->cont_2_uart_w_0_read_data_o);
+
+//unsigned int read = uut->cont_2_uart_w_0_read_data_o;
+/*
+    int addr_count = 0;
+  printf("address count %d\n",addr_count);
+
+  uut->start = 0;
+  advanceClock(1000);
+  addr_count += 256;
+  uut->address = addr_count;
+  uut->data = addr_count + 1;
+  uut->start = 1;
+  advanceClock(1000);
+  //return 0;
+}
+
+while(uut->cont_2_uart_w_0_complete != 1){
+        advanceClock(10);
+}
+
+advanceClock(1000000);
+
+//printf("\n char %x \n", (unsigned int)uut->v->ram_0->dp_ram_i->readWord(4 ));
+
+advanceClock(1000);
+
+uut->we_i = 0;
+
+uut->start = 0;
+advanceClock(10);
+uut->start = 1;
+advanceClock(10);
+addr_count = 0;
+uut->address = addr_count;
+
+
+while(addr_count < 1024){
+  printf("address count %d\n",addr_count);
+	while(uut->cont_2_uart_w_0_complete != 1){
+        	advanceClock(10);
+}
+
+printf("data read %d\n",uut->cont_2_uart_w_0_read_data_o);
+
+  advanceClock(1000000);
+  uut->start = 0;
+  uut->address = addr_count;
+  addr_count += 256;
+  advanceClock(10);
+  uut->start = 1;
+  advanceClock(10);
+}
+
+*/
+
+
+/*
+  write_instruction(0x80, 0x00000737);//          	sw	a4,20(s0)
+  write_instruction(0x84, 0x00470713);//          	sw	a3,2(s0)
+  write_instruction(0x88, 0x000006b7);//          	mul	a5,a4,a3
+  write_instruction(0x8c, 0x00268693);//          	j	0 <_start>
+  write_instruction(0x90, 0x000007b7);//          	j	0 <_start>
+  write_instruction(0x94, 0x00378793);//          	j	0 <_start>
+  write_instruction(0x98, 0x00D7078B);//          	j	0 <_start>
+  write_instruction(0x9c, 0xfe5ff06f);//          	j	0 <_start>
+*/
+
+
+//00111111100000010000000100010011
+//
+    //write_instruction(0x80, 0xfd010113); //         	addi	sp,sp,-48
+    //write_instruction(0x84, 0x02812623); //          	sw	s0,44(sp)
+  /*  write_instruction(0x80, 0x3F810113); //          	sw	s0,44(sp)
+
+
+
+    write_instruction(0x84, 0x3F810113); //          	sw	s0,44(sp)
+
+
+    write_instruction(0x88, 0x03010413 ); //         	addi	s0,sp,48
+    write_instruction(0x8c, 0xfca42e23 ); //         	sw	a0,-36(s0)
+    write_instruction(0x90, 0xfcb42c23); //          	sw	a1,-40(s0)
+    write_instruction(0x94, 0x00100793); //          	li	a5,1 # 1 <main-0x7f>
+    write_instruction(0x98, 0xfef42623); //          	sw	a5,-20(s0)
+    write_instruction(0x9c, 0x00200793 ); //         	li	a5,2 # 2 <main-0x7e>
+    write_instruction(0xa0, 0xfef42423); //          	sw	a5,-24(s0)
+    write_instruction(0xa4, 0xfec42783); //          	lw	a5,-20(s0)
+    write_instruction(0xa8, 0x00178793 ); //         	addi	a5,a5,1
+    write_instruction(0xac, 0xfef42623 ); //         	sw	a5,-20(s0)
+    write_instruction(0xb0, 0xfe842783 ); //         	lw	a5,-24(s0)
+    write_instruction(0xb4, 0x00178793 ); //         	addi	a5,a5,1
+    write_instruction(0xb8, 0xfef42423 ); //         	sw	a5,-24(s0)
+    write_instruction(0xbc, 0xfe9ff06f ); //         	j	a4 <main+0x24>
+*/
+/*
+write_instruction(0x80,0xfd010113);//          	addi	sp,sp,-48
+  write_instruction(0x84,0x02812623);//          	sw	s0,44(sp)
+  write_instruction(0x88,0x03010413);//          	addi	s0,sp,48
+  write_instruction(0x8c,0xfca42e23);//          	sw	a0,-36(s0)
+  write_instruction(0x90,0xfcb42c23);//          	sw	a1,-40(s0)
+  write_instruction(0x94,0xfe042623);//          	sw	zero,-20(s0)
+  write_instruction(0x98,0xfec42783);//          	lw	a5,-20(s0)
+  write_instruction(0x9c,0x00178793);//          	addi	a5,a5,1
+  write_instruction(0xa0,0xfef42623);//          	sw	a5,-20(s0)
+  write_instruction(0xa4,0x0c002703);//          	lw	a4,192(zero) # c0 <_bss_start>
+  write_instruction(0xa8,0xfec42783);//          	lw	a5,-20(s0)
+  write_instruction(0xac,0x02f70733 );//         	mul	a4,a4,a5
+  write_instruction(0xb0,0x0ce02023);//          	sw	a4,192(zero) # c0 <_bss_start>
+  write_instruction(0xb4,0xfe5ff06f);//          	j	98 <main+0x18>
+*/
+
+/*      write_instruction( 0x80,  0x00014737);
+ //uut->v->ram_0->dp_ram_i->writeByte ( 0x80,0x37);
+ //uut->v->ram_0->dp_ram_i->writeByte ( 0x81,0xa6);
+ //uut->v->ram_0->dp_ram_i->writeByte ( 0x82,0x00);
+ //uut->v->ram_0->dp_ram_i->writeByte ( 0x83,0x00);
+
+     write_instruction( 0x84,  0x000146b7);
+      write_instruction( 0x88,  0x02d707b3 );
+      write_instruction( 0x8c,  0x02d60733 );
+      write_instruction( 0x90,  0x02d60733);
+*/
+
+  /*    uut->debug_req_i = 0;
+      uut->fetch_enable_i = 1;
+      uut->irq_i = 0;
+      uut->irq_id_i = 0;
+      uut->rst_ni = 0;
+      uut->test_en_i = 1;
+*/
+
+
+  //    	advanceClock( 600);
+
+		printf("\n char %u \n", (unsigned int)uut->design_2_top->forte_soc_top_i->ram_0->dp_ram_i->readByte(4 ));
+//   uut->eval();
+
+
+/*
+    while (!Verilated::gotFinish())
+    {
+
+	      uut->clk_i = uut->clk_i ? 0 : 1;       // Toggle clock
+        uut->eval();            // Evaluate model
+
+        if (tfp != NULL)
+        {
+            tfp->dump (main_time);
+        }
+
+        main_time++;            // Time passes...
+    }
+*/
+    uut->final();               // Done simulating
+
+    if (tfp != NULL)
+    {
+        tfp->close();
+        delete tfp;
+    }
+
+    delete uut;
+
+    return 0;
+}

@@ -1,0 +1,11 @@
+prefix=/Users/tuhoang/CFU_IBEX/riscv32_custom
+exec_prefix=/Users/tuhoang/CFU_IBEX/riscv32_custom
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: riscv-fesvr
+Description: RISC-V front-end server
+Version: git
+Libs: -Wl,-rpath,${libdir} -L${libdir} -lfesvr
+Cflags: -I${includedir} 
+URL: http://riscv.org/download.html#tab_fesvr

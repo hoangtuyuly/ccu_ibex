@@ -1,0 +1,31 @@
+name: cfu-symbiflow
+channels:
+  - defaults
+  - litex-hub
+dependencies:
+  - litex-hub::gcc-riscv32-elf-newlib
+  - litex-hub::openfpgaloader
+  - litex-hub::dfu-util
+  - litex-hub::flterm
+  - litex-hub::openocd
+  - litex-hub::verilator
+  - litex-hub::nextpnr-nexus
+  - litex-hub::nextpnr-ecp5
+  - litex-hub::nextpnr-ice40
+# Temporarily pin Yosys until symbiflow-yosys-plugins catches up
+#   AND https://github.com/YosysHQ/yosys/issues/4081 is resolved
+  - litex-hub::yosys=0.29_35_g57c9eb70f=20230524_010725_py37
+  - litex-hub::iceprog
+  - litex-hub::prjxray-tools
+  - litex-hub::prjxray-db
+  - litex-hub::vtr-optimized
+  - litex-hub::symbiflow-yosys-plugins
+  - lxml
+  - simplejson
+  - intervaltree
+  - json-c
+  - libevent
+  - python=3.7
+  - pip
+  - pip:
+    - -r ./requirements-symbiflow.txt

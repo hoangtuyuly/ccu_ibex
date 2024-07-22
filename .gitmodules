@@ -1,0 +1,6 @@
+[submodule "CFU-Playground"]
+	path = CFU-Playground
+	url = https://github.com/google/CFU-Playground.git
+[submodule "CFU_Playground"]
+	path = CFU_Playground
+	url = https://github.com/hoangtuyuly/CFU_Playground.git

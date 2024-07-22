@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - run: git fetch --prune --unshallow origin +refs/tags/*:refs/tags/*
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install -U pip
+        python -m pip install setuptools_scm wheel
+
+    - name: Build
+      run: |
+        python setup.py sdist bdist_wheel
+
+    - name: Upload dist
+      uses: actions/upload-artifact@v2
+      with:
+        name: pyvcd-dist
+        path: "dist/*"
+
+    # - name: Test Publish package
+    #   uses: pypa/gh-action-pypi-publish@master
+    #   with:
+    #     user: __token__
+    #     password: ${{ secrets.test_pypi_password }}
+    #     repository_url: https://test.pypi.org/legacy/
+
+    - name: Publish package
+      if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags')
+      uses: pypa/gh-action-pypi-publish@master
+      with:
+        user: __token__
+        password: ${{ secrets.pypi_password }}
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.6', '3.7', '3.8', '3.9', 'pypy-3.7']
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install -U pip
+        python -m pip install -e . -r requirements.txt
+
+    - name: Test
+      run: |
+        make test
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
+    - name: Install dependencies
+      run: |
+        python -m pip install -U pip
+        python -m pip install -e . -r requirements.txt
+    - name: Lint
+      run: |
+        make lint
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
+    - name: Install dependencies
+      run: |
+        python -m pip install -U pip
+        python -m pip install -e . -r requirements.txt coveralls
+    - name: Coverage
+      env:
+        COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        make coverage && coveralls

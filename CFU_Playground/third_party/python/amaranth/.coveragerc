@@ -1,0 +1,12 @@
+[run]
+branch = True
+include =
+  amaranth/*
+omit =
+  amaranth/test/*
+
+[report]
+exclude_lines =
+	:nocov:
+partial_branches =
+  :nobr:
