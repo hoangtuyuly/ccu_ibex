@@ -129,17 +129,27 @@
 
 
 
-#define cfu_op0(rs1, rs2) cfu_op_hw(0, rs1, rs2)
-#define cfu_op1(rs1, rs2) cfu_op_hw(1, rs1, rs2)
+#define cfu(rs1, rs2) cfu_op_hw(0, rs1, rs2)
 
 #define cfu_op_hw(funct3, rs1, rs2) opcode_R(funct3, rs1, rs2)
 
+
+// #define opcode_R(funct3, rs1, rs2)                  \
+// ({                                                  \
+//     uint32_t result;                                \
+//     asm volatile(                                   \
+//         "cfu" #funct3 " %[result], %[a], %[b]\n"    \
+//         : [result] "=r" (result)                    \
+//         : [a] "r" (rs1), [b] "r" (rs2)              \
+//     );                                              \
+//     result;                                         \
+// })
 
 #define opcode_R(funct3, rs1, rs2)                  \
 ({                                                  \
     uint32_t result;                                \
     asm volatile(                                   \
-        "cfu" #funct3 " %[result], %[a], %[b]\n"    \
+        "ccu %[result], %[a], %[b]\n"    \
         : [result] "=r" (result)                    \
         : [a] "r" (rs1), [b] "r" (rs2)              \
     );                                              \

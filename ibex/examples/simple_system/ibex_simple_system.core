@@ -171,11 +171,10 @@ targets:
           # Disabling tracing reduces compile times but doesn't have a
           # huge influence on runtime performance.
           - '--trace'
-          - '--trace-fst' # this requires -DVM_TRACE_FMT_FST in CFLAGS below!
           - '--trace-structs'
           - '--trace-params'
           - '--trace-max-array 1024'
-          - '-CFLAGS "-Wno-bitwise-instead-of-logical -Wno-deprecated -I/opt/homebrew/opt/libelf/include/libelf -std=c++14 -Wall -DVM_TRACE_FMT_FST -DTOPLEVEL_NAME=ibex_simple_system -g"'
+          - '-CFLAGS "-I/opt/homebrew/opt/libelf/include/libelf -I/opt/homebrew/opt/libelf/include -std=c++14 -Wall -DTOPLEVEL_NAME=ibex_simple_system -g"'
           - '-LDFLAGS "-L/opt/homebrew/opt/libelf/lib -pthread -lutil -lelf"'
           - "-Wall"
           - "-Wwarn-IMPERFECTSCH"

@@ -2,12 +2,12 @@
 TARGET_ARCH := riscv32
 TARGET_TOOLCHAIN_PREFIX := riscv32-unknown-elf-
 
-RISCV_ARCH := rv32imc_zicsr
+RISCV_ARCH := rv32imc_zicsr_zifencei
 RISCV_ABI := ilp32
 RISCV_CODE_MODEL := medany
 
 # Allow additional flags on the command line for debugging.
-RISCV_EXTRA_CFLAGS :=
+RISCV_EXTRA_CFLAGS := 
 
 PLATFORM_FLAGS = \
   -march=$(RISCV_ARCH) \
@@ -31,7 +31,7 @@ CCFLAGS += $(PLATFORM_FLAGS)
 
 BUILD_TYPE := micro
 
-TARGET_DEFAULT_TOOLCHAIN_ROOT := /Users/tuhoang/riscv32/bin/
+TARGET_DEFAULT_TOOLCHAIN_ROOT := $(RISCV)/bin/
 TARGET_TOOLCHAIN_ROOT := $(TARGET_DEFAULT_TOOLCHAIN_ROOT)
 
 # See http://b/158651472 for why memory arena threshold test is disabled.
@@ -46,6 +46,5 @@ CXXFLAGS += $(RISCV_EXTRA_CFLAGS)
 # This disables the "linker relaxation" optimization, which produced incorrect code.
 # TODO(b/279805615): Check whether this is fixed in newer versions of the toolchain.
 LDFLAGS += -mno-relax
-
 include $(MAKEFILE_DIR)/ext_libs/eyalroz_printf.inc
 

@@ -28,6 +28,7 @@ namespace tflite {
 namespace {
 
 TfLiteStatus ConvEval(TfLiteContext* context, TfLiteNode* node) {
+
   const TfLiteEvalTensor* input =
       tflite::micro::GetEvalInput(context, node, kConvInputTensor);
   const TfLiteEvalTensor* filter =
@@ -45,7 +46,8 @@ TfLiteStatus ConvEval(TfLiteContext* context, TfLiteNode* node) {
   TFLITE_DCHECK(node->user_data != nullptr);
   const auto& data = *(static_cast<const OpDataConv*>(node->user_data));
 
-  switch (input->type) {  // Already know in/out types are same.
+  switch (input->type) { 
+
     case kTfLiteFloat32: {
       tflite::reference_ops::Conv(
           ConvParamsFloat(params, data), tflite::micro::GetTensorShape(input),
@@ -60,6 +62,7 @@ TfLiteStatus ConvEval(TfLiteContext* context, TfLiteNode* node) {
       break;
     }
     case kTfLiteInt16: {
+
       if (bias == nullptr || bias->type == kTfLiteInt32) {
         reference_integer_ops::ConvPerChannel(
             ConvParamsQuantized(params, data),
@@ -92,6 +95,7 @@ TfLiteStatus ConvEval(TfLiteContext* context, TfLiteNode* node) {
       break;
     }
     case kTfLiteInt8: {
+
       switch (filter->type) {
         case kTfLiteInt4: {
           int8_t* unpacked_filter_data = static_cast<int8_t*>(

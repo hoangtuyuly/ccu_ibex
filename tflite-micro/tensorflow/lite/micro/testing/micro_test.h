@@ -92,20 +92,15 @@ inline void InitializeTest() { InitializeTarget(); }
     tflite::InitializeTest();
 
 #define TF_LITE_MICRO_TESTS_END                                       \
-  MicroPrintf("%d/%d tests passed", micro_test::tests_passed,         \
-              (micro_test::tests_failed + micro_test::tests_passed)); \
   if (micro_test::tests_failed == 0) {                                \
-    MicroPrintf("~~~ALL TESTS PASSED~~~\n");                          \
     return kTfLiteOk;                                                 \
   } else {                                                            \
-    MicroPrintf("~~~SOME TESTS FAILED~~~\n");                         \
     return kTfLiteError;                                              \
   }                                                                   \
   }
 
 // TODO(petewarden): I'm going to hell for what I'm doing to this poor for loop.
 #define TF_LITE_MICRO_TEST(name)                                           \
-  MicroPrintf("Testing " #name);                                           \
   for (micro_test::is_test_complete = false,                               \
       micro_test::did_test_fail = false;                                   \
        !micro_test::is_test_complete; micro_test::is_test_complete = true, \

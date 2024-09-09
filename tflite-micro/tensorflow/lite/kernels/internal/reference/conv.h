@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "tensorflow/lite/kernels/internal/common.h"
 #include "tensorflow/lite/kernels/internal/types.h"
+#include "tensorflow/lite/micro/micro_log.h"
 
 namespace tflite {
 
@@ -57,6 +58,7 @@ inline void Conv(const ConvParams& params, const RuntimeShape& input_shape,
   const int filter_input_depth = filter_shape.Dims(3);
   const int groups = input_depth / filter_input_depth;
   TFLITE_DCHECK_NE(groups, 0);
+
   TFLITE_DCHECK_EQ(input_depth % filter_input_depth, 0);
   const int filters_per_group = output_depth / groups;
   TFLITE_DCHECK_NE(filters_per_group, 0);
@@ -164,7 +166,6 @@ inline void Conv(const ConvParams& params, const RuntimeShape& input_shape,
             const int in_y = in_y_origin + dilation_height_factor * filter_y;
             for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
               const int in_x = in_x_origin + dilation_width_factor * filter_x;
-
               // Zero padding by omitting the areas outside the image.
               const bool is_point_inside_image =
                   (in_x >= 0) && (in_x < input_width) && (in_y >= 0) &&

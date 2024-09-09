@@ -20,6 +20,8 @@ limitations under the License.
 
 #include "tensorflow/lite/kernels/internal/common.h"
 #include "tensorflow/lite/kernels/internal/portable_tensor_utils.h"
+#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/micro/micro_log.h"
 #include "perf.h"
 
 namespace tflite {
@@ -77,13 +79,22 @@ inline void ConvPerChannel(
       const int in_y_origin = (out_y * stride_height) - pad_height;
       for (int out_x = 0; out_x < output_width; ++out_x) {
         const int in_x_origin = (out_x * stride_width) - pad_width;
+
         for (int out_channel = 0; out_channel < output_depth; ++out_channel) {
-          auto group = out_channel / filters_per_group;
+
           int32_t acc = 0;
-          for (int filter_y = 0; filter_y < filter_height; ++filter_y) {
-            const int in_y = in_y_origin + dilation_height_factor * filter_y;
-            for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
-              const int in_x = in_x_origin + dilation_width_factor * filter_x;
+          //auto group = out_channel / filters_per_group;
+
+          asm volatile(                                   
+          "ccu0 %[result], %[a], %[b]\n"    
+          : [result] "=r" (acc)                    
+          : [a] "r" (0), [b] "r" (0)              
+          );  
+
+          for (int filter_y = 0; filter_y < 1; ++filter_y) {
+            const int in_y = in_y_origin + filter_y;
+            for (int filter_x = 0; filter_x < 1; ++filter_x) {
+              const int in_x = in_x_origin + filter_x;
 
               // Zero padding by omitting the areas outside the image.
               const bool is_point_inside_image =
@@ -94,42 +105,76 @@ inline void ConvPerChannel(
                 continue;
               }
 
-              printf("Entering loop at: %lu\n", perf_get_mcycle()); 
-              
-              // asm volatile
-              // (
-              //   "mod   %[z], %[x], %[y]\n\t"
-              //   : [z] "=r" (c)
-              //   : [x] "r" (a), [y] "r" (b)
-              // );
-              
               for (int in_channel = 0; in_channel < input_depth; in_channel += 4) {
-                int32_t input_val = input_data[Offset(input_shape, batch, in_y,
-                                                        in_x, in_channel)];
-                int32_t filter_val = filter_data[Offset(
-                    filter_shape, out_channel, filter_y, filter_x, in_channel)];
-                acc += filter_val * (input_val + 128);
 
-                input_val = input_data[Offset(input_shape, batch, in_y,
-                                                        in_x, in_channel + 1)];
-                filter_val = filter_data[Offset(
-                    filter_shape, out_channel, filter_y, filter_x, in_channel + 1)];
-                acc += filter_val * (input_val + 128);
+                uint32_t filter_val = *((uint32_t *)(filter_data + Offset(
+                    filter_shape, out_channel, filter_y, filter_x, in_channel)));
 
-                input_val = input_data[Offset(input_shape, batch, in_y,
-                                                        in_x, in_channel + 2)];
-                filter_val = filter_data[Offset(
-                    filter_shape, out_channel, filter_y, filter_x, in_channel + 2)];
-                acc += filter_val * (input_val + 128);
+                uint32_t input_val = *((uint32_t *)(input_data + Offset(
+                    input_shape, batch, in_y, in_x, in_channel)));
 
-                input_val = input_data[Offset(input_shape, batch, in_y,
-                                                        in_x, in_channel + 3)];
-                filter_val = filter_data[Offset(
-                    filter_shape, out_channel, filter_y, filter_x, in_channel + 3)];
-                acc += filter_val * (input_val + 128);
+                asm volatile("nop");
+
+                asm volatile(                                   
+                "ccu1 %[result], %[a], %[b]\n"    
+                : [result] "=r" (acc)                    
+                : [a] "r" (input_val), [b] "r" (filter_val)              
+                );  
+
               }
 
-              printf("Exiting loop at: %lu\n", perf_get_mcycle()); 
+              // for (int in_channel = 0; in_channel < filter_input_depth;
+              //      ++in_channel) {
+              //   int32_t input_val =
+              //       input_data[Offset(input_shape, batch, in_y, in_x,
+              //                         in_channel + group * filter_input_depth)];
+              //   int32_t filter_val = filter_data[Offset(
+              //       filter_shape, out_channel, filter_y, filter_x, in_channel)];
+              //   acc += filter_val * (input_val + input_offset);
+              // }
+              
+
+              // for (int in_channel = 0; in_channel < input_depth; in_channel += 4) {
+              //   int32_t input_val = input_data[Offset(input_shape, batch, in_y,
+              //                                           in_x, in_channel)];
+              //   int32_t filter_val = filter_data[Offset(
+              //       filter_shape, out_channel, filter_y, filter_x, in_channel)];
+              //   acc += filter_val * (input_val + 128);
+
+              //   MicroPrintf("filter_val1 %d\n", filter_val);
+              //   MicroPrintf("input_val1 %d\n", input_val);
+              //   MicroPrintf("acc1 %d\n", acc);
+
+              //   input_val = input_data[Offset(input_shape, batch, in_y,
+              //                                           in_x, in_channel + 1)];
+              //   filter_val = filter_data[Offset(
+              //       filter_shape, out_channel, filter_y, filter_x, in_channel + 1)];
+              //   acc += filter_val * (input_val + 128);
+
+              //   MicroPrintf("filter_val2 %d\n", filter_val);
+              //   MicroPrintf("input_val2 %d\n", input_val);
+              //   MicroPrintf("acc2 %d\n", acc);
+
+              //   input_val = input_data[Offset(input_shape, batch, in_y,
+              //                                           in_x, in_channel + 2)];
+              //   filter_val = filter_data[Offset(
+              //       filter_shape, out_channel, filter_y, filter_x, in_channel + 2)];
+              //   acc += filter_val * (input_val + 128);
+
+              //   MicroPrintf("filter_val3 %d\n", filter_val);
+              //   MicroPrintf("input_val3 %d\n", input_val);
+              //   MicroPrintf("acc3 %d\n", acc);
+
+              //   input_val = input_data[Offset(input_shape, batch, in_y,
+              //                                           in_x, in_channel + 3)];
+              //   filter_val = filter_data[Offset(
+              //       filter_shape, out_channel, filter_y, filter_x, in_channel + 3)];
+              //   acc += filter_val * (input_val + 128);
+
+              //   MicroPrintf("filter_val4 %d\n", filter_val);
+              //   MicroPrintf("input_val4 %d\n", input_val);
+              //   MicroPrintf("acc4 %d\n", acc);
+              // }
 
             }
           }
@@ -149,6 +194,7 @@ inline void ConvPerChannel(
     }
   }
 }
+
 
 
 // Fixed-point per-channel-quantization convolution reference kernel.

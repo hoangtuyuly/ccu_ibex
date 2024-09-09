@@ -96,16 +96,16 @@ module ibex_tracer (
   localparam logic [4:0] MEM = (1 << 4);
   logic [4:0] data_accessed;
 
-  logic trace_log_enable;
-  initial begin
-    if ($value$plusargs("ibex_tracer_enable=%b", trace_log_enable)) begin
-      if (trace_log_enable == 1'b0) begin
-        $display("%m: Instruction trace disabled.");
-      end
-    end else begin
-      trace_log_enable = 1'b1;
-    end
-  end
+  logic trace_log_enable = 1'b0;
+  // initial begin
+  //   if ($value$plusargs("ibex_tracer_enable=%b", trace_log_enable)) begin
+  //     if (trace_log_enable == 1'b0) begin
+  //       $display("%m: Instruction trace disabled.");
+  //     end
+  //   end else begin
+  //     trace_log_enable = 1'b1;
+  //   end
+  // end
 
   function automatic void printbuffer_dumpline(int fh);
     string rvfi_insn_str;

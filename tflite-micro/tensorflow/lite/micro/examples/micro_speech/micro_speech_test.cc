@@ -32,6 +32,13 @@ limitations under the License.
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 #include "tensorflow/lite/micro/testing/micro_test.h"
 
+#define DEV_WRITE(addr, val) (*((volatile uint32_t *)(addr)) = val)
+
+int putchar(int c);
+int puts(const char *str);
+void puthex(uint32_t h);
+void putint(int num);
+
 #define TF_LITE_MICRO_CHECK_FAIL()   \
   do {                               \
     if (micro_test::did_test_fail) { \
@@ -106,8 +113,11 @@ TfLiteStatus LoadMicroSpeechModelAndPerformInference(
   TF_LITE_MICRO_EXPECT(interpreter.AllocateTensors() == kTfLiteOk);
   TF_LITE_MICRO_CHECK_FAIL();
 
-  MicroPrintf("MicroSpeech model arena size = %u",
-              interpreter.arena_used_bytes());
+  // MicroPrintf("MicroSpeech model arena size = %u",
+  //             interpreter.arena_used_bytes());
+  puts("MicroSpeech model arena size ");
+  putint(interpreter.arena_used_bytes());
+  putchar('\n');
 
   TfLiteTensor* input = interpreter.input(0);
   TF_LITE_MICRO_EXPECT(input != nullptr);
@@ -135,13 +145,20 @@ TfLiteStatus LoadMicroSpeechModelAndPerformInference(
 
   // Dequantize output values
   float category_predictions[kCategoryCount];
-  MicroPrintf("MicroSpeech category predictions for <%s>", expected_label);
+  //MicroPrintf("MicroSpeech category predictions for <%s>", expected_label);
+  puts("MicroSpeech category predictions for ");
+  puts(expected_label);
+  putchar('\n');
+
   for (int i = 0; i < kCategoryCount; i++) {
     category_predictions[i] =
         (tflite::GetTensorData<int8_t>(output)[i] - output_zero_point) *
         output_scale;
-    MicroPrintf("  %.4f %s", static_cast<double>(category_predictions[i]),
-                kCategoryLabels[i]);
+    // MicroPrintf("  %.4f %s", static_cast<double>(category_predictions[i]),
+    //             kCategoryLabels[i]);
+        // putint(category_predictions[i]);
+        puts(kCategoryLabels[i]);
+        putchar('\n');
   }
   int prediction_index =
       std::distance(std::begin(category_predictions),
@@ -205,8 +222,12 @@ TfLiteStatus GenerateFeatures(const int16_t* audio_data,
   TF_LITE_MICRO_EXPECT(interpreter.AllocateTensors() == kTfLiteOk);
   TF_LITE_MICRO_CHECK_FAIL();
 
-  MicroPrintf("AudioPreprocessor model arena size = %u",
-              interpreter.arena_used_bytes());
+  // MicroPrintf("AudioPreprocessor model arena size = %u",
+  //             interpreter.arena_used_bytes());
+
+  puts("AudioPreprocessor model arena size ");
+  putint(interpreter.arena_used_bytes());
+  putchar('\n');
 
   size_t remaining_samples = audio_data_size;
   size_t feature_index = 0;
@@ -284,4 +305,52 @@ TF_LITE_MICRO_TEST(NoiseTest) {
                   g_noise_1000ms_audio_data_size);
 }
 
+
 TF_LITE_MICRO_TESTS_END
+
+int putchar(int c) {
+  DEV_WRITE(0x20000 + 0x0, (unsigned char)c);
+
+  return c;
+}
+
+int puts(const char *str) {
+  while (*str) {
+    putchar(*str++);
+  }
+
+  return 0;
+}
+
+void puthex(uint32_t h) {
+  int cur_digit;
+  // Iterate through h taking top 4 bits each time and outputting ASCII of hex
+  // digit for those 4 bits
+  for (int i = 0; i < 8; i++) {
+    cur_digit = h >> 28;
+
+    if (cur_digit < 10)
+      putchar('0' + cur_digit);
+    else
+      putchar('A' - 10 + cur_digit);
+
+    h <<= 4;
+  }
+}
+
+void putint(int num) {
+  if (num == 0) {
+      putchar('0'+ 0);
+      return;
+  }
+  
+  if (num < 0) {
+    putchar('-');
+    num = -num;
+  }
+
+  while(num) {
+      putchar('0' + (num % 10));
+      num /= 10;
+  }
+}

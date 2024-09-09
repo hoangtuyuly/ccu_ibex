@@ -167,6 +167,18 @@ ifneq ($(TOOLCHAIN), gcc)
   CC_WARNINGS += -Wshadow
 endif
 
+# COMMON_FLAGS := \
+#   -fno-unwind-tables \
+#   -ffunction-sections \
+#   -fdata-sections \
+#   -fmessage-length=0 \
+#   -DTF_LITE_STATIC_MEMORY \
+#   -DTF_LITE_DISABLE_X86_NEON \
+#   -march=rv32imc_zicsr_zifencei \
+#   -mabi=ilp32 \
+#   $(CC_WARNINGS) \
+#   $(ADDITIONAL_DEFINES)
+
 COMMON_FLAGS := \
   -fno-unwind-tables \
   -ffunction-sections \
@@ -174,7 +186,14 @@ COMMON_FLAGS := \
   -fmessage-length=0 \
   -DTF_LITE_STATIC_MEMORY \
   -DTF_LITE_DISABLE_X86_NEON \
-  -march=rv32imc_zicsr \
+  -march=rv32imc_zicsr_zifencei \
+  -mabi=ilp32 \
+  -static \
+  -mcmodel=medany \
+  -g \
+  -Os \
+  -fvisibility=hidden \
+  -nostartfiles \
   $(CC_WARNINGS) \
   $(ADDITIONAL_DEFINES)
 
@@ -798,6 +817,7 @@ $(patsubst %.S,%.o,$(patsubst %.cc,%.o,$(patsubst %.c,%.o,$(THIRD_PARTY_KERNEL_C
 MICROLITE_KERNEL_OBJS := $(addprefix $(KERNEL_OBJDIR), \
 $(patsubst %.S,%.o,$(patsubst %.cc,%.o,$(patsubst %.c,%.o,$(MICROLITE_CC_KERNEL_SRCS)))))
 
+
 $(CORE_OBJDIR)%.o: %.cc $(THIRD_PARTY_TARGETS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(CORE_OPTIMIZATION_LEVEL) $(INCLUDES) -c $< -o $@
@@ -848,6 +868,10 @@ $(KERNEL_OBJDIR)%.o: %.S $(THIRD_PARTY_TARGETS)
 
 microlite: $(MICROLITE_LIB_PATH)
 
+
+LDFLAGS += -lgcc -T /Users/tuhoang/CFU_IBEX/tflite-micro/link.ld /Users/tuhoang/CFU_IBEX/tflite-micro/crt0.o
+LDFLAGS += -Wl,--no-warn-rwx-segments
+
 # Gathers together all the objects we've compiled into a single '.a' archive.
 $(MICROLITE_LIB_PATH): $(MICROLITE_LIB_OBJS) $(MICROLITE_KERNEL_OBJS) $(MICROLITE_THIRD_PARTY_OBJS) $(MICROLITE_THIRD_PARTY_KERNEL_OBJS) $(MICROLITE_CUSTOM_OP_OBJS)
 	@mkdir -p $(dir $@)
@@ -858,7 +882,7 @@ $(BINDIR)%_test : $(CORE_OBJDIR)%_test.o $(MICROLITE_LIB_PATH)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) \
 	-o $@ $< \
-	$(MICROLITE_LIB_PATH) $(LDFLAGS) $(MICROLITE_LIBS)
+	$(MICROLITE_LIB_PATH) $(LDFLAGS) $(MICROLITE_LIBS) -lm -lgcc
 
 $(BINDIR)%.test_target: $(BINDIR)%_test
 	@test -f $(TEST_SCRIPT) || (echo 'Unable to find the test script. Is the software emulation available in $(TARGET)?'; exit 1)

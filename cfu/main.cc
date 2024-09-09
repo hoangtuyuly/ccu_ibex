@@ -17,8 +17,7 @@ int main(int argc, char *argv[]) {
   a = 5;
   b = 2;
   
-  c = cfu_op0(a, b);
-  c = cfu_op1(a, b);
+  c = cfu(a, b);
 
   return 0;
 }

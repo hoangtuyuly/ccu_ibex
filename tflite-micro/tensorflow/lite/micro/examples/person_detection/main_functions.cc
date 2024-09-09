@@ -24,6 +24,13 @@ limitations under the License.
 #include "tensorflow/lite/micro/models/person_detect_model_data.h"
 #include "tensorflow/lite/micro/system_setup.h"
 #include "tensorflow/lite/schema/schema_generated.h"
+#include <stdint.h>
+#define DEV_WRITE(addr, val) (*((volatile uint32_t *)(addr)) = val)
+
+int putchar(int c);
+int puts(const char *str);
+void puthex(uint32_t h);
+void putint(int num);
 
 // Globals, used for compatibility with Arduino-style sketches.
 namespace {
@@ -79,7 +86,7 @@ void setup() {
   // Allocate memory from the tensor_arena for the model's tensors.
   TfLiteStatus allocate_status = interpreter->AllocateTensors();
   if (allocate_status != kTfLiteOk) {
-    MicroPrintf("AllocateTensors() failed");
+    //MicroPrintf("AllocateTensors() failed");
     return;
   }
 
@@ -92,18 +99,74 @@ void loop() {
   // Get image from provider.
   if (kTfLiteOk !=
       GetImage(kNumCols, kNumRows, kNumChannels, input->data.int8)) {
-    MicroPrintf("Image capture failed.");
+    //MicroPrintf("Image capture failed.");
   }
 
-  // Run the model on this input and make sure it succeeds.
+    // Run the model on this input and make sure it succeeds.
   if (kTfLiteOk != interpreter->Invoke()) {
-    MicroPrintf("Invoke failed.");
+    //MicroPrintf("Invoke failed.");
   }
+
 
   TfLiteTensor* output = interpreter->output(0);
 
-  // Process the inference results.
+  // // Process the inference results.
   int8_t person_score = output->data.uint8[kPersonIndex];
   int8_t no_person_score = output->data.uint8[kNotAPersonIndex];
-  RespondToDetection(person_score, no_person_score);
+
+  // RespondToDetection(person_score, no_person_score);
+  puts("person_score ");
+  putint(person_score);
+  puts("\n");
+  puts("no_person_score ");
+  putint(no_person_score);
 }
+
+int putchar(int c) {
+  DEV_WRITE(0x20000 + 0x0, (unsigned char)c);
+
+  return c;
+}
+
+int puts(const char *str) {
+  while (*str) {
+    putchar(*str++);
+  }
+
+  return 0;
+}
+
+void puthex(uint32_t h) {
+  int cur_digit;
+  // Iterate through h taking top 4 bits each time and outputting ASCII of hex
+  // digit for those 4 bits
+  for (int i = 0; i < 8; i++) {
+    cur_digit = h >> 28;
+
+    if (cur_digit < 10)
+      putchar('0' + cur_digit);
+    else
+      putchar('A' - 10 + cur_digit);
+
+    h <<= 4;
+  }
+}
+
+void putint(int num) {
+  if (num == 0) {
+      putchar('0'+ 0);
+      return;
+  }
+  
+  if (num < 0) {
+    putchar('-');
+    num = -num;
+  }
+
+  while(num) {
+      putchar('0' + (num % 10));
+      num /= 10;
+  }
+}
+
+
