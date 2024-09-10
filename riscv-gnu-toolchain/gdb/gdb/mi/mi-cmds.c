@@ -1,5 +1,5 @@
 /* MI Command Set for GDB, the GNU debugger.
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2024 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions (a Red Hat company).
 
@@ -18,7 +18,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "top.h"
 #include "mi-cmds.h"
 #include "mi-main.h"
@@ -183,7 +182,7 @@ mi_command::mi_command (const char *name, int *suppress_notification)
 
 /* See mi-cmds.h.  */
 
-gdb::optional<scoped_restore_tmpl<int>>
+std::optional<scoped_restore_tmpl<int>>
 mi_command::do_suppress_notification () const
 {
   if (m_suppress_notification != nullptr)

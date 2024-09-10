@@ -1,5 +1,5 @@
 /* Support for printing Modula 2 types for GDB, the GNU debugger.
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,7 +16,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "event-top.h"
 #include "language.h"
 #include "gdbsupport/gdb_obstack.h"
 #include "bfd.h"
@@ -389,7 +389,7 @@ m2_get_discrete_bounds (struct type *type, LONGEST *lowp, LONGEST *highp)
 	      return 0;
 	    }
 	}
-      /* fall through */
+      [[fallthrough]];
     default:
       return get_discrete_bounds (type, lowp, highp);
     }

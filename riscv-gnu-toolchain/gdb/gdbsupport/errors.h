@@ -1,6 +1,6 @@
 /* Declarations for error-reporting facilities.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -119,6 +119,13 @@ extern void flush_streams ();
    of GetLastError.  */
 
 extern const char *strwinerror (ULONGEST error);
+
+/* Like perror_with_name, but for Windows errors.  Throw an exception
+   including STRING and the system text for the given error
+   number.  */
+
+extern void throw_winerror_with_name (const char *string, ULONGEST err)
+  ATTRIBUTE_NORETURN;
 
 #endif /* USE_WIN32API */
 

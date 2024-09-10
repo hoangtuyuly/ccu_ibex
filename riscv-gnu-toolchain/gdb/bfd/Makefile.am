@@ -1,6 +1,6 @@
 ## Process this file with automake to generate Makefile.in
 #
-#   Copyright (C) 2012-2023 Free Software Foundation, Inc.
+#   Copyright (C) 2012-2024 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -75,7 +75,7 @@ BFD_H = bfd.h
 # need two copies of the executable, one to download and one for the
 # debugger).
 BFD32_LIBS = \
-	archive.lo archures.lo bfd.lo bfdio.lo bfdwin.lo cache.lo \
+	archive.lo archures.lo bfd.lo bfdio.lo cache.lo \
 	coff-bfd.lo compress.lo corefile.lo elf-properties.lo format.lo \
 	hash.lo libbfd.lo linker.lo merge.lo opncls.lo reloc.lo \
 	section.lo simple.lo stab-syms.lo stabs.lo syms.lo targets.lo \
@@ -84,7 +84,7 @@ BFD32_LIBS = \
 BFD64_LIBS = archive64.lo
 
 BFD32_LIBS_CFILES = \
-	archive.c archures.c bfd.c bfdio.c bfdwin.c cache.c coff-bfd.c \
+	archive.c archures.c bfd.c bfdio.c cache.c coff-bfd.c \
 	compress.c corefile.c elf-properties.c format.c hash.c \
 	libbfd.c linker.c merge.c opncls.c reloc.c \
 	section.c simple.c stab-syms.c stabs.c syms.c targets.c \
@@ -586,10 +586,12 @@ BFD64_BACKENDS = \
 	pe-aarch64.lo \
 	pe-aarch64igen.lo \
 	pe-loongarch64igen.lo \
+	pe-riscv64igen.lo \
 	pe-x86_64.lo \
 	pei-aarch64.lo \
 	pei-ia64.lo \
 	pei-loongarch64.lo \
+	pei-riscv64.lo \
 	pei-x86_64.lo \
 	pepigen.lo \
 	pex64igen.lo \
@@ -635,6 +637,7 @@ BFD64_BACKENDS_CFILES = \
 	pei-aarch64.c \
 	pei-ia64.c \
 	pei-loongarch64.c \
+	pei-riscv64.c \
 	pei-x86_64.c \
 	vms-alpha.c
 
@@ -691,7 +694,8 @@ BUILD_CFILES = \
 	elf32-ia64.c elf64-ia64.c \
 	elf32-loongarch.c elf64-loongarch.c \
 	elf32-riscv.c elf64-riscv.c \
-	peigen.c pepigen.c pex64igen.c pe-aarch64igen.c pe-loongarch64igen.c
+	peigen.c pepigen.c pex64igen.c pe-aarch64igen.c pe-loongarch64igen.c \
+	pe-riscv64igen.c
 
 CFILES = $(SOURCE_CFILES) $(BUILD_CFILES)
 
@@ -901,6 +905,10 @@ pe-loongarch64igen.c: peXXigen.c
 	$(AM_V_at)echo "#line 1 \"$<\"" > $@
 	$(AM_V_GEN)$(SED) -e s/XX/peLoongArch64/g < $< >> $@
 
+pe-riscv64igen.c: peXXigen.c
+	$(AM_V_at)echo "#line 1 \"peXXigen.c\"" > $@
+	$(AM_V_GEN)$(SED) -e s/XX/peRiscV64/g < $< >> $@
+
 host-aout.lo: Makefile
 
 # The following program can be used to generate a simple config file
@@ -920,12 +928,12 @@ stmp-bfd-h: bfd-in3.h
 	touch stmp-bfd-h
 
 BFD_H_FILES = bfd-in.h libbfd.c hash.c section.c syms.c \
-	archive.c archures.c bfd.c bfdio.c bfdwin.c \
+	archive.c archures.c bfd.c bfdio.c \
 	cache.c compress.c corefile.c format.c linker.c opncls.c \
 	reloc.c simple.c stab-syms.c stabs.c targets.c
 BFD64_H_FILES = archive64.c
 LIBBFD_H_FILES = libbfd-in.h libbfd.c bfd.c bfdio.c \
-	archive.c archures.c bfdwin.c cache.c hash.c linker.c opncls.c \
+	archive.c archures.c cache.c hash.c linker.c opncls.c \
 	reloc.c section.c stabs.c targets.c
 LIBCOFF_H_FILES = libcoff-in.h coffcode.h
 

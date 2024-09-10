@@ -1,6 +1,6 @@
 /* GDB CLI commands.
 
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,13 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "arch-utils.h"
 #include "readline/tilde.h"
 #include "completer.h"
 #include "target.h"
 #include "gdbsupport/gdb_wait.h"
-#include "gdbcmd.h"
 #include "gdbsupport/gdb_regex.h"
 #include "gdb_vfork.h"
 #include "linespec.h"
@@ -655,12 +653,12 @@ show_script_ext_mode (struct ui_file *file, int from_tty,
    If SEARCH_PATH is non-zero, and the file isn't found in cwd,
    search for it in the source search path.  */
 
-gdb::optional<open_script>
+std::optional<open_script>
 find_and_open_script (const char *script_file, int search_path)
 {
   int fd;
   openp_flags search_flags = OPF_TRY_CWD_FIRST | OPF_RETURN_REALPATH;
-  gdb::optional<open_script> opened;
+  std::optional<open_script> opened;
 
   gdb::unique_xmalloc_ptr<char> file (tilde_expand (script_file));
 
@@ -742,7 +740,7 @@ source_script_with_search (const char *file, int from_tty, int search_path)
   if (file == NULL || *file == 0)
     error (_("source command requires file name of file to source."));
 
-  gdb::optional<open_script> opened = find_and_open_script (file, search_path);
+  std::optional<open_script> opened = find_and_open_script (file, search_path);
   if (!opened)
     {
       /* The script wasn't found, or was otherwise inaccessible.
@@ -1236,37 +1234,39 @@ list_command (const char *arg, int from_tty)
   /* Pull in the current default source line if necessary.  */
   if (arg == NULL || ((arg[0] == '+' || arg[0] == '-' || arg[0] == '.') && arg[1] == '\0'))
     {
-      set_default_source_symtab_and_line ();
-      symtab_and_line cursal = get_current_source_symtab_and_line ();
-
       /* If this is the first "list" since we've set the current
 	 source line, center the listing around that line.  */
       if (get_first_line_listed () == 0 && (arg == nullptr || arg[0] != '.'))
 	{
-	  list_around_line (arg, cursal);
+	  set_default_source_symtab_and_line ();
+	  list_around_line (arg, get_current_source_symtab_and_line ());
 	}
 
       /* "l" and "l +" lists the next few lines, unless we're listing past
 	 the end of the file.  */
       else if (arg == nullptr || arg[0] == '+')
 	{
+	  set_default_source_symtab_and_line ();
+	  const symtab_and_line cursal = get_current_source_symtab_and_line ();
 	  if (last_symtab_line (cursal.symtab) >= cursal.line)
 	    print_source_lines (cursal.symtab,
 				source_lines_range (cursal.line), 0);
 	  else
-	    {
-	      error (_("End of the file was already reached, use \"list .\" to"
-		       " list the current location again"));
-	    }
+	    error (_("End of the file was already reached, use \"list .\" to"
+		     " list the current location again"));
 	}
 
       /* "l -" lists previous ten lines, the ones before the ten just
 	 listed.  */
       else if (arg[0] == '-')
 	{
+	  set_default_source_symtab_and_line ();
+	  const symtab_and_line cursal = get_current_source_symtab_and_line ();
+
 	  if (get_first_line_listed () == 1)
 	    error (_("Already at the start of %s."),
 		   symtab_to_filename_for_display (cursal.symtab));
+
 	  source_lines_range range (get_first_line_listed (),
 				    source_lines_range::BACKWARD);
 	  print_source_lines (cursal.symtab, range, 0);
@@ -1275,6 +1275,7 @@ list_command (const char *arg, int from_tty)
       /* "list ." lists the default location again.  */
       else if (arg[0] == '.')
 	{
+	  symtab_and_line cursal;
 	  if (target_has_stack ())
 	    {
 	      /* Find the current line by getting the PC of the currently
@@ -1282,18 +1283,34 @@ list_command (const char *arg, int from_tty)
 	      frame_info_ptr frame = get_selected_frame (nullptr);
 	      CORE_ADDR curr_pc = get_frame_pc (frame);
 	      cursal = find_pc_line (curr_pc, 0);
+
+	      if (cursal.symtab == nullptr)
+		error
+		  (_("Insufficient debug info for showing source lines at "
+		     "current PC (%s)."), paddress (get_frame_arch (frame),
+						    curr_pc));
 	    }
 	  else
 	    {
 	      /* The inferior is not running, so reset the current source
 		 location to the default (usually the main function).  */
 	      clear_current_source_symtab_and_line ();
-	      set_default_source_symtab_and_line ();
+	      try
+		{
+		  set_default_source_symtab_and_line ();
+		}
+	      catch (const gdb_exception &e)
+		{
+		  error (_("Insufficient debug info for showing source "
+			   "lines at default location"));
+		}
 	      cursal = get_current_source_symtab_and_line ();
+
+	      gdb_assert (cursal.symtab != nullptr);
 	    }
-	  if (cursal.symtab == nullptr)
-	    error (_("No debug information available to print source lines."));
+
 	  list_around_line (arg, cursal);
+
 	  /* Set the repeat args so just pressing "enter" after using "list ."
 	     will print the following lines instead of the same lines again. */
 	  if (from_tty)
@@ -1646,6 +1663,10 @@ disassemble_command (const char *arg, int from_tty)
       == (DISASSEMBLY_SOURCE_DEPRECATED | DISASSEMBLY_SOURCE))
     error (_("Cannot specify both /m and /s."));
 
+  if ((flags & (DISASSEMBLY_RAW_INSN | DISASSEMBLY_RAW_BYTES))
+      == (DISASSEMBLY_RAW_INSN | DISASSEMBLY_RAW_BYTES))
+    error (_("Cannot specify both /r and /b."));
+
   if (! p || ! *p)
     {
       flags |= DISASSEMBLY_OMIT_FNAME;
@@ -1694,6 +1715,20 @@ disassemble_command (const char *arg, int from_tty)
     }
 
   print_disassembly (gdbarch, name, low, high, block, flags);
+}
+
+/* Command completion for the disassemble command.  */
+
+static void
+disassemble_command_completer (struct cmd_list_element *ignore,
+			       completion_tracker &tracker,
+			       const char *text, const char * /* word */)
+{
+  if (skip_over_slash_fmt (tracker, &text))
+    return;
+
+  const char *word = advance_to_expression_complete_word_point (tracker, text);
+  expression_completer (ignore, tracker, text, word);
 }
 
 static void
@@ -2853,7 +2888,7 @@ Note that the address is interpreted as an expression, not as a location\n\
 like in the \"break\" command.\n\
 So, for example, if you want to disassemble function bar in file foo.c\n\
 you must type \"disassemble 'foo.c'::bar\" and not \"disassemble foo.c:bar\"."));
-  set_cmd_completer (c, location_completer);
+  set_cmd_completer_handle_brkchars (c, disassemble_command_completer);
 
   c = add_com ("make", class_support, make_command, _("\
 Run the ``make'' program using the rest of the line as arguments."));

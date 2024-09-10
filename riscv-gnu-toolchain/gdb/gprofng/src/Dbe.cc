@@ -1,4 +1,4 @@
-/* Copyright (C) 2021-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2021-2024 Free Software Foundation, Inc.
    Contributed by Oracle.
 
    This file is part of GNU Binutils.
@@ -271,7 +271,7 @@ dbeGetFileAttributes (const char *filename, const char *format)
       if (!strcmp (format, NTXT ("/bin/ls -dl ")))
 	{
 	  // A kind of "/bin/ls -dl " simulation
-	  struct stat64 sbuf;
+	  dbe_stat_t sbuf;
 	  sbuf.st_mode = 0;
 	  dbe_stat (filename, &sbuf);
 	  if (S_IREAD & sbuf.st_mode)
@@ -7121,10 +7121,7 @@ dbeGetHwcs (Hwcentry **hwcs)
     {
       Hwcentry *ctr = hwcs[i];
       Vector<int> *registers = new Vector<int>(MAX_PICS);
-      regno_t *reglist = ctr->reg_list;
-      for (int k = 0; !REG_LIST_EOL (reglist[k]) && k < MAX_PICS; k++)
-	registers->store (k, reglist[k]);
-
+      registers->store (0, REGNO_ANY);
       i18n->store (i, dbe_strdup (hwc_i18n_metric (ctr)));
       name->store (i, dbe_strdup (ctr->name));
       int_name->store (i, dbe_strdup (ctr->int_name));

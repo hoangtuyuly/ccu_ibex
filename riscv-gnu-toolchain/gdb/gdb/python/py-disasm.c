@@ -1,6 +1,6 @@
 /* Python interface to instruction disassembly.
 
-   Copyright (C) 2021-2023 Free Software Foundation, Inc.
+   Copyright (C) 2021-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "python-internal.h"
 #include "language.h"
 #include "dis-asm.h"
@@ -176,7 +175,7 @@ struct gdbpy_disassembler : public gdb_disassemble_info
   /* Return a reference to an optional that contains the address at which a
      memory error occurred.  The optional will only have a value if a
      memory error actually occurred.  */
-  const gdb::optional<CORE_ADDR> &memory_error_address () const
+  const std::optional<CORE_ADDR> &memory_error_address () const
   { return m_memory_error_address; }
 
   /* Return the content of the disassembler as a string.  The contents are
@@ -221,7 +220,7 @@ private:
 
   /* When the user indicates that a memory error has occurred then the
      address of the memory error is stored in here.  */
-  gdb::optional<CORE_ADDR> m_memory_error_address;
+  std::optional<CORE_ADDR> m_memory_error_address;
 
   /* When the user calls the builtin_disassemble function, if they pass a
      memory source object then a pointer to the object is placed in here,
@@ -245,7 +244,7 @@ private:
 
   /* Store a single exception.  This is used to pass Python exceptions back
      from ::memory_read to disasmpy_builtin_disassemble.  */
-  gdb::optional<gdbpy_err_fetch> m_stored_exception;
+  std::optional<gdbpy_err_fetch> m_stored_exception;
 };
 
 /* Return true if OBJ is still valid, otherwise, return false.  A valid OBJ
@@ -668,12 +667,13 @@ disasmpy_info_read_memory (PyObject *self, PyObject *args, PyObject *kw)
   disasm_info_object *obj = (disasm_info_object *) self;
   DISASMPY_DISASM_INFO_REQUIRE_VALID (obj);
 
-  LONGEST length, offset = 0;
+  gdb_py_longest length, offset = 0;
   gdb::unique_xmalloc_ptr<gdb_byte> buffer;
   static const char *keywords[] = { "length", "offset", nullptr };
 
-  if (!gdb_PyArg_ParseTupleAndKeywords (args, kw, "L|L", keywords,
-					&length, &offset))
+  if (!gdb_PyArg_ParseTupleAndKeywords (args, kw,
+					GDB_PY_LL_ARG "|" GDB_PY_LL_ARG,
+					keywords, &length, &offset))
     return nullptr;
 
   /* The apparent address from which we are reading memory.  Note that in
@@ -850,13 +850,14 @@ gdbpy_disassembler::read_memory_func (bfd_vma memaddr, gdb_byte *buff,
   /* The DisassembleInfo.read_memory method expects an offset from the
      address stored within the DisassembleInfo object; calculate that
      offset here.  */
-  LONGEST offset = (LONGEST) memaddr - (LONGEST) obj->address;
+  gdb_py_longest offset
+    = (gdb_py_longest) memaddr - (gdb_py_longest) obj->address;
 
   /* Now call the DisassembleInfo.read_memory method.  This might have been
      overridden by the user.  */
   gdbpy_ref<> result_obj (PyObject_CallMethod ((PyObject *) obj,
 					       "read_memory",
-					       "KL", len, offset));
+					       "I" GDB_PY_LL_ARG, len, offset));
 
   /* Handle any exceptions.  */
   if (result_obj == nullptr)
@@ -1215,7 +1216,7 @@ private:
 
 /* See python-internal.h.  */
 
-gdb::optional<int>
+std::optional<int>
 gdbpy_print_insn (struct gdbarch *gdbarch, CORE_ADDR memaddr,
 		  disassemble_info *info)
 {
@@ -1294,7 +1295,7 @@ gdbpy_print_insn (struct gdbarch *gdbarch, CORE_ADDR memaddr,
 	    addr = disasm_info->address;
 
 	  info->memory_error_func (-1, addr, info);
-	  return gdb::optional<int> (-1);
+	  return std::optional<int> (-1);
 	}
       else if (PyErr_ExceptionMatches (gdbpy_gdberror_exc))
 	{
@@ -1302,12 +1303,12 @@ gdbpy_print_insn (struct gdbarch *gdbarch, CORE_ADDR memaddr,
 	  gdb::unique_xmalloc_ptr<char> msg = err.to_string ();
 
 	  info->fprintf_func (info->stream, "%s", msg.get ());
-	  return gdb::optional<int> (-1);
+	  return std::optional<int> (-1);
 	}
       else
 	{
 	  gdbpy_print_stack ();
-	  return gdb::optional<int> (-1);
+	  return std::optional<int> (-1);
 	}
 
     }
@@ -1326,7 +1327,7 @@ gdbpy_print_insn (struct gdbarch *gdbarch, CORE_ADDR memaddr,
       PyErr_SetString (PyExc_TypeError,
 		       _("Result is not a DisassemblerResult."));
       gdbpy_print_stack ();
-      return gdb::optional<int> (-1);
+      return std::optional<int> (-1);
     }
 
   /* The result from the Python disassembler has the correct type.  Convert
@@ -1345,7 +1346,7 @@ gdbpy_print_insn (struct gdbarch *gdbarch, CORE_ADDR memaddr,
 	(PyExc_ValueError,
 	 _("Invalid length attribute: length must be greater than 0."));
       gdbpy_print_stack ();
-      return gdb::optional<int> (-1);
+      return std::optional<int> (-1);
     }
   if (length > max_insn_length)
     {
@@ -1354,7 +1355,7 @@ gdbpy_print_insn (struct gdbarch *gdbarch, CORE_ADDR memaddr,
 	 _("Invalid length attribute: length %d greater than architecture maximum of %d"),
 	 length, max_insn_length);
       gdbpy_print_stack ();
-      return gdb::optional<int> (-1);
+      return std::optional<int> (-1);
     }
 
   /* It is impossible to create a DisassemblerResult object with an empty
@@ -1390,7 +1391,7 @@ gdbpy_print_insn (struct gdbarch *gdbarch, CORE_ADDR memaddr,
 	}
     }
 
-  return gdb::optional<int> (length);
+  return std::optional<int> (length);
 }
 
 /* The tp_dealloc callback for the DisassemblerResult type.  Takes care of

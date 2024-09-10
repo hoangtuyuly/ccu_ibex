@@ -17,13 +17,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "exec.h"
 #include "inferior.h"
 #include "target.h"
 #include "command.h"
 #include "completer.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbthread.h"
 #include "ui-out.h"
 #include "observable.h"
@@ -520,7 +519,7 @@ void
 print_selected_inferior (struct ui_out *uiout)
 {
   struct inferior *inf = current_inferior ();
-  const char *filename = inf->pspace->exec_filename.get ();
+  const char *filename = inf->pspace->exec_filename ();
 
   if (filename == NULL)
     filename = _("<noexec>");
@@ -614,8 +613,8 @@ print_inferior (struct ui_out *uiout, const char *requested_inferiors)
       std::string conn = uiout_field_connection (inf->process_target ());
       uiout->field_string ("connection-id", conn);
 
-      if (inf->pspace->exec_filename != nullptr)
-	uiout->field_string ("exec", inf->pspace->exec_filename.get (),
+      if (inf->pspace->exec_filename () != nullptr)
+	uiout->field_string ("exec", inf->pspace->exec_filename (),
 			     file_name_style.style ());
       else
 	uiout->field_skip ("exec");
@@ -751,7 +750,7 @@ inferior_command (const char *args, int from_tty)
     {
       inf = current_inferior ();
       gdb_assert (inf != nullptr);
-      const char *filename = inf->pspace->exec_filename.get ();
+      const char *filename = inf->pspace->exec_filename ();
 
       if (filename == nullptr)
 	filename = _("<noexec>");
@@ -1079,10 +1078,10 @@ static const struct internalvar_funcs inferior_funcs =
   NULL,
 };
 
-
+/* See inferior.h.  */
 
 void
-initialize_inferiors (void)
+initialize_inferiors ()
 {
   struct cmd_list_element *c = NULL;
 

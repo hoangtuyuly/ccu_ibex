@@ -1,6 +1,6 @@
 /* Implementation of the GDB variable objects API.
 
-   Copyright (C) 1999-2023 Free Software Foundation, Inc.
+   Copyright (C) 1999-2024 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,12 +15,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "value.h"
 #include "expression.h"
 #include "frame.h"
 #include "language.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "block.h"
 #include "valprint.h"
 #include "gdbsupport/gdb_regex.h"
@@ -259,7 +258,7 @@ varobj_create (const char *objname,
 	       const char *expression, CORE_ADDR frame, enum varobj_type type)
 {
   /* Fill out a varobj structure for the (root) variable being constructed.  */
-  auto var = gdb::make_unique<varobj> (new varobj_root);
+  auto var = std::make_unique<varobj> (new varobj_root);
 
   if (expression != NULL)
     {

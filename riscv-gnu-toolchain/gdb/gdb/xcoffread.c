@@ -1,5 +1,5 @@
 /* Read AIX xcoff symbol tables and convert to internal format, for GDB.
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
    Derived from coffread.c, dbxread.c, and a lot of hacking.
    Contributed by IBM Corporation.
 
@@ -18,8 +18,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "bfd.h"
+#include "event-top.h"
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -428,8 +428,7 @@ arrange_linetable (std::vector<linetable_entry> &old_linetable)
       if (old_linetable[ii].line == 0)
 	{
 	  /* Function entry found.  */
-	  fentries.emplace_back ();
-	  linetable_entry &e = fentries.back ();
+	  linetable_entry &e = fentries.emplace_back ();
 	  e.line = ii;
 	  e.is_stmt = true;
 	  e.set_unrelocated_pc (old_linetable[ii].unrelocated_pc ());
@@ -1491,6 +1490,7 @@ process_xcoff_symbol (struct xcoff_symbol *cs, struct objfile *objfile)
       sym->set_linkage_name (SYMNAME_ALLOC (name, symname_alloced));
       sym->set_type (builtin_type (objfile)->nodebug_text_symbol);
 
+      sym->set_domain (FUNCTION_DOMAIN);
       sym->set_aclass_index (LOC_BLOCK);
       sym2 = new (&objfile->objfile_obstack) symbol (*sym);
 
@@ -1532,7 +1532,7 @@ process_xcoff_symbol (struct xcoff_symbol *cs, struct objfile *objfile)
 	default:
 	  complaint (_("Unexpected storage class: %d"),
 		     cs->c_sclass);
-	  /* FALLTHROUGH */
+	  [[fallthrough]];
 
 	case C_DECL:
 	case C_PSYM:
@@ -2359,7 +2359,7 @@ scan_xcoff_symtab (minimal_symbol_reader &reader,
 	    complaint (_("Storage class %d not recognized during scan"),
 		       sclass);
 	  }
-	  /* FALLTHROUGH */
+	  [[fallthrough]];
 
 	case C_FCN:
 	  /* C_FCN is .bf and .ef symbols.  I think it is sufficient
@@ -2500,7 +2500,7 @@ scan_xcoff_symtab (minimal_symbol_reader &reader,
 	    switch (p[1])
 	      {
 	      case 'S':
-		pst->add_psymbol (gdb::string_view (namestring,
+		pst->add_psymbol (std::string_view (namestring,
 						    p - namestring),
 				  true, VAR_DOMAIN, LOC_STATIC,
 				  SECT_OFF_DATA (objfile),
@@ -2513,7 +2513,7 @@ scan_xcoff_symtab (minimal_symbol_reader &reader,
 	      case 'G':
 		/* The addresses in these entries are reported to be
 		   wrong.  See the code that reads 'G's for symtabs.  */
-		pst->add_psymbol (gdb::string_view (namestring,
+		pst->add_psymbol (std::string_view (namestring,
 						    p - namestring),
 				  true, VAR_DOMAIN, LOC_STATIC,
 				  SECT_OFF_DATA (objfile),
@@ -2534,7 +2534,7 @@ scan_xcoff_symtab (minimal_symbol_reader &reader,
 		    || (p == namestring + 1
 			&& namestring[0] != ' '))
 		  {
-		    pst->add_psymbol (gdb::string_view (namestring,
+		    pst->add_psymbol (std::string_view (namestring,
 							p - namestring),
 				      true, STRUCT_DOMAIN, LOC_TYPEDEF, -1,
 				      psymbol_placement::STATIC,
@@ -2544,9 +2544,9 @@ scan_xcoff_symtab (minimal_symbol_reader &reader,
 		    if (p[2] == 't')
 		      {
 			/* Also a typedef with the same name.  */
-			pst->add_psymbol (gdb::string_view (namestring,
+			pst->add_psymbol (std::string_view (namestring,
 							    p - namestring),
-					  true, VAR_DOMAIN, LOC_TYPEDEF, -1,
+					  true, TYPE_DOMAIN, LOC_TYPEDEF, -1,
 					  psymbol_placement::STATIC,
 					  unrelocated_addr (0),
 					  psymtab_language,
@@ -2559,9 +2559,9 @@ scan_xcoff_symtab (minimal_symbol_reader &reader,
 	      case 't':
 		if (p != namestring)	/* a name is there, not just :T...  */
 		  {
-		    pst->add_psymbol (gdb::string_view (namestring,
+		    pst->add_psymbol (std::string_view (namestring,
 							p - namestring),
-				      true, VAR_DOMAIN, LOC_TYPEDEF, -1,
+				      true, TYPE_DOMAIN, LOC_TYPEDEF, -1,
 				      psymbol_placement::STATIC,
 				      unrelocated_addr (0),
 				      psymtab_language,
@@ -2624,7 +2624,7 @@ scan_xcoff_symtab (minimal_symbol_reader &reader,
 			  ;
 			/* Note that the value doesn't matter for
 			   enum constants in psymtabs, just in symtabs.  */
-			pst->add_psymbol (gdb::string_view (p, q - p), true,
+			pst->add_psymbol (std::string_view (p, q - p), true,
 					  VAR_DOMAIN, LOC_CONST, -1,
 					  psymbol_placement::STATIC,
 					  unrelocated_addr (0),
@@ -2644,7 +2644,7 @@ scan_xcoff_symtab (minimal_symbol_reader &reader,
 
 	      case 'c':
 		/* Constant, e.g. from "const" in Pascal.  */
-		pst->add_psymbol (gdb::string_view (namestring,
+		pst->add_psymbol (std::string_view (namestring,
 						    p - namestring),
 				  true, VAR_DOMAIN, LOC_CONST, -1,
 				  psymbol_placement::STATIC,
@@ -2659,9 +2659,9 @@ scan_xcoff_symtab (minimal_symbol_reader &reader,
 		    std::string name (namestring, (p - namestring));
 		    function_outside_compilation_unit_complaint (name.c_str ());
 		  }
-		pst->add_psymbol (gdb::string_view (namestring,
+		pst->add_psymbol (std::string_view (namestring,
 						    p - namestring),
-				  true, VAR_DOMAIN, LOC_BLOCK,
+				  true, FUNCTION_DOMAIN, LOC_BLOCK,
 				  SECT_OFF_TEXT (objfile),
 				  psymbol_placement::STATIC,
 				  unrelocated_addr (symbol.n_value),
@@ -2686,9 +2686,9 @@ scan_xcoff_symtab (minimal_symbol_reader &reader,
 		if (startswith (namestring, "@FIX"))
 		  continue;
 
-		pst->add_psymbol (gdb::string_view (namestring,
+		pst->add_psymbol (std::string_view (namestring,
 						    p - namestring),
-				  true, VAR_DOMAIN, LOC_BLOCK,
+				  true, FUNCTION_DOMAIN, LOC_BLOCK,
 				  SECT_OFF_TEXT (objfile),
 				  psymbol_placement::GLOBAL,
 				  unrelocated_addr (symbol.n_value),
@@ -2871,8 +2871,7 @@ xcoff_initial_scan (struct objfile *objfile, symfile_add_flags symfile_flags)
 
   /* DWARF2 sections.  */
 
-  if (dwarf2_has_info (objfile, &dwarf2_xcoff_names))
-    dwarf2_initialize_objfile (objfile);
+  dwarf2_initialize_objfile (objfile, &dwarf2_xcoff_names);
 }
 
 static void

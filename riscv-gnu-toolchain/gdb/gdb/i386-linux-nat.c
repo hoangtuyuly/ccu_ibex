@@ -1,6 +1,6 @@
 /* Native-dependent code for GNU/Linux i386.
 
-   Copyright (C) 1999-2023 Free Software Foundation, Inc.
+   Copyright (C) 1999-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "inferior.h"
 #include "gdbcore.h"
 #include "regcache.h"
@@ -652,7 +651,7 @@ i386_linux_nat_target::low_resume (ptid_t ptid, int step, enum gdb_signal signal
   int pid = ptid.lwp ();
   int request;
 
-  if (catch_syscall_enabled () > 0)
+  if (catch_syscall_enabled ())
    request = PTRACE_SYSCALL;
   else
     request = PTRACE_CONT;

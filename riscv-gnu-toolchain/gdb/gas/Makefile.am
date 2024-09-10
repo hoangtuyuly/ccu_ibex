@@ -1,6 +1,6 @@
 ## Process this file with automake to generate Makefile.in
 #
-#   Copyright (C) 2012-2023 Free Software Foundation, Inc.
+#   Copyright (C) 2012-2024 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -82,6 +82,7 @@ GAS_CFILES = \
 	flonum-mult.c \
 	frags.c \
 	gen-sframe.c \
+	ginsn.c \
 	hash.c \
 	input-file.c \
 	input-scrub.c \
@@ -93,6 +94,8 @@ GAS_CFILES = \
 	read.c \
 	remap.c \
 	sb.c \
+	scfidw2gen.c \
+	scfi.c \
 	sframe-opt.c \
 	stabs.c \
 	subsegs.c \
@@ -118,6 +121,7 @@ HFILES = \
 	flonum.h \
 	frags.h \
 	gen-sframe.h \
+	ginsn.h \
 	hash.h \
 	input-file.h \
 	itbl-lex.h \
@@ -128,6 +132,8 @@ HFILES = \
 	output-file.h \
 	read.h \
 	sb.h \
+	scfidw2gen.h \
+	scfi.h \
 	subsegs.h \
 	symbols.h \
 	tc.h \
@@ -336,7 +342,6 @@ TARG_ENV_HFILES = \
 	config/te-hppa.h \
 	config/te-hppa64.h \
 	config/te-hppalinux64.h \
-	config/te-ia64aix.h \
 	config/te-interix.h \
 	config/te-lynx.h \
 	config/te-macos.h \

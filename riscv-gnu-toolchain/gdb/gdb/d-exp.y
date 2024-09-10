@@ -1,6 +1,6 @@
 /* YACC parser for D expressions, for GDB.
 
-   Copyright (C) 2014-2023 Free Software Foundation, Inc.
+   Copyright (C) 2014-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -38,7 +38,6 @@
 
 %{
 
-#include "defs.h"
 #include <ctype.h>
 #include "expression.h"
 #include "value.h"
@@ -444,7 +443,7 @@ PrimaryExpression:
 		  /* Handle VAR, which could be local or global.  */
 		  sym = lookup_symbol (copy.c_str (),
 				       pstate->expression_context_block,
-				       VAR_DOMAIN, &is_a_field_of_this);
+				       SEARCH_VFT, &is_a_field_of_this);
 		  if (sym.symbol && sym.symbol->aclass () != LOC_TYPEDEF)
 		    {
 		      if (symbol_read_needs_frame (sym.symbol))
@@ -493,7 +492,7 @@ PrimaryExpression:
 			      sym =
 				lookup_symbol (name.c_str (),
 					       (const struct block *) NULL,
-					       VAR_DOMAIN, NULL);
+					       SEARCH_VFT, NULL);
 			      pstate->push_symbol (name.c_str (), sym);
 			    }
 			  else
@@ -1103,7 +1102,7 @@ lex_one_token (struct parser_state *par_state)
 	    last_was_structop = 1;
 	  goto symbol;		/* Nope, must be a symbol.  */
 	}
-      /* FALL THRU.  */
+      [[fallthrough]];
 
     case '0':
     case '1':
@@ -1155,13 +1154,8 @@ lex_one_token (struct parser_state *par_state)
 	toktype = parse_number (par_state, tokstart, p - tokstart,
 				got_dot|got_e, &yylval);
 	if (toktype == ERROR)
-	  {
-	    char *err_copy = (char *) alloca (p - tokstart + 1);
-
-	    memcpy (err_copy, tokstart, p - tokstart);
-	    err_copy[p - tokstart] = 0;
-	    error (_("Invalid number \"%s\"."), err_copy);
-	  }
+	  error (_("Invalid number \"%.*s\"."), (int) (p - tokstart),
+		 tokstart);
 	pstate->lexptr = p;
 	return toktype;
       }
@@ -1180,7 +1174,7 @@ lex_one_token (struct parser_state *par_state)
 	    return ENTRY;
 	  }
       }
-      /* FALLTHRU */
+      [[fallthrough]];
     case '+':
     case '-':
     case '*':
@@ -1337,7 +1331,7 @@ classify_name (struct parser_state *par_state, const struct block *block)
 
   std::string copy = copy_name (yylval.sval);
 
-  sym = lookup_symbol (copy.c_str (), block, VAR_DOMAIN, &is_a_field_of_this);
+  sym = lookup_symbol (copy.c_str (), block, SEARCH_VFT, &is_a_field_of_this);
   if (sym.symbol && sym.symbol->aclass () == LOC_TYPEDEF)
     {
       yylval.tsym.type = sym.symbol->type ();
@@ -1346,9 +1340,11 @@ classify_name (struct parser_state *par_state, const struct block *block)
   else if (sym.symbol == NULL)
     {
       /* Look-up first for a module name, then a type.  */
-      sym = lookup_symbol (copy.c_str (), block, MODULE_DOMAIN, NULL);
+      sym = lookup_symbol (copy.c_str (), block, SEARCH_MODULE_DOMAIN,
+			   nullptr);
       if (sym.symbol == NULL)
-	sym = lookup_symbol (copy.c_str (), block, STRUCT_DOMAIN, NULL);
+	sym = lookup_symbol (copy.c_str (), block, SEARCH_STRUCT_DOMAIN,
+			     nullptr);
 
       if (sym.symbol != NULL)
 	{
@@ -1631,9 +1627,6 @@ d_parse (struct parser_state *par_state)
 static void
 yyerror (const char *msg)
 {
-  if (pstate->prev_lexptr)
-    pstate->lexptr = pstate->prev_lexptr;
-
-  error (_("A %s in expression, near `%s'."), msg, pstate->lexptr);
+  pstate->parse_error (msg);
 }
 

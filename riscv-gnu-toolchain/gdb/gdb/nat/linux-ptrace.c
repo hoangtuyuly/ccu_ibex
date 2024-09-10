@@ -1,5 +1,5 @@
 /* Linux-specific ptrace manipulation routines.
-   Copyright (C) 2012-2023 Free Software Foundation, Inc.
+   Copyright (C) 2012-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,7 +16,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "gdbsupport/common-defs.h"
 #include "linux-ptrace.h"
 #include "linux-procfs.h"
 #include "linux-waitpid.h"
@@ -70,7 +69,7 @@ linux_ptrace_attach_fail_reason_string (ptid_t ptid, int err)
 #if defined __i386__ || defined __x86_64__
 
 /* Address of the 'ret' instruction in asm code block below.  */
-EXTERN_C void linux_ptrace_test_ret_to_nx_instr (void);
+extern "C" void linux_ptrace_test_ret_to_nx_instr (void);
 
 #include <sys/reg.h>
 #include <sys/mman.h>

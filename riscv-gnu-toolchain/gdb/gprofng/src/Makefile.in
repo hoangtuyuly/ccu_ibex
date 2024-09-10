@@ -15,7 +15,7 @@
 @SET_MAKE@
 
 #
-#   Copyright (C) 2021-2023 Free Software Foundation, Inc.
+#   Copyright (C) 2021-2024 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -306,6 +306,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BASH = @BASH@
 BISON = @BISON@
 BUILD_SUBDIRS = @BUILD_SUBDIRS@
 CC = @CC@
@@ -337,7 +338,6 @@ GPROFNG_LIBADD = @GPROFNG_LIBADD@
 GPROFNG_NO_FORMAT_TRUNCATION_CFLAGS = @GPROFNG_NO_FORMAT_TRUNCATION_CFLAGS@
 GPROFNG_NO_SWITCH_CFLAGS = @GPROFNG_NO_SWITCH_CFLAGS@
 GREP = @GREP@
-HELP2MAN = @HELP2MAN@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@

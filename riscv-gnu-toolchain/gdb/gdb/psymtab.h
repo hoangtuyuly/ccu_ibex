@@ -1,6 +1,6 @@
 /* Public partial symbol table definitions.
 
-   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+   Copyright (C) 2009-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,7 +21,7 @@
 #define PSYMTAB_H
 
 #include "objfiles.h"
-#include "gdbsupport/gdb_string_view.h"
+#include <string_view>
 #include "gdbsupport/gdb_obstack.h"
 #include "symfile.h"
 #include "gdbsupport/next-iterator.h"
@@ -131,7 +131,7 @@ private:
   /* The obstack where allocations are made.  This is lazily allocated
      so that we don't waste memory when there are no psymtabs.  */
 
-  gdb::optional<auto_obstack> m_obstack;
+  std::optional<auto_obstack> m_obstack;
 };
 
 /* A partial_symbol records the name, domain, and address class of
@@ -346,7 +346,7 @@ struct partial_symtab
      LANGUAGE is the language from which the symbol originates.  This will
      influence, amongst other things, how the symbol name is demangled. */
 
-  void add_psymbol (gdb::string_view name,
+  void add_psymbol (std::string_view name,
 		    bool copy_name, domain_enum domain,
 		    enum address_class theclass,
 		    short section,
@@ -617,7 +617,7 @@ struct psymbol_functions : public quick_symbol_functions
 
   enum language lookup_global_symbol_language (struct objfile *objfile,
 					       const char *name,
-					       domain_enum domain,
+					       domain_search_flags domain,
 					       bool *symbol_found_p) override;
 
   void print_stats (struct objfile *objfile, bool print_bcache) override;
@@ -626,13 +626,6 @@ struct psymbol_functions : public quick_symbol_functions
 
   void expand_all_symtabs (struct objfile *objfile) override;
 
-  void expand_matching_symbols
-    (struct objfile *,
-     const lookup_name_info &lookup_name,
-     domain_enum domain,
-     int global,
-     symbol_compare_ftype *ordered_compare) override;
-
   bool expand_symtabs_matching
     (struct objfile *objfile,
      gdb::function_view<expand_symtabs_file_matcher_ftype> file_matcher,
@@ -640,8 +633,7 @@ struct psymbol_functions : public quick_symbol_functions
      gdb::function_view<expand_symtabs_symbol_matcher_ftype> symbol_matcher,
      gdb::function_view<expand_symtabs_exp_notify_ftype> expansion_notify,
      block_search_flags search_flags,
-     domain_enum domain,
-     enum search_domain kind) override;
+     domain_search_flags kind) override;
 
   struct compunit_symtab *find_pc_sect_compunit_symtab
     (struct objfile *objfile, struct bound_minimal_symbol msymbol,

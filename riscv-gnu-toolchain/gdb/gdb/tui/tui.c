@@ -1,6 +1,6 @@
 /* General functions for the WDB TUI.
 
-   Copyright (C) 1998-2023 Free Software Foundation, Inc.
+   Copyright (C) 1998-2024 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -19,8 +19,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
-#include "gdbcmd.h"
+#include "event-top.h"
+#include "cli/cli-cmds.h"
 #include "tui/tui.h"
 #include "tui/tui-hooks.h"
 #include "tui/tui-command.h"
@@ -28,7 +28,7 @@
 #include "tui/tui-layout.h"
 #include "tui/tui-io.h"
 #include "tui/tui-regs.h"
-#include "tui/tui-stack.h"
+#include "tui/tui-status.h"
 #include "tui/tui-win.h"
 #include "tui/tui-wingeneral.h"
 #include "tui/tui-winsource.h"
@@ -85,13 +85,19 @@ struct tui_char_command
    mode.  */
 static const struct tui_char_command tui_commands[] = {
   { 'c', "continue" },
+  { 'C', "reverse-continue" },
   { 'd', "down" },
   { 'f', "finish" },
+  { 'F', "reverse-finish" },
   { 'n', "next" },
+  { 'N', "reverse-next" },
   { 'o', "nexti" },
+  { 'O', "reverse-nexti" },
   { 'r', "run" },
   { 's', "step" },
+  { 'S', "reverse-step" },
   { 'i', "stepi" },
+  { 'I', "reverse-stepi" },
   { 'u', "up" },
   { 'v', "info locals" },
   { 'w', "where" },
@@ -285,7 +291,7 @@ tui_set_key_mode (enum tui_key_mode mode)
   tui_current_key_mode = mode;
   rl_set_keymap (mode == TUI_SINGLE_KEY_MODE
 		 ? tui_keymap : tui_readline_standard_keymap);
-  tui_show_locator_content ();
+  tui_show_status_content ();
 }
 
 /* Initialize readline and configure the keymap for the switching
@@ -461,7 +467,7 @@ tui_enable (void)
       tui_set_term_width_to (COLS);
       def_prog_mode ();
 
-      tui_show_frame_info (0);
+      tui_show_frame_info (deprecated_safe_get_selected_frame ());
       tui_set_initial_layout ();
       tui_set_win_focus_to (TUI_SRC_WIN);
       keypad (TUI_CMD_WIN->handle.get (), TRUE);
@@ -492,11 +498,6 @@ tui_enable (void)
       tui_set_win_resized_to (false);
       tui_resize_all ();
     }
-
-  if (deprecated_safe_get_selected_frame ())
-    tui_show_frame_info (deprecated_safe_get_selected_frame ());
-  else
-    tui_display_main ();
 
   /* Install the TUI specific hooks.  This must be done after the call to
      tui_display_main so that we don't detect the symtab changed event it

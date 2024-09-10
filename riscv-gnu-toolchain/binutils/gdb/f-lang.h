@@ -140,9 +140,17 @@ public:
 
   /* See language.h.  */
 
+  struct block_symbol lookup_symbol_local
+       (const char *scope,
+	const char *name,
+	const struct block *block,
+	const domain_search_flags domain) const override;
+
+  /* See language.h.  */
+
   struct block_symbol lookup_symbol_nonlocal
 	(const char *name, const struct block *block,
-	 const domain_enum domain) const override;
+	 const domain_search_flags domain) const override;
 
   /* See language.h.  */
 

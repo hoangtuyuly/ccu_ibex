@@ -1,4 +1,4 @@
-# Copyright (C) 2015-2023 Free Software Foundation, Inc.
+# Copyright (C) 2015-2024 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,8 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import gdb
-from gdb.unwinder import Unwinder, FrameId
-
+from gdb.unwinder import FrameId, Unwinder
 
 # These are set to test whether invalid register names cause an error.
 add_saved_register_errors = {}

@@ -1,5 +1,5 @@
 /* dlltool.c -- tool to generate stuff for PE style DLLs
-   Copyright (C) 1995-2023 Free Software Foundation, Inc.
+   Copyright (C) 1995-2024 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -876,7 +876,7 @@ dlltmp (char **buf, const char *fmt)
 {
   if (!*buf)
     {
-      *buf = malloc (strlen (tmp_prefix) + 64);
+      *buf = xmalloc (strlen (tmp_prefix) + 64);
       sprintf (*buf, fmt, tmp_prefix);
     }
   return *buf;

@@ -1,6 +1,6 @@
 /* <proc_service.h> implementation.
 
-   Copyright (C) 1999-2023 Free Software Foundation, Inc.
+   Copyright (C) 1999-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 
 #include "gdbcore.h"
 #include "inferior.h"
@@ -135,9 +134,8 @@ static struct regcache *
 get_ps_regcache (struct ps_prochandle *ph, lwpid_t lwpid)
 {
   inferior *inf = ph->thread->inf;
-  return get_thread_arch_regcache (inf->process_target (),
-				   ptid_t (inf->pid, lwpid),
-				   inf->gdbarch);
+  return get_thread_arch_regcache (inf, ptid_t (inf->pid, lwpid),
+				   inf->arch ());
 }
 
 /* Get the general registers of LWP LWPID within the target process PH

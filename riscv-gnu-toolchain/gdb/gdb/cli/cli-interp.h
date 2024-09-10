@@ -1,6 +1,6 @@
 /* CLI Definitions for GDB, the GNU debugger.
 
-   Copyright (C) 2016-2023 Free Software Foundation, Inc.
+   Copyright (C) 2016-2024 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -50,7 +50,6 @@ private:
     ui_file *err;
     ui_file *log;
     ui_file *targ;
-    ui_file *targerr;
     /* When redirecting, some or all of these may be non-null
        depending on the logging mode.  */
     ui_file_up stdout_holder;

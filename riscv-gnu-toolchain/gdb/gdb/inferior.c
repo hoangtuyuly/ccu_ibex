@@ -1,6 +1,6 @@
 /* Multi-process control for GDB, the GNU debugger.
 
-   Copyright (C) 2008-2023 Free Software Foundation, Inc.
+   Copyright (C) 2008-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,13 +17,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "exec.h"
 #include "inferior.h"
 #include "target.h"
 #include "command.h"
 #include "completer.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbthread.h"
 #include "ui-out.h"
 #include "observable.h"
@@ -171,6 +170,18 @@ void
 inferior::set_args (gdb::array_view<char * const> args)
 {
   set_args (construct_inferior_arguments (args));
+}
+
+void
+inferior::set_arch (gdbarch *arch)
+{
+  gdb_assert (arch != nullptr);
+  gdb_assert (gdbarch_initialized_p (arch));
+  m_gdbarch = arch;
+
+  process_stratum_target *proc_target = this->process_target ();
+  if (proc_target != nullptr)
+    registers_changed_ptid (proc_target, ptid_t (this->pid));
 }
 
 void
@@ -702,8 +713,6 @@ kill_inferior_command (const char *args, int from_tty)
 
       target_kill ();
     }
-
-  bfd_cache_close_all ();
 }
 
 /* See inferior.h.  */
@@ -718,10 +727,10 @@ switch_to_inferior_no_thread (inferior *inf)
 
 /* See regcache.h.  */
 
-gdb::optional<scoped_restore_current_thread>
+std::optional<scoped_restore_current_thread>
 maybe_switch_inferior (inferior *inf)
 {
-  gdb::optional<scoped_restore_current_thread> maybe_restore_thread;
+  std::optional<scoped_restore_current_thread> maybe_restore_thread;
   if (inf != current_inferior ())
     {
       maybe_restore_thread.emplace ();
@@ -831,15 +840,13 @@ remove_inferior_command (const char *args, int from_tty)
 struct inferior *
 add_inferior_with_spaces (void)
 {
-  struct address_space *aspace;
   struct program_space *pspace;
   struct inferior *inf;
 
   /* If all inferiors share an address space on this system, this
      doesn't really return a new address space; otherwise, it
      really does.  */
-  aspace = maybe_new_address_space ();
-  pspace = new program_space (aspace);
+  pspace = new program_space (maybe_new_address_space ());
   inf = add_inferior (0);
   inf->pspace = pspace;
   inf->aspace = pspace->aspace;
@@ -847,10 +854,10 @@ add_inferior_with_spaces (void)
   /* Setup the inferior's initial arch, based on information obtained
      from the global "set ..." options.  */
   gdbarch_info info;
-  inf->gdbarch = gdbarch_find_by_info (info);
+  inf->set_arch (gdbarch_find_by_info (info));
   /* The "set ..." options reject invalid settings, so we should
      always have a valid arch by now.  */
-  gdb_assert (inf->gdbarch != NULL);
+  gdb_assert (inf->arch () != nullptr);
 
   return inf;
 }
@@ -1002,19 +1009,17 @@ clone_inferior_command (const char *args, int from_tty)
 
   for (i = 0; i < copies; ++i)
     {
-      struct address_space *aspace;
       struct program_space *pspace;
       struct inferior *inf;
 
       /* If all inferiors share an address space on this system, this
 	 doesn't really return a new address space; otherwise, it
 	 really does.  */
-      aspace = maybe_new_address_space ();
-      pspace = new program_space (aspace);
+      pspace = new program_space (maybe_new_address_space ());
       inf = add_inferior (0);
       inf->pspace = pspace;
       inf->aspace = pspace->aspace;
-      inf->gdbarch = orginf->gdbarch;
+      inf->set_arch (orginf->arch ());
 
       switch_to_inferior_and_push_target (inf, no_connection, orginf);
 
@@ -1073,10 +1078,10 @@ static const struct internalvar_funcs inferior_funcs =
   NULL,
 };
 
-
+/* See inferior.h.  */
 
 void
-initialize_inferiors (void)
+initialize_inferiors ()
 {
   struct cmd_list_element *c = NULL;
 

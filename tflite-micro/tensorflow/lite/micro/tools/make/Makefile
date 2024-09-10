@@ -167,18 +167,6 @@ ifneq ($(TOOLCHAIN), gcc)
   CC_WARNINGS += -Wshadow
 endif
 
-# COMMON_FLAGS := \
-#   -fno-unwind-tables \
-#   -ffunction-sections \
-#   -fdata-sections \
-#   -fmessage-length=0 \
-#   -DTF_LITE_STATIC_MEMORY \
-#   -DTF_LITE_DISABLE_X86_NEON \
-#   -march=rv32imc_zicsr_zifencei \
-#   -mabi=ilp32 \
-#   $(CC_WARNINGS) \
-#   $(ADDITIONAL_DEFINES)
-
 COMMON_FLAGS := \
   -fno-unwind-tables \
   -ffunction-sections \
@@ -188,14 +176,26 @@ COMMON_FLAGS := \
   -DTF_LITE_DISABLE_X86_NEON \
   -march=rv32imc_zicsr_zifencei \
   -mabi=ilp32 \
-  -static \
-  -mcmodel=medany \
-  -g \
-  -Os \
-  -fvisibility=hidden \
-  -nostartfiles \
   $(CC_WARNINGS) \
   $(ADDITIONAL_DEFINES)
+
+# COMMON_FLAGS := \
+#   -fno-unwind-tables \
+#   -ffunction-sections \
+#   -fdata-sections \
+#   -fmessage-length=0 \
+#   -DTF_LITE_STATIC_MEMORY \
+#   -DTF_LITE_DISABLE_X86_NEON \
+#   -march=rv32imc_zicsr_zifencei \
+#   -mabi=ilp32 \
+#   -static \
+#   -mcmodel=medany \
+#   -g \
+#   -Os \
+#   -fvisibility=hidden \
+#   -nostartfiles \
+#   $(CC_WARNINGS) \
+#   $(ADDITIONAL_DEFINES)
 
   # -Werror \ #
 ifeq ($(TARGET), $(HOST_OS))
@@ -869,8 +869,8 @@ $(KERNEL_OBJDIR)%.o: %.S $(THIRD_PARTY_TARGETS)
 microlite: $(MICROLITE_LIB_PATH)
 
 
-LDFLAGS += -lgcc -T /Users/tuhoang/CFU_IBEX/tflite-micro/link.ld /Users/tuhoang/CFU_IBEX/tflite-micro/crt0.o
-LDFLAGS += -Wl,--no-warn-rwx-segments
+# LDFLAGS += -lgcc -T /Users/tuhoang/CFU_IBEX/tflite-micro/link.ld /Users/tuhoang/CFU_IBEX/tflite-micro/crt0.o
+# LDFLAGS += -Wl,--no-warn-rwx-segments
 
 # Gathers together all the objects we've compiled into a single '.a' archive.
 $(MICROLITE_LIB_PATH): $(MICROLITE_LIB_OBJS) $(MICROLITE_KERNEL_OBJS) $(MICROLITE_THIRD_PARTY_OBJS) $(MICROLITE_THIRD_PARTY_KERNEL_OBJS) $(MICROLITE_CUSTOM_OP_OBJS)

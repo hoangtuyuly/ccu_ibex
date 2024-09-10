@@ -1,6 +1,6 @@
 /* Support for printing Ada values for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,8 +17,9 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include <ctype.h>
+#include "event-top.h"
+#include "extract-store-integer.h"
 #include "gdbtypes.h"
 #include "expression.h"
 #include "value.h"
@@ -89,7 +90,7 @@ print_optional_low_bound (struct ui_file *stream, struct type *type,
       break;
     case TYPE_CODE_UNDEF:
       index_type = NULL;
-      /* FALL THROUGH */
+      [[fallthrough]];
     default:
       if (low_bound == 1)
 	return 0;
@@ -385,7 +386,7 @@ ada_print_scalar (struct type *type, LONGEST val, struct ui_file *stream)
 
     case TYPE_CODE_ENUM:
       {
-	gdb::optional<LONGEST> posn = discrete_position (type, val);
+	std::optional<LONGEST> posn = discrete_position (type, val);
 	if (posn.has_value ())
 	  fputs_styled (ada_enum_name (type->field (*posn).name ()),
 			variable_name_style.style (), stream);
@@ -627,7 +628,7 @@ print_field_values (struct value *value, struct value *outer_value,
 	{
 	  /* Bitfields require special handling, especially due to byte
 	     order problems.  */
-	  if (HAVE_CPLUS_STRUCT (type) && TYPE_FIELD_IGNORE (type, i))
+	  if (type->field (i).is_ignored ())
 	    {
 	      fputs_styled (_("<optimized out or zero length>"),
 			    metadata_style.style (), stream);
@@ -827,7 +828,7 @@ ada_val_print_enum (struct value *value, struct ui_file *stream, int recurse,
   int offset_aligned = ada_aligned_value_addr (type, valaddr) - valaddr;
 
   val = unpack_long (type, valaddr + offset_aligned);
-  gdb::optional<LONGEST> posn = discrete_position (type, val);
+  std::optional<LONGEST> posn = discrete_position (type, val);
   if (posn.has_value ())
     {
       const char *name = ada_enum_name (type->field (*posn).name ());

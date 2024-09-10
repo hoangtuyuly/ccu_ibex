@@ -2,7 +2,7 @@
 
 %{
 
-/* Copyright (C) 1991-2023 Free Software Foundation, Inc.
+/* Copyright (C) 1991-2024 Free Software Foundation, Inc.
    Written by Steve Chamberlain of Cygnus Support.
 
    This file is part of the GNU Binutils.
@@ -120,11 +120,12 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
       parser_input = input_selected;
       switch (t)
 	{
-	case input_script: return INPUT_SCRIPT; break;
-	case input_mri_script: return INPUT_MRI_SCRIPT; break;
-	case input_version_script: return INPUT_VERSION_SCRIPT; break;
-	case input_dynamic_list: return INPUT_DYNAMIC_LIST; break;
-	case input_defsym: return INPUT_DEFSYM; break;
+	case input_script: return INPUT_SCRIPT;
+	case input_mri_script: return INPUT_MRI_SCRIPT;
+	case input_version_script: return INPUT_VERSION_SCRIPT;
+	case input_section_ordering_script: return INPUT_SECTION_ORDERING_SCRIPT;
+	case input_dynamic_list: return INPUT_DYNAMIC_LIST;
+	case input_defsym: return INPUT_DEFSYM;
 	default: abort ();
 	}
     }
@@ -133,7 +134,7 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 				comment (); }
 
 <MRI,EXPRESSION>"$"([0-9A-Fa-f])+ {
-				yylval.integer = bfd_scan_vma (yytext + 1, 0, 16);
+				yylval.integer = strtoull (yytext + 1, 0, 16);
 				yylval.bigint.str = NULL;
 				return INT;
 			}
@@ -158,8 +159,7 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 				    default:
 				     ibase = 10;
 				   }
-				   yylval.integer = bfd_scan_vma (yytext, 0,
-								  ibase);
+				   yylval.integer = strtoull (yytext, 0, ibase);
 				   yylval.bigint.str = NULL;
 				   return INT;
 				 }
@@ -172,7 +172,7 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 				      ++s;
 				      ibase = 16;
 				    }
-				  yylval.integer = bfd_scan_vma (s, 0, ibase);
+				  yylval.integer = strtoull (s, 0, ibase);
 				  yylval.bigint.str = NULL;
 				  if (yytext[yyleng - 1] == 'M'
 				      || yytext[yyleng - 1] == 'm')
@@ -322,6 +322,7 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 <WILD>"SORT"				{ RTOKEN(SORT_BY_NAME); }
 <WILD>"SORT_BY_INIT_PRIORITY"		{ RTOKEN(SORT_BY_INIT_PRIORITY); }
 <WILD>"SORT_NONE"			{ RTOKEN(SORT_NONE); }
+<WILD>"REVERSE"				{ RTOKEN(REVERSE); }
 <EXPRESSION>"NOLOAD"			{ RTOKEN(NOLOAD); }
 <EXPRESSION>"READONLY"			{ RTOKEN(READONLY); }
 <EXPRESSION>"DSECT"			{ RTOKEN(DSECT); }
@@ -668,7 +669,7 @@ static int
 yy_input (char *buf, int max_size)
 {
   int result = 0;
-  if (YY_CURRENT_BUFFER->yy_input_file)
+  if (YY_CURRENT_BUFFER != NULL && YY_CURRENT_BUFFER->yy_input_file)
     {
       if (yyin)
 	{

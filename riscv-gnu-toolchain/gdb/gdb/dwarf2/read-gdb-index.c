@@ -1,6 +1,6 @@
 /* Reading code for .gdb_index
 
-   Copyright (C) 2023 Free Software Foundation, Inc.
+   Copyright (C) 2023-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,12 +17,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "read-gdb-index.h"
 
 #include "cli/cli-cmds.h"
 #include "complaints.h"
 #include "dwz.h"
+#include "event-top.h"
 #include "gdb/gdb-index.h"
 #include "gdbsupport/gdb-checked-static-cast.h"
 #include "mapped-index.h"
@@ -88,6 +88,9 @@ struct mapped_gdb_index final : public mapped_index_base
   /* A pointer to the constant pool.  */
   gdb::array_view<const gdb_byte> constant_pool;
 
+  /* The shortcut table data.  */
+  gdb::array_view<const gdb_byte> shortcut_table;
+
   /* Return the index into the constant pool of the name of the IDXth
      symbol in the symbol table.  */
   offset_type symbol_name_index (offset_type idx) const
@@ -136,13 +139,6 @@ struct dwarf2_gdb_index : public dwarf2_base_index_functions
      gdb.dwarf2/gdb-index.exp testcase.  */
   void dump (struct objfile *objfile) override;
 
-  void expand_matching_symbols
-    (struct objfile *,
-     const lookup_name_info &lookup_name,
-     domain_enum domain,
-     int global,
-     symbol_compare_ftype *ordered_compare) override;
-
   bool expand_symtabs_matching
     (struct objfile *objfile,
      gdb::function_view<expand_symtabs_file_matcher_ftype> file_matcher,
@@ -150,8 +146,7 @@ struct dwarf2_gdb_index : public dwarf2_base_index_functions
      gdb::function_view<expand_symtabs_symbol_matcher_ftype> symbol_matcher,
      gdb::function_view<expand_symtabs_exp_notify_ftype> expansion_notify,
      block_search_flags search_flags,
-     domain_enum domain,
-     enum search_domain kind) override;
+     domain_search_flags domain) override;
 };
 
 /* This dumps minimal information about the index.
@@ -170,189 +165,6 @@ dwarf2_gdb_index::dump (struct objfile *objfile)
   gdb_printf ("\n");
 }
 
-/* Struct used to manage iterating over all CUs looking for a symbol.  */
-
-struct dw2_symtab_iterator
-{
-  /* The dwarf2_per_objfile owning the CUs we are iterating on.  */
-  dwarf2_per_objfile *per_objfile;
-  /* If set, only look for symbols that match that block.  Valid values are
-     GLOBAL_BLOCK and STATIC_BLOCK.  */
-  gdb::optional<block_enum> block_index;
-  /* The kind of symbol we're looking for.  */
-  domain_enum domain;
-  /* The list of CUs from the index entry of the symbol,
-     or NULL if not found.  */
-  offset_view vec;
-  /* The next element in VEC to look at.  */
-  int next;
-  /* The number of elements in VEC, or zero if there is no match.  */
-  int length;
-  /* Have we seen a global version of the symbol?
-     If so we can ignore all further global instances.
-     This is to work around gold/15646, inefficient gold-generated
-     indices.  */
-  int global_seen;
-};
-
-/* Initialize the index symtab iterator ITER, offset_type NAMEI variant.  */
-
-static void
-dw2_symtab_iter_init (struct dw2_symtab_iterator *iter,
-		      dwarf2_per_objfile *per_objfile,
-		      gdb::optional<block_enum> block_index,
-		      domain_enum domain, offset_type namei,
-		      mapped_gdb_index &index)
-{
-  iter->per_objfile = per_objfile;
-  iter->block_index = block_index;
-  iter->domain = domain;
-  iter->next = 0;
-  iter->global_seen = 0;
-  iter->vec = {};
-  iter->length = 0;
-
-  gdb_assert (!index.symbol_name_slot_invalid (namei));
-  offset_type vec_idx = index.symbol_vec_index (namei);
-
-  iter->vec = offset_view (index.constant_pool.slice (vec_idx));
-  iter->length = iter->vec[0];
-}
-
-/* Return the next matching CU or NULL if there are no more.  */
-
-static struct dwarf2_per_cu_data *
-dw2_symtab_iter_next (struct dw2_symtab_iterator *iter,
-		      mapped_gdb_index &index)
-{
-  dwarf2_per_objfile *per_objfile = iter->per_objfile;
-
-  for ( ; iter->next < iter->length; ++iter->next)
-    {
-      offset_type cu_index_and_attrs = iter->vec[iter->next + 1];
-      offset_type cu_index = GDB_INDEX_CU_VALUE (cu_index_and_attrs);
-      gdb_index_symbol_kind symbol_kind =
-	GDB_INDEX_SYMBOL_KIND_VALUE (cu_index_and_attrs);
-      /* Only check the symbol attributes if they're present.
-	 Indices prior to version 7 don't record them,
-	 and indices >= 7 may elide them for certain symbols
-	 (gold does this).  */
-      int attrs_valid = (index.version >= 7
-			 && symbol_kind != GDB_INDEX_SYMBOL_KIND_NONE);
-
-      /* Don't crash on bad data.  */
-      if (cu_index >= per_objfile->per_bfd->all_units.size ())
-	{
-	  complaint (_(".gdb_index entry has bad CU index"
-		       " [in module %s]"), objfile_name (per_objfile->objfile));
-	  continue;
-	}
-
-      dwarf2_per_cu_data *per_cu = per_objfile->per_bfd->get_cu (cu_index);
-
-      /* Skip if already read in.  */
-      if (per_objfile->symtab_set_p (per_cu))
-	continue;
-
-      /* Check static vs global.  */
-      if (attrs_valid)
-	{
-	  bool is_static = GDB_INDEX_SYMBOL_STATIC_VALUE (cu_index_and_attrs);
-
-	  if (iter->block_index.has_value ())
-	    {
-	      bool want_static = *iter->block_index == STATIC_BLOCK;
-
-	      if (is_static != want_static)
-		continue;
-	    }
-
-	  /* Work around gold/15646.  */
-	  if (!is_static
-	      && symbol_kind == GDB_INDEX_SYMBOL_KIND_TYPE)
-	    {
-	      if (iter->global_seen)
-		continue;
-
-	      iter->global_seen = 1;
-	    }
-	}
-
-      /* Only check the symbol's kind if it has one.  */
-      if (attrs_valid)
-	{
-	  switch (iter->domain)
-	    {
-	    case VAR_DOMAIN:
-	      if (symbol_kind != GDB_INDEX_SYMBOL_KIND_VARIABLE
-		  && symbol_kind != GDB_INDEX_SYMBOL_KIND_FUNCTION
-		  /* Some types are also in VAR_DOMAIN.  */
-		  && symbol_kind != GDB_INDEX_SYMBOL_KIND_TYPE)
-		continue;
-	      break;
-	    case STRUCT_DOMAIN:
-	      if (symbol_kind != GDB_INDEX_SYMBOL_KIND_TYPE)
-		continue;
-	      break;
-	    case LABEL_DOMAIN:
-	      if (symbol_kind != GDB_INDEX_SYMBOL_KIND_OTHER)
-		continue;
-	      break;
-	    case MODULE_DOMAIN:
-	      if (symbol_kind != GDB_INDEX_SYMBOL_KIND_OTHER)
-		continue;
-	      break;
-	    default:
-	      break;
-	    }
-	}
-
-      ++iter->next;
-      return per_cu;
-    }
-
-  return NULL;
-}
-
-void
-dwarf2_gdb_index::expand_matching_symbols
-  (struct objfile *objfile,
-   const lookup_name_info &name, domain_enum domain,
-   int global,
-   symbol_compare_ftype *ordered_compare)
-{
-  /* Used for Ada.  */
-  dwarf2_per_objfile *per_objfile = get_dwarf2_per_objfile (objfile);
-
-  const block_enum block_kind = global ? GLOBAL_BLOCK : STATIC_BLOCK;
-
-  mapped_gdb_index &index
-    = *(gdb::checked_static_cast<mapped_gdb_index *>
-	(per_objfile->per_bfd->index_table.get ()));
-
-  const char *match_name = name.ada ().lookup_name ().c_str ();
-  auto matcher = [&] (const char *symname)
-  {
-    if (ordered_compare == nullptr)
-      return true;
-    return ordered_compare (symname, match_name) == 0;
-  };
-
-  dw2_expand_symtabs_matching_symbol (index, name, matcher,
-				      [&] (offset_type namei)
-    {
-      struct dw2_symtab_iterator iter;
-      struct dwarf2_per_cu_data *per_cu;
-
-      dw2_symtab_iter_init (&iter, per_objfile, block_kind, domain, namei,
-			    index);
-      while ((per_cu = dw2_symtab_iter_next (&iter, index)) != NULL)
-	dw2_expand_symtabs_matching_one (per_cu, per_objfile, nullptr,
-					 nullptr);
-      return true;
-    }, per_objfile);
-}
-
 /* Helper for dw2_expand_matching symtabs.  Called on each symbol
    matched, to expand corresponding CUs that were marked.  IDX is the
    index of the symbol name that matched.  */
@@ -363,7 +175,7 @@ dw2_expand_marked_cus
    gdb::function_view<expand_symtabs_file_matcher_ftype> file_matcher,
    gdb::function_view<expand_symtabs_exp_notify_ftype> expansion_notify,
    block_search_flags search_flags,
-   search_domain kind)
+   domain_search_flags kind)
 {
   offset_type vec_len, vec_idx;
   bool global_seen = false;
@@ -414,27 +226,24 @@ dw2_expand_marked_cus
 		continue;
 	    }
 
-	  switch (kind)
+	  domain_search_flags mask = 0;
+	  switch (symbol_kind)
 	    {
-	    case VARIABLES_DOMAIN:
-	      if (symbol_kind != GDB_INDEX_SYMBOL_KIND_VARIABLE)
-		continue;
+	    case GDB_INDEX_SYMBOL_KIND_VARIABLE:
+	      mask = SEARCH_VAR_DOMAIN;
 	      break;
-	    case FUNCTIONS_DOMAIN:
-	      if (symbol_kind != GDB_INDEX_SYMBOL_KIND_FUNCTION)
-		continue;
+	    case GDB_INDEX_SYMBOL_KIND_FUNCTION:
+	      mask = SEARCH_FUNCTION_DOMAIN;
 	      break;
-	    case TYPES_DOMAIN:
-	      if (symbol_kind != GDB_INDEX_SYMBOL_KIND_TYPE)
-		continue;
+	    case GDB_INDEX_SYMBOL_KIND_TYPE:
+	      mask = SEARCH_TYPE_DOMAIN | SEARCH_STRUCT_DOMAIN;
 	      break;
-	    case MODULES_DOMAIN:
-	      if (symbol_kind != GDB_INDEX_SYMBOL_KIND_OTHER)
-		continue;
-	      break;
-	    default:
+	    case GDB_INDEX_SYMBOL_KIND_OTHER:
+	      mask = SEARCH_MODULE_DOMAIN;
 	      break;
 	    }
+	  if ((kind & mask) == 0)
+	    continue;
 	}
 
       /* Don't crash on bad data.  */
@@ -462,8 +271,7 @@ dwarf2_gdb_index::expand_symtabs_matching
      gdb::function_view<expand_symtabs_symbol_matcher_ftype> symbol_matcher,
      gdb::function_view<expand_symtabs_exp_notify_ftype> expansion_notify,
      block_search_flags search_flags,
-     domain_enum domain,
-     enum search_domain kind)
+     domain_search_flags domain)
 {
   dwarf2_per_objfile *per_objfile = get_dwarf2_per_objfile (objfile);
 
@@ -496,7 +304,7 @@ dwarf2_gdb_index::expand_symtabs_matching
 					  [&] (offset_type idx)
     {
       if (!dw2_expand_marked_cus (per_objfile, idx, file_matcher,
-				  expansion_notify, search_flags, kind))
+				  expansion_notify, search_flags, domain))
 	return false;
       return true;
     }, per_objfile);
@@ -583,7 +391,7 @@ to use the section anyway."),
 
   /* Indexes with higher version than the one supported by GDB may be no
      longer backward compatible.  */
-  if (version > 8)
+  if (version > 9)
     return 0;
 
   map->version = version;
@@ -610,6 +418,16 @@ to use the section anyway."),
 						    symbol_table_end));
 
   ++i;
+
+  if (version >= 9)
+    {
+      const gdb_byte *shortcut_table = addr + metadata[i];
+      const gdb_byte *shortcut_table_end = addr + metadata[i + 1];
+      map->shortcut_table
+	= gdb::array_view<const gdb_byte> (shortcut_table, shortcut_table_end);
+      ++i;
+    }
+
   map->constant_pool = buffer.slice (metadata[i]);
 
   if (map->constant_pool.empty () && !map->symbol_table.empty ())
@@ -635,7 +453,7 @@ create_cus_from_gdb_index_list (dwarf2_per_bfd *per_bfd,
 {
   for (offset_type i = 0; i < n_elements; i += 2)
     {
-      gdb_static_assert (sizeof (ULONGEST) >= 8);
+      static_assert (sizeof (ULONGEST) >= 8);
 
       sect_offset sect_off
 	= (sect_offset) extract_unsigned_integer (cu_list, 8, BFD_ENDIAN_LITTLE);
@@ -687,7 +505,7 @@ create_signatured_type_table_from_gdb_index
       void **slot;
       cu_offset type_offset_in_tu;
 
-      gdb_static_assert (sizeof (ULONGEST) >= 8);
+      static_assert (sizeof (ULONGEST) >= 8);
       sect_offset sect_off
 	= (sect_offset) extract_unsigned_integer (bytes, 8, BFD_ENDIAN_LITTLE);
       type_offset_in_tu
@@ -749,13 +567,48 @@ create_addrmap_from_gdb_index (dwarf2_per_objfile *per_objfile,
 	  continue;
 	}
 
-      lo = (ULONGEST) per_objfile->adjust ((unrelocated_addr) lo);
-      hi = (ULONGEST) per_objfile->adjust ((unrelocated_addr) hi);
       mutable_map.set_empty (lo, hi - 1, per_bfd->get_cu (cu_index));
     }
 
   per_bfd->index_addrmap
     = new (&per_bfd->obstack) addrmap_fixed (&per_bfd->obstack, &mutable_map);
+}
+
+/* Sets the name and language of the main function from the shortcut table.  */
+
+static void
+set_main_name_from_gdb_index (dwarf2_per_objfile *per_objfile,
+			      mapped_gdb_index *index)
+{
+  const auto expected_size = 2 * sizeof (offset_type);
+  if (index->shortcut_table.size () < expected_size)
+    /* The data in the section is not present, is corrupted or is in a version
+       we don't know about.  Regardless, we can't make use of it.  */
+    return;
+
+  auto ptr = index->shortcut_table.data ();
+  const auto dw_lang = extract_unsigned_integer (ptr, 4, BFD_ENDIAN_LITTLE);
+  if (dw_lang >= DW_LANG_hi_user)
+    {
+      complaint (_(".gdb_index shortcut table has invalid main language %u"),
+		   (unsigned) dw_lang);
+      return;
+    }
+  if (dw_lang == 0)
+    {
+      /* Don't bother if the language for the main symbol was not known or if
+	 there was no main symbol at all when the index was built.  */
+      return;
+    }
+  ptr += 4;
+
+  const auto lang = dwarf_lang_to_enum_language (dw_lang);
+  const auto name_offset = extract_unsigned_integer (ptr,
+						     sizeof (offset_type),
+						     BFD_ENDIAN_LITTLE);
+  const auto name = (const char *) (index->constant_pool.data () + name_offset);
+
+  set_objfile_main_name (per_objfile->objfile, name, (enum language) lang);
 }
 
 /* See read-gdb-index.h.  */
@@ -778,7 +631,7 @@ dwarf2_read_gdb_index
   if (main_index_contents.empty ())
     return 0;
 
-  auto map = gdb::make_unique<mapped_gdb_index> ();
+  auto map = std::make_unique<mapped_gdb_index> ();
   if (!read_gdb_index_from_buffer (objfile_name (objfile),
 				   use_deprecated_index_sections,
 				   main_index_contents, map.get (), &cu_list,
@@ -842,6 +695,8 @@ dwarf2_read_gdb_index
   finalize_all_units (per_bfd);
 
   create_addrmap_from_gdb_index (per_objfile, map.get ());
+
+  set_main_name_from_gdb_index (per_objfile, map.get ());
 
   per_bfd->index_table = std::move (map);
   per_bfd->quick_file_names_table =

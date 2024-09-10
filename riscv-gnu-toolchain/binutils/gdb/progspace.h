@@ -23,10 +23,8 @@
 
 #include "target.h"
 #include "gdb_bfd.h"
-#include "gdbsupport/gdb_vecs.h"
 #include "registry.h"
 #include "solist.h"
-#include "gdbsupport/next-iterator.h"
 #include "gdbsupport/safe-iterator.h"
 #include "gdbsupport/intrusive_list.h"
 #include "gdbsupport/refcounted-object.h"
@@ -41,7 +39,7 @@ struct inferior;
 struct exec;
 struct address_space;
 struct program_space;
-struct shobj;
+struct solib;
 
 typedef std::list<std::unique_ptr<objfile>> objfile_list;
 
@@ -291,8 +289,17 @@ struct program_space
   struct objfile *objfile_for_address (CORE_ADDR address);
 
   /* Return the list of  all the solibs in this program space.  */
-  intrusive_list<shobj> &solibs ()
+  intrusive_list<solib> &solibs ()
   { return so_list; }
+
+  /* Similar to `bfd_get_filename (exec_bfd ())` but in original form given
+     by user, without symbolic links and pathname resolved.  It is not nullptr
+     iff `exec_bfd ()` is not nullptr.  */
+  const char *exec_filename () const
+  { return m_exec_filename.get (); }
+
+  void set_exec_filename (gdb::unique_xmalloc_ptr<char> filename)
+  { m_exec_filename = std::move (filename); }
 
   /* Close and clear exec_bfd.  If we end up with no target sections
      to read memory from, this unpushes the exec_ops target.  */
@@ -300,15 +307,16 @@ struct program_space
 
   /* Return the exec BFD for this program space.  */
   bfd *exec_bfd () const
-  {
-    return ebfd.get ();
-  }
+  { return ebfd.get (); }
 
   /* Set the exec BFD for this program space to ABFD.  */
   void set_exec_bfd (gdb_bfd_ref_ptr &&abfd)
   {
     ebfd = std::move (abfd);
   }
+
+  bfd *core_bfd () const
+  { return cbfd.get ();  }
 
   /* Reset saved solib data at the start of an solib event.  This lets
      us properly collect the data when calling solib_add, so it can then
@@ -353,10 +361,6 @@ struct program_space
   gdb_bfd_ref_ptr ebfd;
   /* The last-modified time, from when the exec was brought in.  */
   long ebfd_mtime = 0;
-  /* Similar to bfd_get_filename (exec_bfd) but in original form given
-     by user, without symbolic links and pathname resolved.  It is not
-     NULL iff EBFD is not NULL.  */
-  gdb::unique_xmalloc_ptr<char> exec_filename;
 
   /* Binary file diddling handle for the core file.  */
   gdb_bfd_ref_ptr cbfd;
@@ -395,14 +399,14 @@ struct program_space
 
   /* List of shared objects mapped into this space.  Managed by
      solib.c.  */
-  intrusive_list<shobj> so_list;
+  intrusive_list<solib> so_list;
 
   /* Number of calls to solib_add.  */
   unsigned int solib_add_generation = 0;
 
   /* When an solib is added, it is also added to this vector.  This
      is so we can properly report solib changes to the user.  */
-  std::vector<shobj *> added_solibs;
+  std::vector<solib *> added_solibs;
 
   /* When an solib is removed, its name is added to this vector.
      This is so we can properly report solib changes to the user.  */
@@ -415,6 +419,9 @@ private:
   /* The set of target sections matching the sections mapped into
      this program space.  Managed by both exec_ops and solib.c.  */
   std::vector<target_section> m_target_sections;
+
+  /* See `exec_filename`.  */
+  gdb::unique_xmalloc_ptr<char> m_exec_filename;
 };
 
 /* The list of all program spaces.  There's always at least one.  */
@@ -422,6 +429,9 @@ extern std::vector<struct program_space *>program_spaces;
 
 /* The current program space.  This is always non-null.  */
 extern struct program_space *current_program_space;
+
+/* Initialize progspace-related global state.  */
+extern void initialize_progspace ();
 
 /* Copies program space SRC to DEST.  Copies the main executable file,
    and the main symbol file.  Returns DEST.  */

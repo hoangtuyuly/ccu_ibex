@@ -49,3 +49,74 @@
     { "vscatterpf0qp%XW",  { MVexVSIBQWpX }, PREFIX_DATA },
     { "vscatterpf1qp%XW",  { MVexVSIBQWpX }, PREFIX_DATA },
   },
+  /* REG_EVEX_MAP4_80 */
+  {
+    { "%NFaddA",	{ VexGb, Eb, Ib }, NO_PREFIX },
+    { "%NForA",	{ VexGb, Eb, Ib }, NO_PREFIX },
+    { "adcA",	{ VexGb, Eb, Ib }, NO_PREFIX },
+    { "sbbA",	{ VexGb, Eb, Ib }, NO_PREFIX },
+    { "%NFandA",	{ VexGb, Eb, Ib }, NO_PREFIX },
+    { "%NFsubA",	{ VexGb, Eb, Ib }, NO_PREFIX },
+    { "%NFxorA",	{ VexGb, Eb, Ib }, NO_PREFIX },
+  },
+  /* REG_EVEX_MAP4_81 */
+  {
+    { "%NFaddQ",	{ VexGv, Ev, Iv }, PREFIX_NP_OR_DATA },
+    { "%NForQ",	{ VexGv, Ev, Iv }, PREFIX_NP_OR_DATA },
+    { "adcQ",	{ VexGv, Ev, Iv }, PREFIX_NP_OR_DATA },
+    { "sbbQ",	{ VexGv, Ev, Iv }, PREFIX_NP_OR_DATA },
+    { "%NFandQ",	{ VexGv, Ev, Iv }, PREFIX_NP_OR_DATA },
+    { "%NFsubQ",	{ VexGv, Ev, Iv }, PREFIX_NP_OR_DATA },
+    { "%NFxorQ",	{ VexGv, Ev, Iv }, PREFIX_NP_OR_DATA },
+  },
+  /* REG_EVEX_MAP4_83 */
+  {
+    { "%NFaddQ",	{ VexGv, Ev, sIb }, PREFIX_NP_OR_DATA },
+    { "%NForQ",	{ VexGv, Ev, sIb }, PREFIX_NP_OR_DATA },
+    { "adcQ",	{ VexGv, Ev, sIb }, PREFIX_NP_OR_DATA },
+    { "sbbQ",	{ VexGv, Ev, sIb }, PREFIX_NP_OR_DATA },
+    { "%NFandQ",	{ VexGv, Ev, sIb }, PREFIX_NP_OR_DATA },
+    { "%NFsubQ",	{ VexGv, Ev, sIb }, PREFIX_NP_OR_DATA },
+    { "%NFxorQ",	{ VexGv, Ev, sIb }, PREFIX_NP_OR_DATA },
+  },
+  /* REG_EVEX_MAP4_8F */
+  {
+    { VEX_W_TABLE (EVEX_W_MAP4_8F_R_0) },
+  },
+  /* REG_EVEX_MAP4_F6 */
+  {
+    { Bad_Opcode },
+    { Bad_Opcode },
+    { "notA",	{ VexGb, Eb }, NO_PREFIX },
+    { "%NFnegA",	{ VexGb, Eb }, NO_PREFIX },
+    { "%NFmulA",	{ Eb }, NO_PREFIX },
+    { "%NFimulA",	{ Eb }, NO_PREFIX },
+    { "%NFdivA",	{ Eb }, NO_PREFIX },
+    { "%NFidivA",	{ Eb }, NO_PREFIX },
+  },
+  /* REG_EVEX_MAP4_F7 */
+  {
+    { Bad_Opcode },
+    { Bad_Opcode },
+    { "notQ",	{ VexGv, Ev }, PREFIX_NP_OR_DATA },
+    { "%NFnegQ",	{ VexGv, Ev }, PREFIX_NP_OR_DATA },
+    { "%NFmulQ",	{ Ev }, PREFIX_NP_OR_DATA },
+    { "%NFimulQ",	{ Ev }, PREFIX_NP_OR_DATA },
+    { "%NFdivQ",	{ Ev }, PREFIX_NP_OR_DATA },
+    { "%NFidivQ",	{ Ev }, PREFIX_NP_OR_DATA },
+  },
+  /* REG_EVEX_MAP4_FE */
+  {
+    { "%NFincA",	{ VexGb, Eb }, NO_PREFIX },
+    { "%NFdecA",	{ VexGb, Eb }, NO_PREFIX },
+  },
+  /* REG_EVEX_MAP4_FF */
+  {
+    { "%NFincQ",	{ VexGv, Ev }, PREFIX_NP_OR_DATA },
+    { "%NFdecQ",	{ VexGv, Ev }, PREFIX_NP_OR_DATA },
+    { Bad_Opcode },
+    { Bad_Opcode },
+    { Bad_Opcode },
+    { Bad_Opcode },
+    { VEX_W_TABLE (EVEX_W_MAP4_FF_R_6) },
+  },

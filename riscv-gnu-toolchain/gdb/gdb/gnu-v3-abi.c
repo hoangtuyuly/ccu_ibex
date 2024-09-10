@@ -1,7 +1,7 @@
 /* Abstraction of GNU v3 abi.
    Contributed by Jim Blandy <jimb@redhat.com>
 
-   Copyright (C) 2001-2023 Free Software Foundation, Inc.
+   Copyright (C) 2001-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,7 +18,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "language.h"
 #include "value.h"
 #include "cp-abi.h"
@@ -1079,7 +1079,7 @@ gnuv3_get_typeid_type (struct gdbarch *gdbarch)
   struct symbol *typeinfo;
   struct type *typeinfo_type;
 
-  typeinfo = lookup_symbol ("std::type_info", NULL, STRUCT_DOMAIN,
+  typeinfo = lookup_symbol ("std::type_info", NULL, SEARCH_STRUCT_DOMAIN,
 			    NULL).symbol;
   if (typeinfo == NULL)
     {
@@ -1225,7 +1225,7 @@ gnuv3_get_type_from_type_info (struct value *type_info_ptr)
    of the routine we are thunking to and continue to there instead.  */
 
 static CORE_ADDR 
-gnuv3_skip_trampoline (frame_info_ptr frame, CORE_ADDR stop_pc)
+gnuv3_skip_trampoline (const frame_info_ptr &frame, CORE_ADDR stop_pc)
 {
   CORE_ADDR real_stop_pc, method_stop_pc, func_addr;
   struct gdbarch *gdbarch = get_frame_arch (frame);

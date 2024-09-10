@@ -21,6 +21,7 @@
  */
 int putchar(int c);
 
+int putint(int num);
 /**
  * Writes string to simulator out log.  Signature matches c stdlib function of
  * the same name.

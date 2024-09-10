@@ -19,11 +19,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "arch-utils.h"
-#include "bfdlink.h"
+#include "cli/cli-cmds.h"
+#include "extract-store-integer.h"
 #include "symtab.h"
-#include "gdbtypes.h"
 #include "gdbcore.h"
 #include "frame.h"
 #include "target.h"
@@ -31,27 +30,20 @@
 #include "symfile.h"
 #include "objfiles.h"
 #include "source.h"
-#include "gdbcmd.h"
 #include "breakpoint.h"
 #include "language.h"
 #include "complaints.h"
-#include "demangle.h"
 #include "inferior.h"
 #include "regcache.h"
 #include "filenames.h"
 #include "gdbsupport/gdb_obstack.h"
 #include "completer.h"
-#include "bcache.h"
-#include "hashtab.h"
 #include "readline/tilde.h"
 #include "block.h"
 #include "observable.h"
 #include "exec.h"
-#include "parser-defs.h"
 #include "varobj.h"
-#include "elf-bfd.h"
 #include "solib.h"
-#include "remote.h"
 #include "stack.h"
 #include "gdb_bfd.h"
 #include "cli/cli-utils.h"
@@ -98,8 +90,6 @@ static void symbol_file_add_main_1 (const char *args, symfile_add_flags add_flag
 				    objfile_flags flags, CORE_ADDR reloff);
 
 static const struct sym_fns *find_sym_fns (bfd *);
-
-static void overlay_invalidate_all (void);
 
 static void simple_free_overlay_table (void);
 
@@ -1034,7 +1024,6 @@ symbol_file_add_with_addrs (const gdb_bfd_ref_ptr &abfd, const char *name,
 			    section_addr_info *addrs,
 			    objfile_flags flags, struct objfile *parent)
 {
-  struct objfile *objfile;
   const int from_tty = add_flags & SYMFILE_VERBOSE;
   const int mainline = add_flags & SYMFILE_MAINLINE;
   const int always_confirm = add_flags & SYMFILE_ALWAYS_CONFIRM;
@@ -1061,14 +1050,17 @@ symbol_file_add_with_addrs (const gdb_bfd_ref_ptr &abfd, const char *name,
 
   if (from_tty
       && (always_confirm
-	  || ((have_full_symbols () || have_partial_symbols ())
+	  || ((have_full_symbols (current_program_space)
+	       || have_partial_symbols (current_program_space))
 	      && mainline))
-      && !query (_("Load new symbol table from \"%s\"? "), name))
+      && !query (_ ("Load new symbol table from \"%s\"? "), name))
     error (_("Not confirmed."));
 
   if (mainline)
     flags |= OBJF_MAINLINE;
-  objfile = objfile::make (abfd, name, flags, parent);
+
+  objfile *objfile
+    = objfile::make (abfd, current_program_space, name, flags, parent);
 
   /* We either created a new mapped symbol table, mapped an existing
      symbol table file which has not had initial symbol reading
@@ -1207,7 +1199,8 @@ symbol_file_add_main_1 (const char *args, symfile_add_flags add_flags,
 void
 symbol_file_clear (int from_tty)
 {
-  if ((have_full_symbols () || have_partial_symbols ())
+  if ((have_full_symbols (current_program_space)
+       || have_partial_symbols (current_program_space))
       && from_tty
       && (current_program_space->symfile_object_file
 	  ? !query (_("Discard symbol table from `%s'? "),
@@ -1217,7 +1210,7 @@ symbol_file_clear (int from_tty)
 
   /* solib descriptors may have handles to objfiles.  Wipe them before their
      objfiles get stale by free_all_objfiles.  */
-  no_shared_libraries (NULL, from_tty);
+  no_shared_libraries (current_program_space);
 
   current_program_space->free_all_objfiles ();
 
@@ -1237,6 +1230,8 @@ separate_debug_file_exists (const std::string &name, unsigned long crc,
 			    struct objfile *parent_objfile,
 			    deferred_warnings *warnings)
 {
+  SEPARATE_DEBUG_FILE_SCOPED_DEBUG_ENTER_EXIT;
+
   unsigned long file_crc;
   int file_crc_p;
   struct stat parent_stat, abfd_stat;
@@ -1251,19 +1246,13 @@ separate_debug_file_exists (const std::string &name, unsigned long crc,
   if (filename_cmp (name.c_str (), objfile_name (parent_objfile)) == 0)
     return 0;
 
-  if (separate_debug_file_debug)
-    {
-      gdb_printf (gdb_stdlog, _("  Trying %s..."), name.c_str ());
-      gdb_flush (gdb_stdlog);
-    }
+  separate_debug_file_debug_printf ("Trying %s...", name.c_str ());
 
   gdb_bfd_ref_ptr abfd (gdb_bfd_open (name.c_str (), gnutarget));
 
   if (abfd == NULL)
     {
-      if (separate_debug_file_debug)
-	gdb_printf (gdb_stdlog, _(" no, unable to open.\n"));
-
+      separate_debug_file_debug_printf ("unable to open file");
       return 0;
     }
 
@@ -1285,10 +1274,7 @@ separate_debug_file_exists (const std::string &name, unsigned long crc,
       if (abfd_stat.st_dev == parent_stat.st_dev
 	  && abfd_stat.st_ino == parent_stat.st_ino)
 	{
-	  if (separate_debug_file_debug)
-	    gdb_printf (gdb_stdlog,
-			_(" no, same file as the objfile.\n"));
-
+	  separate_debug_file_debug_printf ("same file as the objfile");
 	  return 0;
 	}
       verified_as_different = 1;
@@ -1300,9 +1286,7 @@ separate_debug_file_exists (const std::string &name, unsigned long crc,
 
   if (!file_crc_p)
     {
-      if (separate_debug_file_debug)
-	gdb_printf (gdb_stdlog, _(" no, error computing CRC.\n"));
-
+      separate_debug_file_debug_printf ("error computing CRC");
       return 0;
     }
 
@@ -1318,20 +1302,18 @@ separate_debug_file_exists (const std::string &name, unsigned long crc,
 	{
 	  if (!gdb_bfd_crc (parent_objfile->obfd.get (), &parent_crc))
 	    {
-	      if (separate_debug_file_debug)
-		gdb_printf (gdb_stdlog,
-			    _(" no, error computing CRC.\n"));
-
+	      separate_debug_file_debug_printf ("error computing CRC");
 	      return 0;
 	    }
 	}
 
       if (verified_as_different || parent_crc != file_crc)
 	{
-	  if (separate_debug_file_debug)
-	    gdb_printf (gdb_stdlog, "the debug information found in \"%s\""
-			" does not match \"%s\" (CRC mismatch).\n",
-			name.c_str (), objfile_name (parent_objfile));
+	  separate_debug_file_debug_printf
+	    ("the debug information found in \"%s\" does not match "
+	     "\"%s\" (CRC mismatch).", name.c_str (),
+	     objfile_name (parent_objfile));
+
 	  warnings->warn (_("the debug information found in \"%ps\""
 			    " does not match \"%ps\" (CRC mismatch)."),
 			  styled_string (file_name_style.style (),
@@ -1343,8 +1325,7 @@ separate_debug_file_exists (const std::string &name, unsigned long crc,
       return 0;
     }
 
-  if (separate_debug_file_debug)
-    gdb_printf (gdb_stdlog, _(" yes!\n"));
+  separate_debug_file_debug_printf ("found a match");
 
   return 1;
 }
@@ -1385,10 +1366,9 @@ find_separate_debug_file (const char *dir,
 			  unsigned long crc32, struct objfile *objfile,
 			  deferred_warnings *warnings)
 {
-  if (separate_debug_file_debug)
-    gdb_printf (gdb_stdlog,
-		_("\nLooking for separate debug info (debug link) for "
-		  "%s\n"), objfile_name (objfile));
+  SEPARATE_DEBUG_FILE_SCOPED_DEBUG_START_END
+    ("looking for separate debug info (debug link) for %s",
+     objfile_name (objfile));
 
   /* First try in the same directory as the original file.  */
   std::string debugfile = dir;
@@ -1596,19 +1576,7 @@ validate_readnow_readnever (objfile_flags flags)
     error (_("-readnow and -readnever cannot be used simultaneously"));
 }
 
-/* This is the symbol-file command.  Read the file, analyze its
-   symbols, and add a struct symtab to a symtab list.  The syntax of
-   the command is rather bizarre:
-
-   1. The function buildargv implements various quoting conventions
-   which are undocumented and have little or nothing in common with
-   the way things are quoted (or not quoted) elsewhere in GDB.
-
-   2. Options are used, which are not generally used in GDB (perhaps
-   "set mapped on", "set readnow on" would be better)
-
-   3. The order of options matters, which is contrary to GNU
-   conventions (because it is confusing and inconvenient).  */
+/* See symfile.h.  */
 
 void
 symbol_file_command (const char *args, int from_tty)
@@ -1697,8 +1665,8 @@ set_initial_language_callback ()
     {
       const char *name = main_name ();
       struct symbol *sym
-	= lookup_symbol_in_language (name, NULL, VAR_DOMAIN, default_lang,
-				     NULL).symbol;
+	= lookup_symbol_in_language (name, nullptr, SEARCH_FUNCTION_DOMAIN,
+				     default_lang, nullptr).symbol;
 
       if (sym != NULL)
 	lang = sym->language ();
@@ -1855,7 +1823,9 @@ load_command (const char *arg, int from_tty)
     {
       const char *parg, *prev;
 
-      arg = get_exec_file (1);
+      arg = current_program_space->exec_filename ();
+      if (arg == nullptr)
+	no_executable_specified_error ();
 
       /* We may need to quote this string so buildargv can pull it
 	 apart.  */
@@ -2418,7 +2388,7 @@ remove_symbol_file_command (const char *args, int from_tty)
 	{
 	  if ((objfile->flags & OBJF_USERLOADED) != 0
 	      && (objfile->flags & OBJF_SHARED) != 0
-	      && objfile->pspace == pspace
+	      && objfile->pspace () == pspace
 	      && is_addr_in_objfile (addr, objfile))
 	    {
 	      objf = objfile;
@@ -2439,7 +2409,7 @@ remove_symbol_file_command (const char *args, int from_tty)
 	{
 	  if ((objfile->flags & OBJF_USERLOADED) != 0
 	      && (objfile->flags & OBJF_SHARED) != 0
-	      && objfile->pspace == pspace
+	      && objfile->pspace () == pspace
 	      && filename_cmp (filename.get (), objfile_name (objfile)) == 0)
 	    {
 	      objf = objfile;
@@ -2642,7 +2612,7 @@ reread_symbols (int from_tty)
 	     making the dangling pointers point to correct data
 	     again.  */
 
-	  objfiles_changed ();
+	  objfiles_changed (current_program_space);
 
 	  /* Recompute section offsets and section indices.  */
 	  objfile->sf->sym_offsets (objfile, {});
@@ -2834,7 +2804,6 @@ allocate_symtab (struct compunit_symtab *cust, const char *filename,
 
   symtab->filename = objfile->intern (filename);
   symtab->filename_for_id = objfile->intern (filename_for_id);
-  symtab->fullname = NULL;
   symtab->set_language (deduce_language_from_filename (filename));
 
   /* This can be very verbose with lots of headers.
@@ -2916,7 +2885,7 @@ clear_symtab_users (symfile_add_flags add_flags)
 
   /* Clear the "current" symtab first, because it is no longer valid.
      breakpoint_re_set may try to access the current symtab.  */
-  clear_current_source_symtab_and_line ();
+  clear_current_source_symtab_and_line (current_program_space);
 
   clear_displays ();
   clear_last_displayed_sal ();
@@ -3001,13 +2970,13 @@ section_is_overlay (struct obj_section *section)
   return 0;
 }
 
-/* Function: overlay_invalidate_all (void)
-   Invalidate the mapped state of all overlay sections (mark it as stale).  */
+/* Invalidate the mapped state of all overlay sections (mark it as stale) in
+   PSPACE.  */
 
 static void
-overlay_invalidate_all (void)
+overlay_invalidate_all (program_space *pspace)
 {
-  for (objfile *objfile : current_program_space->objfiles ())
+  for (objfile *objfile : pspace->objfiles ())
     for (obj_section *sect : objfile->sections ())
       if (section_is_overlay (sect))
 	sect->ovly_mapped = -1;
@@ -3043,7 +3012,7 @@ section_is_mapped (struct obj_section *osect)
 	{
 	  if (overlay_cache_invalid)
 	    {
-	      overlay_invalidate_all ();
+	      overlay_invalidate_all (current_program_space);
 	      overlay_cache_invalid = 0;
 	    }
 	  if (osect->ovly_mapped == -1)
@@ -3085,8 +3054,7 @@ pc_in_mapped_range (CORE_ADDR pc, struct obj_section *section)
 {
   if (section_is_overlay (section))
     {
-      if (section->addr () <= pc
-	  && pc < section->endaddr ())
+      if (section->contains (pc))
 	return true;
     }
 
@@ -3755,7 +3723,7 @@ static void
 symfile_free_objfile (struct objfile *objfile)
 {
   /* Remove the target sections owned by this objfile.  */
-  objfile->pspace->remove_target_sections (objfile);
+  objfile->pspace ()->remove_target_sections (objfile);
 }
 
 /* Wrapper around the quick_symbol_functions expand_symtabs_matching "method".
@@ -3769,7 +3737,7 @@ expand_symtabs_matching
    gdb::function_view<expand_symtabs_symbol_matcher_ftype> symbol_matcher,
    gdb::function_view<expand_symtabs_exp_notify_ftype> expansion_notify,
    block_search_flags search_flags,
-   enum search_domain kind)
+   domain_search_flags domain)
 {
   for (objfile *objfile : current_program_space->objfiles ())
     if (!objfile->expand_symtabs_matching (file_matcher,
@@ -3777,8 +3745,7 @@ expand_symtabs_matching
 					   symbol_matcher,
 					   expansion_notify,
 					   search_flags,
-					   UNDEF_DOMAIN,
-					   kind))
+					   domain))
       return false;
   return true;
 }

@@ -19,6 +19,28 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* This include file defines the interface between the main part of
+   the debugger, and the part which is target-specific, or specific to
+   the communications interface between us and the target.
+
+   A TARGET is an interface between the debugger and a particular
+   kind of file or process.  Targets can be STACKED in STRATA,
+   so that more than one target can potentially respond to a request.
+   In particular, memory accesses will walk down the stack of targets
+   until they find a target that is interested in handling that particular
+   address.  STRATA are artificial boundaries on the stack, within
+   which particular kinds of targets live.  Strata exist so that
+   people don't get confused by pushing e.g. a process target and then
+   a file target, and wondering why they can't see the current values
+   of variables any more (the file target is handling them and they
+   never get to the process target).  So when you push a file target,
+   it goes into the file stratum, which is always below the process
+   stratum.
+
+   Note that rather than allow an empty stack, we always have the
+   dummy target at the bottom stratum, so we can call the target
+   methods without checking them.  */
+
 #if !defined (TARGET_H)
 #define TARGET_H
 
@@ -48,30 +70,6 @@ typedef const gdb_byte const_gdb_byte;
 #include "gdbsupport/scoped_restore.h"
 #include "gdbsupport/refcounted-object.h"
 #include "target-section.h"
-
-/* This include file defines the interface between the main part
-   of the debugger, and the part which is target-specific, or
-   specific to the communications interface between us and the
-   target.
-
-   A TARGET is an interface between the debugger and a particular
-   kind of file or process.  Targets can be STACKED in STRATA,
-   so that more than one target can potentially respond to a request.
-   In particular, memory accesses will walk down the stack of targets
-   until they find a target that is interested in handling that particular
-   address.  STRATA are artificial boundaries on the stack, within
-   which particular kinds of targets live.  Strata exist so that
-   people don't get confused by pushing e.g. a process target and then
-   a file target, and wondering why they can't see the current values
-   of variables any more (the file target is handling them and they
-   never get to the process target).  So when you push a file target,
-   it goes into the file stratum, which is always below the process
-   stratum.
-
-   Note that rather than allow an empty stack, we always have the
-   dummy target at the bottom stratum, so we can call the target
-   methods without checking them.  */
-
 #include "target/target.h"
 #include "target/resume.h"
 #include "target/wait.h"
@@ -433,6 +431,24 @@ struct target_info
   const char *doc;
 };
 
+/* A GDB target.
+
+   Each inferior has a stack of these.  See overall description at the
+   top.
+
+   Most target methods traverse the current inferior's target stack;
+   you call the method on the top target (normally via one of the
+   target_foo wrapper free functions), and the implementation of said
+   method does its work and returns, or defers to the same method on
+   the target beneath on the current inferior's target stack.  Thus,
+   the inferior you want to call the target method on must be made the
+   current inferior before calling a target method, so that the stack
+   traversal works correctly.
+
+   Methods that traverse the stack have a TARGET_DEFAULT_XXX marker in
+   their declaration below.  See the macros' description above, where
+   they're defined.  */
+
 struct target_ops
   : public refcounted_object
   {
@@ -739,7 +755,7 @@ struct target_ops
        potential optimization is missed.  */
     virtual bool has_pending_events ()
       TARGET_DEFAULT_RETURN (false);
-    virtual void thread_events (int)
+    virtual void thread_events (bool)
       TARGET_DEFAULT_IGNORE ();
     /* Returns true if the target supports setting thread options
        OPTIONS, false otherwise.  */
@@ -783,6 +799,17 @@ struct target_ops
        1 byte long.  The OFFSET, for a seekable object, specifies the
        starting point.  The ANNEX can be used to provide additional
        data-specific information to the target.
+
+       When accessing memory, inferior_ptid indicates which process's
+       memory is to be accessed.  This is usually the same process as
+       the current inferior, however it may also be a process that is
+       a fork child of the current inferior, at a moment that the
+       child does not exist in GDB's inferior lists.  This happens
+       when we remove software breakpoints from the address space of a
+       fork child process that we're not going to stay attached to.
+       Because the fork child is a clone of the fork parent, we can
+       use the fork parent inferior's stack for target method
+       delegation.
 
        Return the transferred status, error or OK (an
        'enum target_xfer_status' value).  Save the number of addressable units
@@ -983,6 +1010,14 @@ struct target_ops
        SB.  Return 0 on success, or -1 if an error occurs (and set
        *TARGET_ERRNO).  */
     virtual int fileio_fstat (int fd, struct stat *sb, fileio_error *target_errno);
+
+    /* Get information about the file FILENAME and put it in SB.  Look for
+       FILENAME in the filesystem as seen by INF.  If INF is NULL, use the
+       filesystem seen by the debugger (GDB or, for remote targets, the
+       remote stub).  Return 0 on success, or -1 if an error occurs (and
+       set *TARGET_ERRNO).  */
+    virtual int fileio_stat (struct inferior *inf, const char *filename,
+			     struct stat *sb, fileio_error *target_errno);
 
     /* Close FD on the target.  Return 0, or -1 if an error occurs
        (and set *TARGET_ERRNO).  */
@@ -1332,6 +1367,10 @@ struct target_ops
        Returns true if storing the tags succeeded and false otherwise.  */
     virtual bool store_memtags (CORE_ADDR address, size_t len,
 				const gdb::byte_vector &tags, int type)
+      TARGET_DEFAULT_NORETURN (tcomplain ());
+
+    /* Returns true if ADDRESS is tagged, otherwise returns false.  */
+    virtual bool is_address_tagged (gdbarch *gdbarch, CORE_ADDR address)
       TARGET_DEFAULT_NORETURN (tcomplain ());
 
     /* Return the x86 XSAVE extended state area layout.  */
@@ -1889,7 +1928,7 @@ extern bool target_is_async_p ();
 extern void target_async (bool enable);
 
 /* Enables/disables thread create and exit events.  */
-extern void target_thread_events (int enable);
+extern void target_thread_events (bool enable);
 
 /* Returns true if the target supports setting thread options
    OPTIONS.  */
@@ -2189,6 +2228,14 @@ extern int target_fileio_pread (int fd, gdb_byte *read_buf, int len,
 extern int target_fileio_fstat (int fd, struct stat *sb,
 				fileio_error *target_errno);
 
+/* Get information about the file at FILENAME on the target and put it in
+   SB.  Look in the filesystem as seen by INF.  If INF is NULL, use the
+   filesystem seen by the debugger (GDB or, for remote targets, the remote
+   stub).  Return 0 on success, or -1 if an error occurs (and set
+   *TARGET_ERRNO).  */
+extern int target_fileio_stat (struct inferior *inf, const char *filename,
+			       struct stat *sb, fileio_error *target_errno);
+
 /* Close FD on the target.  Return 0, or -1 if an error occurs
    (and set *TARGET_ERRNO).  */
 extern int target_fileio_close (int fd, fileio_error *target_errno);
@@ -2317,6 +2364,8 @@ extern bool target_fetch_memtags (CORE_ADDR address, size_t len,
 extern bool target_store_memtags (CORE_ADDR address, size_t len,
 				  const gdb::byte_vector &tags, int type);
 
+extern bool target_is_address_tagged (gdbarch *gdbarch, CORE_ADDR address);
+
 extern x86_xsave_layout target_fetch_x86_xsave_layout ();
 
 /* Command logging facility.  */
@@ -2394,7 +2443,7 @@ struct target_unpusher
 
 typedef std::unique_ptr<struct target_ops, target_unpusher> target_unpush_up;
 
-extern void target_pre_inferior (int);
+extern void target_pre_inferior ();
 
 extern void target_preopen (int);
 
@@ -2457,7 +2506,7 @@ extern int default_memory_insert_breakpoint (struct gdbarch *,
 
 extern void initialize_targets (void);
 
-extern void noprocess (void) ATTRIBUTE_NORETURN;
+[[noreturn]] extern void noprocess (void);
 
 extern void target_require_runnable (void);
 

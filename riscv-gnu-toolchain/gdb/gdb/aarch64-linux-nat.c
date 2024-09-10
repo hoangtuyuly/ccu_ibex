@@ -1,6 +1,6 @@
 /* Native-dependent code for GNU/Linux AArch64.
 
-   Copyright (C) 2011-2023 Free Software Foundation, Inc.
+   Copyright (C) 2011-2024 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GDB.
@@ -18,7 +18,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 
 #include "inferior.h"
 #include "gdbcore.h"
@@ -26,7 +25,7 @@
 #include "linux-nat.h"
 #include "target-descriptions.h"
 #include "auxv.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "aarch64-nat.h"
 #include "aarch64-tdep.h"
 #include "aarch64-linux-tdep.h"
@@ -79,12 +78,6 @@ public:
 
   int can_do_single_step () override;
 
-  /* Override the GNU/Linux inferior startup hook.  */
-  void post_startup_inferior (ptid_t) override;
-
-  /* Override the GNU/Linux post attach hook.  */
-  void post_attach (int pid) override;
-
   /* These three defer to common nat/ code.  */
   void low_new_thread (struct lwp_info *lp) override
   { aarch64_linux_new_thread (lp); }
@@ -94,6 +87,7 @@ public:
   { aarch64_linux_prepare_to_resume (lp); }
 
   void low_new_fork (struct lwp_info *parent, pid_t child_pid) override;
+  void low_init_process (pid_t pid) override;
   void low_forget_process (pid_t pid) override;
 
   /* Add our siginfo layout converter.  */
@@ -111,6 +105,8 @@ public:
   /* Write allocation tags to memory via PTRACE.  */
   bool store_memtags (CORE_ADDR address, size_t len,
 		      const gdb::byte_vector &tags, int type) override;
+  /* Check if an address is tagged.  */
+  bool is_address_tagged (gdbarch *gdbarch, CORE_ADDR address) override;
 };
 
 static aarch64_linux_nat_target the_aarch64_linux_nat_target;
@@ -137,7 +133,7 @@ fetch_gregs_from_thread (struct regcache *regcache)
 
   /* Make sure REGS can hold all registers contents on both aarch64
      and arm.  */
-  gdb_static_assert (sizeof (regs) >= 18 * 4);
+  static_assert (sizeof (regs) >= 18 * 4);
 
   tid = regcache->ptid ().lwp ();
 
@@ -175,7 +171,7 @@ store_gregs_to_thread (const struct regcache *regcache)
 
   /* Make sure REGS can hold all registers contents on both aarch64
      and arm.  */
-  gdb_static_assert (sizeof (regs) >= 18 * 4);
+  static_assert (sizeof (regs) >= 18 * 4);
   tid = regcache->ptid ().lwp ();
 
   iovec.iov_base = &regs;
@@ -217,7 +213,7 @@ fetch_fpregs_from_thread (struct regcache *regcache)
 
   /* Make sure REGS can hold all VFP registers contents on both aarch64
      and arm.  */
-  gdb_static_assert (sizeof regs >= ARM_VFP3_REGS_SIZE);
+  static_assert (sizeof regs >= ARM_VFP3_REGS_SIZE);
 
   tid = regcache->ptid ().lwp ();
 
@@ -264,7 +260,7 @@ store_fpregs_to_thread (const struct regcache *regcache)
 
   /* Make sure REGS can hold all VFP registers contents on both aarch64
      and arm.  */
-  gdb_static_assert (sizeof regs >= ARM_VFP3_REGS_SIZE);
+  static_assert (sizeof regs >= ARM_VFP3_REGS_SIZE);
   tid = regcache->ptid ().lwp ();
 
   iovec.iov_base = &regs;
@@ -836,36 +832,25 @@ ps_err_e
 ps_get_thread_area (struct ps_prochandle *ph,
 		    lwpid_t lwpid, int idx, void **base)
 {
-  int is_64bit_p
-    = (gdbarch_bfd_arch_info (target_gdbarch ())->bits_per_word == 64);
+  gdbarch *arch = current_inferior ()->arch ();
+  int is_64bit_p = (gdbarch_bfd_arch_info (arch)->bits_per_word == 64);
 
   return aarch64_ps_get_thread_area (ph, lwpid, idx, base, is_64bit_p);
 }
 
 
-/* Implement the virtual inf_ptrace_target::post_startup_inferior method.  */
+/* Implement the "low_init_process" target_ops method.  */
 
 void
-aarch64_linux_nat_target::post_startup_inferior (ptid_t ptid)
-{
-  low_forget_process (ptid.pid ());
-  aarch64_linux_get_debug_reg_capacity (ptid.pid ());
-  linux_nat_target::post_startup_inferior (ptid);
-}
-
-/* Implement the "post_attach" target_ops method.  */
-
-void
-aarch64_linux_nat_target::post_attach (int pid)
+aarch64_linux_nat_target::low_init_process (pid_t pid)
 {
   low_forget_process (pid);
-  /* Set the hardware debug register capacity.  If
-     aarch64_linux_get_debug_reg_capacity is not called
-     (as it is in aarch64_linux_child_post_startup_inferior) then
-     software watchpoints will be used instead of hardware
-     watchpoints when attaching to a target.  */
+  /* Set the hardware debug register capacity.  This requires the process to be
+     ptrace-stopped, otherwise detection will fail and software watchpoints will
+     be used instead of hardware.  If we allow this to be done lazily, we
+     cannot guarantee that it's called when the process is ptrace-stopped, so
+     do it now.  */
   aarch64_linux_get_debug_reg_capacity (pid);
-  linux_nat_target::post_attach (pid);
 }
 
 /* Implement the "read_description" target_ops method.  */
@@ -887,7 +872,7 @@ aarch64_linux_nat_target::read_description ()
 
   ret = ptrace (PTRACE_GETREGSET, tid, NT_ARM_VFP, &iovec);
   if (ret == 0)
-    return aarch32_read_description ();
+    return aarch32_read_description (false);
 
   CORE_ADDR hwcap = linux_get_hwcap ();
   CORE_ADDR hwcap2 = linux_get_hwcap2 ();
@@ -972,9 +957,7 @@ aarch64_linux_nat_target::stopped_data_address (CORE_ADDR *addr_p)
 bool
 aarch64_linux_nat_target::stopped_by_watchpoint ()
 {
-  CORE_ADDR addr;
-
-  return stopped_data_address (&addr);
+  return stopped_data_address (nullptr);
 }
 
 /* Implement the "can_do_single_step" target_ops method.  */
@@ -1005,24 +988,24 @@ aarch64_linux_nat_target::thread_architecture (ptid_t ptid)
   /* If this is a 32-bit architecture, then this is ARM, not AArch64.
      There's no SVE vectors here, so just return the inferior
      architecture.  */
-  if (gdbarch_bfd_arch_info (inf->gdbarch)->bits_per_word == 32)
-    return inf->gdbarch;
+  if (gdbarch_bfd_arch_info (inf->arch ())->bits_per_word == 32)
+    return inf->arch ();
 
   /* Only return the inferior's gdbarch if both vq and svq match the ones in
      the tdep.  */
   aarch64_gdbarch_tdep *tdep
-    = gdbarch_tdep<aarch64_gdbarch_tdep> (inf->gdbarch);
+    = gdbarch_tdep<aarch64_gdbarch_tdep> (inf->arch ());
   uint64_t vq = aarch64_sve_get_vq (ptid.lwp ());
   uint64_t svq = aarch64_za_get_svq (ptid.lwp ());
   if (vq == tdep->vq && svq == tdep->sme_svq)
-    return inf->gdbarch;
+    return inf->arch ();
 
   /* We reach here if any vector length for the thread is different from its
      value at process start.  Lookup gdbarch via info (potentially creating a
      new one) by using a target description that corresponds to the new vq/svq
      value and the current architecture features.  */
 
-  const struct target_desc *tdesc = gdbarch_target_desc (inf->gdbarch);
+  const struct target_desc *tdesc = gdbarch_target_desc (inf->arch ());
   aarch64_features features = aarch64_features_from_target_desc (tdesc);
   features.vq = vq;
   features.svq = svq;
@@ -1072,6 +1055,19 @@ aarch64_linux_nat_target::store_memtags (CORE_ADDR address, size_t len,
     return aarch64_mte_store_memtags (tid, address, len, tags);
 
   return false;
+}
+
+bool
+aarch64_linux_nat_target::is_address_tagged (gdbarch *gdbarch, CORE_ADDR address)
+{
+  /* Here we take a detour going to linux-tdep layer to read the smaps file,
+     because currently there isn't a better way to get that information to
+     check if a given address is tagged or not.
+
+     In the future, if this check is made, for instance, available via PTRACE,
+     it will be possible to drop the smaps path in favor of a PTRACE one for
+     this check.  */
+  return gdbarch_tagged_address_p (gdbarch, address);
 }
 
 void _initialize_aarch64_linux_nat ();

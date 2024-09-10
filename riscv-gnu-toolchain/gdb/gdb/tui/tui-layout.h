@@ -1,6 +1,6 @@
 /* TUI layout window management.
 
-   Copyright (C) 1998-2023 Free Software Foundation, Inc.
+   Copyright (C) 1998-2024 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -189,7 +189,11 @@ public:
   /* See tui_layout_base::get_windows.  */
   void get_windows (std::vector<tui_win_info *> *windows) override
   {
-    windows->push_back (m_window);
+    if (m_window != nullptr && m_window->is_visible ())
+      {
+	/* Only get visible windows.  */
+	windows->push_back (m_window);
+      }
   }
 
 protected:

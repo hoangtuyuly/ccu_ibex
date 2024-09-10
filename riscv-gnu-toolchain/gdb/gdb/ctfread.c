@@ -1,6 +1,6 @@
 /* Compact ANSI-C Type Format (CTF) support in GDB.
 
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -75,7 +75,6 @@
    already in the symbol table, and the CTF string table does not contain any
    duplicated strings.  */
 
-#include "defs.h"
 #include "buildsym.h"
 #include "complaints.h"
 #include "block.h"
@@ -505,7 +504,7 @@ new_symbol (struct ctf_context *ccp, struct type *type, ctf_id_t tid)
 	  case CTF_K_INTEGER:
 	  case CTF_K_FLOAT:
 	    sym->set_aclass_index (LOC_TYPEDEF);
-	    sym->set_domain (VAR_DOMAIN);
+	    sym->set_domain (TYPE_DOMAIN);
 	    break;
 	  case CTF_K_POINTER:
 	    break;
@@ -1473,7 +1472,7 @@ ctf_psymtab_type_cb (ctf_id_t tid, void *arg)
     {
       case CTF_K_ENUM:
 	ctf_psymtab_add_enums (ccp, tid);
-	/* FALL THROUGH */
+	[[fallthrough]];
       case CTF_K_STRUCT:
       case CTF_K_UNION:
 	domain = STRUCT_DOMAIN;

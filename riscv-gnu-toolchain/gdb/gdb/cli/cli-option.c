@@ -1,6 +1,6 @@
 /* CLI options framework, for GDB.
 
-   Copyright (C) 2017-2023 Free Software Foundation, Inc.
+   Copyright (C) 2017-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "cli/cli-option.h"
 #include "cli/cli-decode.h"
 #include "cli/cli-utils.h"
@@ -58,11 +57,11 @@ struct option_def_and_value
   void *ctx;
 
   /* The option's value, if any.  */
-  gdb::optional<option_value> value;
+  std::optional<option_value> value;
 
   /* Constructor.  */
   option_def_and_value (const option_def &option_, void *ctx_,
-			gdb::optional<option_value> &&value_ = {})
+			std::optional<option_value> &&value_ = {})
     : option (option_),
       ctx (ctx_),
       value (std::move (value_))
@@ -99,7 +98,7 @@ private:
      allocated on the heap, so we must clear the pointer in the
      source, to avoid a double free.  */
   static void clear_value (const option_def &option,
-			   gdb::optional<option_value> &value)
+			   std::optional<option_value> &value)
   {
     if (value.has_value ())
       {
@@ -109,7 +108,7 @@ private:
   }
 };
 
-static void save_option_value_in_ctx (gdb::optional<option_def_and_value> &ov);
+static void save_option_value_in_ctx (std::optional<option_def_and_value> &ov);
 
 /* Info passed around when handling completion.  */
 struct parse_option_completion_info
@@ -177,7 +176,7 @@ complete_on_all_options (completion_tracker &tracker,
 /* Parse ARGS, guided by OPTIONS_GROUP.  HAVE_DELIMITER is true if the
    whole ARGS line included the "--" options-terminator delimiter.  */
 
-static gdb::optional<option_def_and_value>
+static std::optional<option_def_and_value>
 parse_option (gdb::array_view<const option_def_group> options_group,
 	      process_options_mode mode,
 	      bool have_delimiter,
@@ -496,7 +495,7 @@ complete_options (completion_tracker &tracker,
 	    }
 	  else if (**args == '-')
 	    {
-	      gdb::optional<option_def_and_value> ov
+	      std::optional<option_def_and_value> ov
 		= parse_option (options_group, mode, have_delimiter,
 				args, &completion_info);
 	      if (!ov && !tracker.have_completions ())
@@ -589,7 +588,7 @@ complete_options (completion_tracker &tracker,
 /* Save the parsed value in the option's context.  */
 
 static void
-save_option_value_in_ctx (gdb::optional<option_def_and_value> &ov)
+save_option_value_in_ctx (std::optional<option_def_and_value> &ov)
 {
   switch (ov->option.type)
     {

@@ -17,7 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "event-top.h"
+#include "exceptions.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "bfd.h"
@@ -34,7 +35,7 @@
 #include <sys/stat.h>
 #include "dictionary.h"
 #include "typeprint.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "source.h"
 #include "readline/tilde.h"
 #include <cli/cli-style.h>
@@ -810,8 +811,8 @@ maintenance_info_symtabs (const char *regexp, int from_tty)
 		    gdb_printf ("((struct symtab *) %s)\n",
 				host_address_to_string (symtab));
 		    gdb_printf ("\t  fullname %s\n",
-				symtab->fullname != NULL
-				? symtab->fullname
+				symtab->fullname () != nullptr
+				? symtab->fullname ()
 				: "(null)");
 		    gdb_printf ("\t  "
 				"linetable ((struct linetable *) %s)\n",
@@ -919,8 +920,7 @@ maintenance_expand_symtabs (const char *args, int from_tty)
 	 NULL,
 	 NULL,
 	 SEARCH_GLOBAL_BLOCK | SEARCH_STATIC_BLOCK,
-	 UNDEF_DOMAIN,
-	 ALL_DOMAIN);
+	 SEARCH_ALL_DOMAINS);
 }
 
 

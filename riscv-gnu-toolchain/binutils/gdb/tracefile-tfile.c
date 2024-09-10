@@ -17,7 +17,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "tracefile.h"
 #include "readline/tilde.h"
 #include "gdbsupport/filestuff.h"
@@ -467,7 +467,7 @@ tfile_target_open (const char *arg, int from_tty)
 
   gdb::unique_xmalloc_ptr<char> filename (tilde_expand (arg));
   if (!IS_ABSOLUTE_PATH (filename.get ()))
-    filename = make_unique_xstrdup (gdb_abspath (filename.get ()).c_str ());
+    filename = make_unique_xstrdup (gdb_abspath (filename).c_str ());
 
   flags = O_BINARY | O_LARGEFILE;
   flags |= O_RDONLY;

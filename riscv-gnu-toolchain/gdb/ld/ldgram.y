@@ -1,5 +1,5 @@
 /* A YACC grammar to parse a superset of the AT&T linker scripting language.
-   Copyright (C) 1991-2023 Free Software Foundation, Inc.
+   Copyright (C) 1991-2024 Free Software Foundation, Inc.
    Written by Steve Chamberlain of Cygnus Support (steve@cygnus.com).
 
    This file is part of the GNU Binutils.
@@ -102,7 +102,7 @@ static void yyerror (const char *);
 %type <flag_info> sect_flags
 %type <name> memspec_opt memspec_at_opt paren_script_name casesymlist
 %type <cname> wildcard_name
-%type <wildcard> section_name_spec filename_spec wildcard_maybe_exclude
+%type <wildcard> section_name_spec filename_spec wildcard_maybe_exclude wildcard_maybe_reverse
 %token <bigint> INT
 %token <name> NAME LNAME
 %type <integer> length
@@ -132,7 +132,7 @@ static void yyerror (const char *);
 %token SECTIONS PHDRS INSERT_K AFTER BEFORE LINKER_VERSION
 %token DATA_SEGMENT_ALIGN DATA_SEGMENT_RELRO_END DATA_SEGMENT_END
 %token SORT_BY_NAME SORT_BY_ALIGNMENT SORT_NONE
-%token SORT_BY_INIT_PRIORITY
+%token SORT_BY_INIT_PRIORITY REVERSE
 %token '{' '}'
 %token SIZEOF_HEADERS OUTPUT_FORMAT FORCE_COMMON_ALLOCATION OUTPUT_ARCH
 %token INHIBIT_COMMON_ALLOCATION FORCE_GROUP_ALLOCATION
@@ -157,7 +157,7 @@ static void yyerror (const char *);
 %token LOG2CEIL FORMAT PUBLIC DEFSYMEND BASE ALIAS TRUNCATE REL
 %token INPUT_SCRIPT INPUT_MRI_SCRIPT INPUT_DEFSYM CASE EXTERN START
 %token <name> VERS_TAG VERS_IDENTIFIER
-%token GLOBAL LOCAL VERSIONK INPUT_VERSION_SCRIPT
+%token GLOBAL LOCAL VERSIONK INPUT_VERSION_SCRIPT INPUT_SECTION_ORDERING_SCRIPT
 %token KEEP ONLY_IF_RO ONLY_IF_RW SPECIAL INPUT_SECTION_FLAGS ALIGN_WITH_INPUT
 %token EXCLUDE_FILE
 %token CONSTANT
@@ -172,6 +172,7 @@ file:
 		INPUT_SCRIPT script_file
 	|	INPUT_MRI_SCRIPT mri_script_file
 	|	INPUT_VERSION_SCRIPT version_script_file
+	|	INPUT_SECTION_ORDERING_SCRIPT section_ordering_script_file
 	|	INPUT_DYNAMIC_LIST dynamic_list_file
 	|	INPUT_DEFSYM defsym_expr
 	;
@@ -440,6 +441,7 @@ wildcard_maybe_exclude:
 			  $$.sorted = none;
 			  $$.exclude_name_list = NULL;
 			  $$.section_flag_list = NULL;
+			  $$.reversed = false;
 			}
 	|	EXCLUDE_FILE '(' exclude_name_list ')' wildcard_name
 			{
@@ -447,64 +449,94 @@ wildcard_maybe_exclude:
 			  $$.sorted = none;
 			  $$.exclude_name_list = $3;
 			  $$.section_flag_list = NULL;
+			  $$.reversed = false;
+			}
+	;
+
+wildcard_maybe_reverse:
+		wildcard_maybe_exclude
+	|	REVERSE '(' wildcard_maybe_exclude ')'
+			{
+			  $$ = $3;
+			  $$.reversed = true;
+			  $$.sorted = by_name;
 			}
 	;
 
 filename_spec:
-		wildcard_maybe_exclude
-	|	SORT_BY_NAME '(' wildcard_maybe_exclude ')'
+		wildcard_maybe_reverse
+	|	SORT_BY_NAME '(' wildcard_maybe_reverse ')'
 			{
 			  $$ = $3;
 			  $$.sorted = by_name;
 			}
-	|	SORT_NONE '(' wildcard_maybe_exclude ')'
+	|	SORT_NONE '(' wildcard_maybe_reverse ')'
 			{
 			  $$ = $3;
 			  $$.sorted = by_none;
+			  $$.reversed = false;
+			}
+	|	REVERSE '(' SORT_BY_NAME '(' wildcard_maybe_exclude ')' ')'
+			{
+			  $$ = $5;
+			  $$.sorted = by_name;
+			  $$.reversed = true;
 			}
 	;
 
 section_name_spec:
-		wildcard_maybe_exclude
-	|	SORT_BY_NAME '(' wildcard_maybe_exclude ')'
+		wildcard_maybe_reverse
+	|	SORT_BY_NAME '(' wildcard_maybe_reverse ')'
 			{
 			  $$ = $3;
 			  $$.sorted = by_name;
 			}
-	|	SORT_BY_ALIGNMENT '(' wildcard_maybe_exclude ')'
+	|	SORT_BY_ALIGNMENT '(' wildcard_maybe_reverse ')'
 			{
 			  $$ = $3;
 			  $$.sorted = by_alignment;
 			}
-	|	SORT_NONE '(' wildcard_maybe_exclude ')'
+	|	SORT_NONE '(' wildcard_maybe_reverse ')'
 			{
 			  $$ = $3;
 			  $$.sorted = by_none;
 			}
-	|	SORT_BY_NAME '(' SORT_BY_ALIGNMENT '(' wildcard_maybe_exclude ')' ')'
+	|	SORT_BY_NAME '(' SORT_BY_ALIGNMENT '(' wildcard_maybe_reverse ')' ')'
 			{
 			  $$ = $5;
 			  $$.sorted = by_name_alignment;
 			}
-	|	SORT_BY_NAME '(' SORT_BY_NAME '(' wildcard_maybe_exclude ')' ')'
+	|	SORT_BY_NAME '(' SORT_BY_NAME '(' wildcard_maybe_reverse ')' ')'
 			{
 			  $$ = $5;
 			  $$.sorted = by_name;
 			}
-	|	SORT_BY_ALIGNMENT '(' SORT_BY_NAME '(' wildcard_maybe_exclude ')' ')'
+	|	SORT_BY_ALIGNMENT '(' SORT_BY_NAME '(' wildcard_maybe_reverse ')' ')'
 			{
 			  $$ = $5;
 			  $$.sorted = by_alignment_name;
 			}
-	|	SORT_BY_ALIGNMENT '(' SORT_BY_ALIGNMENT '(' wildcard_maybe_exclude ')' ')'
+	|	SORT_BY_ALIGNMENT '(' SORT_BY_ALIGNMENT '(' wildcard_maybe_reverse ')' ')'
 			{
 			  $$ = $5;
 			  $$.sorted = by_alignment;
 			}
-	|	SORT_BY_INIT_PRIORITY '(' wildcard_maybe_exclude ')'
+	|	SORT_BY_INIT_PRIORITY '(' wildcard_maybe_reverse ')'
 			{
 			  $$ = $3;
 			  $$.sorted = by_init_priority;
+			}
+	|	REVERSE '(' SORT_BY_NAME '(' wildcard_maybe_exclude ')' ')'
+			{
+			  $$ = $5;
+			  $$.sorted = by_name;
+			  $$.reversed = true;
+			}
+	|	REVERSE '(' SORT_BY_INIT_PRIORITY '(' wildcard_maybe_exclude ')' ')'
+			{
+			  $$ = $5;
+			  $$.sorted = by_init_priority;
+			  $$.reversed = true;
 			}
 	;
 
@@ -1507,6 +1539,39 @@ opt_semicolon:
 		/* empty */
 	|	';'
 	;
+
+section_ordering_script_file:
+		{
+		  ldlex_script ();
+		  PUSH_ERROR (_("section-ordering-file script"));
+		}
+		section_ordering_list
+		{
+		  ldlex_popstate ();
+		  POP_ERROR ();
+		}
+	;
+
+section_ordering_list:
+		section_ordering_list section_order
+	|	section_ordering_list statement_anywhere
+	|
+	;
+
+section_order:	NAME ':'
+		{
+		  ldlex_wild ();
+		  lang_enter_output_section_statement
+		    ($1, NULL, 0, NULL, NULL, NULL, NULL, 0, 0);
+		}
+		'{'
+		statement_list_opt
+		'}'
+		{
+		  ldlex_popstate ();
+		  lang_leave_output_section_statement (NULL, NULL, NULL, NULL);
+		}
+		opt_comma
 
 %%
 static void

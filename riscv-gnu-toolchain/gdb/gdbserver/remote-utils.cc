@@ -1,5 +1,5 @@
 /* Remote utility routines for the remote server for GDB.
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,7 +16,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "server.h"
 #if HAVE_TERMIOS_H
 #include <termios.h>
 #endif
@@ -1063,6 +1062,7 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
     case TARGET_WAITKIND_FORKED:
     case TARGET_WAITKIND_VFORKED:
     case TARGET_WAITKIND_VFORK_DONE:
+    case TARGET_WAITKIND_THREAD_CLONED:
     case TARGET_WAITKIND_EXECD:
     case TARGET_WAITKIND_THREAD_CREATED:
     case TARGET_WAITKIND_SYSCALL_ENTRY:
@@ -1071,13 +1071,30 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
 	struct regcache *regcache;
 	char *buf_start = buf;
 
-	if ((status.kind () == TARGET_WAITKIND_FORKED && cs.report_fork_events)
+	if ((status.kind () == TARGET_WAITKIND_FORKED
+	     && cs.report_fork_events)
 	    || (status.kind () == TARGET_WAITKIND_VFORKED
-		&& cs.report_vfork_events))
+		&& cs.report_vfork_events)
+	    || status.kind () == TARGET_WAITKIND_THREAD_CLONED)
 	  {
 	    enum gdb_signal signal = GDB_SIGNAL_TRAP;
-	    const char *event = (status.kind () == TARGET_WAITKIND_FORKED
-				 ? "fork" : "vfork");
+
+	    auto kind_remote_str = [] (target_waitkind kind)
+	    {
+	      switch (kind)
+		{
+		case TARGET_WAITKIND_FORKED:
+		  return "fork";
+		case TARGET_WAITKIND_VFORKED:
+		  return "vfork";
+		case TARGET_WAITKIND_THREAD_CLONED:
+		  return "clone";
+		default:
+		  gdb_assert_not_reached ("unhandled kind");
+		}
+	    };
+
+	    const char *event = kind_remote_str (status.kind ());
 
 	    sprintf (buf, "T%02x%s:", signal, event);
 	    buf += strlen (buf);

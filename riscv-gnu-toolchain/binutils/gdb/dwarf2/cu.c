@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "dwarf2/cu.h"
 #include "dwarf2/read.h"
 #include "objfiles.h"
@@ -42,8 +41,8 @@ dwarf2_cu::dwarf2_cu (dwarf2_per_cu_data *per_cu,
     producer_is_clang (false),
     producer_is_gas_lt_2_38 (false),
     producer_is_gas_2_39 (false),
-    processing_has_namespace_info (false),
-    load_all_dies (false)
+    producer_is_gas_ge_2_40 (false),
+    processing_has_namespace_info (false)
 {
 }
 
@@ -147,7 +146,8 @@ dwarf2_cu::mark ()
     {
       m_mark = true;
       if (m_dependencies != nullptr)
-	htab_traverse (m_dependencies, dwarf2_mark_helper, per_objfile);
+	htab_traverse_noresize (m_dependencies.get (), dwarf2_mark_helper,
+				per_objfile);
     }
 }
 
@@ -159,13 +159,11 @@ dwarf2_cu::add_dependence (struct dwarf2_per_cu_data *ref_per_cu)
   void **slot;
 
   if (m_dependencies == nullptr)
-    m_dependencies
-      = htab_create_alloc_ex (5, htab_hash_pointer, htab_eq_pointer,
-			      NULL, &comp_unit_obstack,
-			      hashtab_obstack_allocate,
-			      dummy_obstack_deallocate);
+    m_dependencies.reset (htab_create_alloc
+			  (5, htab_hash_pointer, htab_eq_pointer,
+			   nullptr, xcalloc, xfree));
 
-  slot = htab_find_slot (m_dependencies, ref_per_cu, INSERT);
+  slot = htab_find_slot (m_dependencies.get (), ref_per_cu, INSERT);
   if (*slot == nullptr)
     *slot = ref_per_cu;
 }

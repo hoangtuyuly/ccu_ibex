@@ -1,6 +1,6 @@
 /* Parse expressions for GDB.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    Modified from expread.y by the Department of Computer Science at the
    State University of New York at Buffalo, 1991.
@@ -29,7 +29,6 @@
    during the process of parsing; the lower levels of the tree always
    come first in the result.  */
 
-#include "defs.h"
 #include <ctype.h>
 #include "arch-utils.h"
 #include "symtab.h"
@@ -40,7 +39,7 @@
 #include "command.h"
 #include "language.h"
 #include "parser-defs.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "symfile.h"
 #include "inferior.h"
 #include "target-float.h"
@@ -49,7 +48,7 @@
 #include "objfiles.h"
 #include "user-regs.h"
 #include <algorithm>
-#include "gdbsupport/gdb_optional.h"
+#include <optional>
 #include "c-exp.h"
 
 static unsigned int expressiondebug = 0;
@@ -225,7 +224,8 @@ parser_state::push_dollar (struct stoken str)
   /* On some systems, such as HP-UX and hppa-linux, certain system routines
      have names beginning with $ or $$.  Check for those, first.  */
 
-  sym = lookup_symbol (copy.c_str (), NULL, VAR_DOMAIN, NULL);
+  sym = lookup_symbol (copy.c_str (), nullptr,
+		       SEARCH_VAR_DOMAIN | SEARCH_FUNCTION_DOMAIN, nullptr);
   if (sym.symbol)
     {
       push_new<expr::var_value_operation> (sym);
@@ -242,6 +242,21 @@ parser_state::push_dollar (struct stoken str)
 
   push_new<expr::internalvar_operation>
     (create_internalvar (copy.c_str () + 1));
+}
+
+/* See parser-defs.h.  */
+
+void
+parser_state::parse_error (const char *msg)
+{
+  if (this->prev_lexptr)
+    this->lexptr = this->prev_lexptr;
+
+  if (*this->lexptr == '\0')
+    error (_("A %s in expression, near the end of `%s'."),
+	   msg, this->start_of_input);
+  else
+    error (_("A %s in expression, near `%s'."), msg, this->lexptr);
 }
 
 
@@ -471,7 +486,7 @@ parse_expression (const char *string, innermost_block_tracker *tracker,
 expression_up
 parse_expression_with_language (const char *string, enum language lang)
 {
-  gdb::optional<scoped_restore_current_language> lang_saver;
+  std::optional<scoped_restore_current_language> lang_saver;
   if (current_language->la_language != lang)
     {
       lang_saver.emplace ();

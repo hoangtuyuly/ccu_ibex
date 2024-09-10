@@ -37,5 +37,44 @@ int main(int argc, char **argv) {
     asm volatile("wfi");
   }
 
+
+  int a, b, result;
+  a = 5;
+  b = 3;
+
+  asm volatile(                                   
+  "ccu0 %[result], %[a], %[b]\n"    
+  : [result] "=r" (result)                    
+  : [a] "r" (a), [b] "r" (b)              
+  );  
+
+  asm volatile(                                   
+  "ccu1 %[result], %[a], %[b]\n"    
+  : [result] "=r" (result)                    
+  : [a] "r" (a), [b] "r" (b)              
+  );  
+
+  asm volatile(                                   
+  "ccu1 %[result], %[a], %[b]\n"    
+  : [result] "=r" (result)                    
+  : [a] "r" (a), [b] "r" (b)              
+  );  
+
+  asm volatile(                                   
+  "ccu0 %[result], %[a], %[b]\n"    
+  : [result] "=r" (result)                    
+  : [a] "r" (a), [b] "r" (b)              
+  ); 
+
+  a = 1;
+  b = 1;
+  
+  asm volatile(                                   
+  "ccu1 %[result], %[a], %[b]\n"    
+  : [result] "=r" (result)                    
+  : [a] "r" (a), [b] "r" (b)              
+  ); 
+  putint(result);
+
   return 0;
 }

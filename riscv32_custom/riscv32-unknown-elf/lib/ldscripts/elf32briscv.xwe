@@ -7,7 +7,7 @@ OUTPUT_FORMAT("elf32-bigriscv", "elf32-bigriscv",
 	      "elf32-bigriscv")
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
-SEARCH_DIR("/Users/tuhoang/CFU_IBEX/riscv32_custom/riscv32-unknown-elf/lib");
+SEARCH_DIR("/Users/tuhoang/CFU_IBEX/cfu_ibex/riscv32_custom/riscv32-unknown-elf/lib");
 SECTIONS
 {
   PROVIDE (__executable_start = SEGMENT_START("text-segment", 0x10000)); . = SEGMENT_START("text-segment", 0x10000) + SIZEOF_HEADERS;

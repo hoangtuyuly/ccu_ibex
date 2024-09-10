@@ -1,6 +1,6 @@
 /* Python interface to program spaces.
 
-   Copyright (C) 2010-2023 Free Software Foundation, Inc.
+   Copyright (C) 2010-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "python-internal.h"
 #include "charset.h"
 #include "progspace.h"
@@ -28,6 +27,7 @@
 #include "block.h"
 #include "py-event.h"
 #include "observable.h"
+#include "inferior.h"
 
 struct pspace_object
 {
@@ -54,6 +54,9 @@ struct pspace_object
 
   /* The debug method list.  */
   PyObject *xmethods;
+
+  /* The missing debug handler list.  */
+  PyObject *missing_debug_handlers;
 };
 
 extern PyTypeObject pspace_object_type
@@ -69,11 +72,11 @@ struct pspace_deleter
        this is one time when the current program space and current inferior
        are not in sync: All inferiors that use PSPACE may no longer exist.
        We don't need to do much here, and since "there is always an inferior"
-       using target_gdbarch suffices.
+       using the current inferior's arch suffices.
        Note: We cannot call get_current_arch because it may try to access
        the target, which may involve accessing data in the pspace currently
        being deleted.  */
-    struct gdbarch *arch = target_gdbarch ();
+    gdbarch *arch = current_inferior ()->arch ();
 
     gdbpy_enter enter_py (arch);
     gdbpy_ref<pspace_object> object (obj);
@@ -163,6 +166,7 @@ pspy_dealloc (PyObject *self)
   Py_XDECREF (ps_self->frame_unwinders);
   Py_XDECREF (ps_self->type_printers);
   Py_XDECREF (ps_self->xmethods);
+  Py_XDECREF (ps_self->missing_debug_handlers);
   Py_TYPE (self)->tp_free (self);
 }
 
@@ -198,21 +202,11 @@ pspy_initialize (pspace_object *self)
   if (self->xmethods == NULL)
     return 0;
 
+  self->missing_debug_handlers = PyList_New (0);
+  if (self->missing_debug_handlers == nullptr)
+    return 0;
+
   return 1;
-}
-
-static PyObject *
-pspy_new (PyTypeObject *type, PyObject *args, PyObject *keywords)
-{
-  gdbpy_ref<pspace_object> self ((pspace_object *) type->tp_alloc (type, 0));
-
-  if (self != NULL)
-    {
-      if (!pspy_initialize (self.get ()))
-	return NULL;
-    }
-
-  return (PyObject *) self.release ();
 }
 
 PyObject *
@@ -350,6 +344,47 @@ pspy_get_xmethods (PyObject *o, void *ignore)
 
   Py_INCREF (self->xmethods);
   return self->xmethods;
+}
+
+/* Return the list of missing debug handlers for this program space.  */
+
+static PyObject *
+pspy_get_missing_debug_handlers (PyObject *o, void *ignore)
+{
+  pspace_object *self = (pspace_object *) o;
+
+  Py_INCREF (self->missing_debug_handlers);
+  return self->missing_debug_handlers;
+}
+
+/* Set this program space's list of missing debug handlers to HANDLERS.  */
+
+static int
+pspy_set_missing_debug_handlers (PyObject *o, PyObject *handlers,
+				 void *ignore)
+{
+  pspace_object *self = (pspace_object *) o;
+
+  if (handlers == nullptr)
+    {
+      PyErr_SetString (PyExc_TypeError,
+		       "cannot delete the missing debug handlers list");
+      return -1;
+    }
+
+  if (!PyList_Check (handlers))
+    {
+      PyErr_SetString (PyExc_TypeError,
+		       "the missing debug handlers attribute must be a list");
+      return -1;
+    }
+
+  /* Take care in case the LHS and RHS are related somehow.  */
+  gdbpy_ref<> tmp (self->missing_debug_handlers);
+  Py_INCREF (handlers);
+  self->missing_debug_handlers = handlers;
+
+  return 0;
 }
 
 /* Set the 'type_printers' attribute.  */
@@ -744,6 +779,8 @@ static gdb_PyGetSetDef pspace_getset[] =
     "Type printers.", NULL },
   { "xmethods", pspy_get_xmethods, NULL,
     "Debug methods.", NULL },
+  { "missing_debug_handlers", pspy_get_missing_debug_handlers,
+    pspy_set_missing_debug_handlers, "Missing debug handlers.", NULL },
   { NULL }
 };
 
@@ -807,5 +844,5 @@ PyTypeObject pspace_object_type =
   offsetof (pspace_object, dict), /* tp_dictoffset */
   0,				  /* tp_init */
   0,				  /* tp_alloc */
-  pspy_new,			  /* tp_new */
+  0,				  /* tp_new */
 };

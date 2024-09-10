@@ -82,6 +82,11 @@ struct dwarf_scanner_base
   virtual void wait_completely ()
   {
   }
+
+  /* Look up ADDR, and return either the corresponding CU, or nullptr
+     if the address could not be found.  */
+  virtual dwarf2_per_cu_data *lookup (unrelocated_addr addr)
+  { return nullptr; }
 };
 
 /* Base class containing bits shared by both .gdb_index and
@@ -127,9 +132,7 @@ struct mapped_index_base : public dwarf_scanner_base
 				 dwarf2_per_objfile *per_objfile) const;
 
   cooked_index *index_for_writing () override
-  {
-    error (_("Cannot use an index to create the index"));
-  }
+  { return nullptr; }
 };
 
 #endif /* GDB_DWARF2_MAPPED_INDEX_H */

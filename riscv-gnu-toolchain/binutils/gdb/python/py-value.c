@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "top.h"
 #include "charset.h"
 #include "value.h"
@@ -1046,7 +1045,6 @@ get_field_type (PyObject *field)
 static PyObject *
 valpy_getitem (PyObject *self, PyObject *key)
 {
-  struct gdb_exception except;
   value_object *self_value = (value_object *) self;
   gdb::unique_xmalloc_ptr<char> field;
   struct type *base_class_type = NULL, *field_type = NULL;
@@ -1155,7 +1153,11 @@ valpy_getitem (PyObject *self, PyObject *key)
 	     type.  */
 	  struct value *idx = convert_value_from_python (key);
 
-	  if (idx != NULL)
+	  if (idx != NULL
+	      && binop_user_defined_p (BINOP_SUBSCRIPT, tmp, idx))
+	    res_val = value_x_binop (tmp, idx, BINOP_SUBSCRIPT,
+				     OP_NULL, EVAL_NORMAL);
+	  else if (idx != NULL)
 	    {
 	      /* Check the value's type is something that can be accessed via
 		 a subscript.  */
@@ -1178,10 +1180,8 @@ valpy_getitem (PyObject *self, PyObject *key)
     }
   catch (gdb_exception &ex)
     {
-      except = std::move (ex);
+      GDB_PY_HANDLE_EXCEPTION (ex);
     }
-
-  GDB_PY_HANDLE_EXCEPTION (except);
 
   return result;
 }
@@ -1214,10 +1214,13 @@ valpy_call (PyObject *self, PyObject *args, PyObject *keywords)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  if (ftype->code () != TYPE_CODE_FUNC)
+  if (ftype->code () != TYPE_CODE_FUNC && ftype->code () != TYPE_CODE_METHOD
+      && ftype->code () != TYPE_CODE_INTERNAL_FUNCTION)
     {
       PyErr_SetString (PyExc_RuntimeError,
-		       _("Value is not callable (not TYPE_CODE_FUNC)."));
+		       _("Value is not callable (not TYPE_CODE_FUNC"
+			 " or TYPE_CODE_METHOD"
+			 " or TYPE_CODE_INTERNAL_FUNCTION)."));
       return NULL;
     }
 
@@ -1251,9 +1254,15 @@ valpy_call (PyObject *self, PyObject *args, PyObject *keywords)
     {
       scoped_value_mark free_values;
 
-      value *return_value
-	= call_function_by_hand (function, NULL,
-				 gdb::make_array_view (vargs, args_count));
+      value *return_value;
+      if (ftype->code () == TYPE_CODE_INTERNAL_FUNCTION)
+	return_value = call_internal_function (gdbpy_enter::get_gdbarch (),
+					       current_language,
+					       function, args_count, vargs);
+      else
+	return_value
+	  = call_function_by_hand (function, NULL,
+				   gdb::make_array_view (vargs, args_count));
       result = value_to_value_object (return_value);
     }
   catch (const gdb_exception &except)
@@ -1677,7 +1686,6 @@ valpy_absolute (PyObject *self)
 static int
 valpy_nonzero (PyObject *self)
 {
-  struct gdb_exception except;
   value_object *self_value = (value_object *) self;
   struct type *type;
   int nonzero = 0; /* Appease GCC warning.  */
@@ -1697,13 +1705,11 @@ valpy_nonzero (PyObject *self)
     }
   catch (gdb_exception &ex)
     {
-      except = std::move (ex);
+      /* This is not documented in the Python documentation, but if
+	 this function fails, return -1 as slot_nb_nonzero does (the
+	 default Python nonzero function).  */
+      GDB_PY_SET_HANDLE_EXCEPTION (ex);
     }
-
-  /* This is not documented in the Python documentation, but if this
-     function fails, return -1 as slot_nb_nonzero does (the default
-     Python nonzero function).  */
-  GDB_PY_SET_HANDLE_EXCEPTION (except);
 
   return nonzero;
 }

@@ -17,8 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "arch-utils.h"
+#include "exceptions.h"
 #include "mi-cmds.h"
 #include "ui-out.h"
 #include "mi-out.h"

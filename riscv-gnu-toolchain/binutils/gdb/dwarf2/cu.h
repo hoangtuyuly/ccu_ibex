@@ -122,7 +122,7 @@ private:
   /* A set of pointers to dwarf2_per_cu_data objects for compilation
      units referenced by this one.  Only set during full symbol processing;
      partial symbol tables do not have dependencies.  */
-  htab_t m_dependencies = nullptr;
+  htab_up m_dependencies;
 
 public:
   /* The generic symbol table building routines have separate lists for
@@ -136,12 +136,8 @@ public:
      distinguish these in buildsym.c.  */
   struct pending **list_in_scope = nullptr;
 
-  /* Hash table holding all the loaded partial DIEs
-     with partial_die->offset.SECT_OFF as hash.  */
-  htab_t partial_dies = nullptr;
-
-  /* Storage for things with the same lifetime as this read-in compilation
-     unit, including partial DIEs.  */
+  /* Storage for things with the same lifetime as this read-in
+     compilation unit. */
   auto_obstack comp_unit_obstack;
 
   /* Backlink to our per_cu entry.  */
@@ -155,7 +151,7 @@ public:
 
   /* A hash table of DIE cu_offset for following references with
      die_info->offset.sect_off as hash.  */
-  htab_t die_hash = nullptr;
+  htab_up die_hash;
 
   /* Full DIEs if read in.  */
   struct die_info *dies = nullptr;
@@ -174,7 +170,7 @@ public:
   std::vector<delayed_method_info> method_list;
 
   /* To be copied to symtab->call_site_htab.  */
-  htab_t call_site_htab = nullptr;
+  htab_up call_site_htab;
 
   /* Non-NULL if this CU came from a DWO file.
      There is an invariant here that is important to remember:
@@ -267,18 +263,13 @@ public:
   bool producer_is_clang : 1;
   bool producer_is_gas_lt_2_38 : 1;
   bool producer_is_gas_2_39 : 1;
+  bool producer_is_gas_ge_2_40 : 1;
 
   /* When true, the file that we're processing is known to have
      debugging info for C++ namespaces.  GCC 3.3.x did not produce
      this information, but later versions do.  */
 
   bool processing_has_namespace_info : 1;
-
-  /* This flag will be set when reading partial DIEs if we need to load
-     absolutely all DIEs for this compilation unit, instead of just the ones
-     we think are interesting.  It gets set if we look for a DIE in the
-     hash table and don't find it.  */
-  bool load_all_dies : 1;
 
   /* Get the buildsym_compunit for this CU.  */
   buildsym_compunit *get_builder ();

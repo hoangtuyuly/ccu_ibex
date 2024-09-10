@@ -1,6 +1,6 @@
 /* Read a symbol table in MIPS' format (Third-Eye).
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    Contributed by Alessandro Forin (af@cs.cmu.edu) at CMU.  Major work
    by Per Bothner, John Gilmore and Ian Lance Taylor at Cygnus Support.
@@ -23,7 +23,6 @@
 /* Read symbols from an ECOFF file.  Most of the work is done in
    mdebugread.c.  */
 
-#include "defs.h"
 #include "bfd.h"
 #include "symtab.h"
 #include "objfiles.h"

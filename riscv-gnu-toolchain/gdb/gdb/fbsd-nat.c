@@ -1,6 +1,6 @@
 /* Native-dependent code for FreeBSD.
 
-   Copyright (C) 2002-2023 Free Software Foundation, Inc.
+   Copyright (C) 2002-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "gdbsupport/block-signals.h"
 #include "gdbsupport/byte-vector.h"
 #include "gdbsupport/event-loop.h"
@@ -26,7 +25,7 @@
 #include "regcache.h"
 #include "regset.h"
 #include "gdbarch.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbthread.h"
 #include "gdbsupport/buildargv.h"
 #include "gdbsupport/gdb_wait.h"
@@ -99,7 +98,7 @@ fbsd_nat_target::have_pending_event (ptid_t filter)
 
 /* See fbsd-nat.h.  */
 
-gdb::optional<fbsd_nat_target::pending_event>
+std::optional<fbsd_nat_target::pending_event>
 fbsd_nat_target::take_pending_event (ptid_t filter)
 {
   for (auto it = m_pending_events.begin (); it != m_pending_events.end (); it++)
@@ -178,7 +177,7 @@ fbsd_nat_target::find_memory_regions (find_memory_region_ftype func,
 	{
 	  gdb_printf ("Save segment, %ld bytes at %s (%c%c%c)\n",
 		      (long) size,
-		      paddress (target_gdbarch (), kve->kve_start),
+		      paddress (current_inferior ()->arch (), kve->kve_start),
 		      kve->kve_protection & KVME_PROT_READ ? 'r' : '-',
 		      kve->kve_protection & KVME_PROT_WRITE ? 'w' : '-',
 		      kve->kve_protection & KVME_PROT_EXEC ? 'x' : '-');
@@ -1641,7 +1640,7 @@ fbsd_nat_target::stop_process (inferior *inf)
       if (status.sig () == GDB_SIGNAL_STOP)
 	break;
 
-      /* FALLTHROUGH */
+      [[fallthrough]];
     default:
       /* Some other event has occurred.  Save the current
 	 event.  */
@@ -1663,7 +1662,7 @@ fbsd_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
 			 target_options_to_string (target_options).c_str ());
 
   /* If there is a valid pending event, return it.  */
-  gdb::optional<pending_event> event = take_pending_event (ptid);
+  std::optional<pending_event> event = take_pending_event (ptid);
   if (event.has_value ())
     {
       /* Stop any other inferiors currently running.  */
@@ -1899,7 +1898,7 @@ fbsd_nat_target::detach_fork_children (inferior *inf)
 
   while (1)
     {
-      gdb::optional<pending_event> event = take_pending_event (ptid);
+      std::optional<pending_event> event = take_pending_event (ptid);
       if (!event.has_value ())
 	break;
 

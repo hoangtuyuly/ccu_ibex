@@ -1,5 +1,5 @@
 /* C API for x86 cpuid insn.
-   Copyright (C) 2007-2023 Free Software Foundation, Inc.
+   Copyright (C) 2007-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -27,8 +27,6 @@
    nullptr in C terms to avoid a compilation error.  */
 #define nullptr ((void *) 0)
 #endif
-
-#if defined(__i386__) || defined(__x86_64__)
 
 /* Return cpuid data for requested cpuid level, as found in returned
    eax, ebx, ecx and edx registers.  The function checks if cpuid is
@@ -77,26 +75,6 @@ x86_cpuid_count (unsigned int __level, unsigned int __sublevel,
 
   return __get_cpuid_count (__level, __sublevel, __eax, __ebx, __ecx, __edx);
 }
-
-#else
-
-static __inline int
-x86_cpuid (unsigned int __level,
-	    unsigned int *__eax, unsigned int *__ebx,
-	    unsigned int *__ecx, unsigned int *__edx)
-{
-  return 0;
-}
-
-static __inline int
-x86_cpuid_count (unsigned int __level, unsigned int __sublevel,
-		 unsigned int *__eax, unsigned int *__ebx,
-		 unsigned int *__ecx, unsigned int *__edx)
-{
-  return 0;
-}
-
-#endif /* i386 && x86_64 */
 
 #ifndef __cplusplus
 /* Avoid leaking this local definition beyond the scope of this header

@@ -1,6 +1,6 @@
 /* Target description support for GDB.
 
-   Copyright (C) 2006-2023 Free Software Foundation, Inc.
+   Copyright (C) 2006-2024 Free Software Foundation, Inc.
 
    Contributed by CodeSourcery.
 
@@ -19,9 +19,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "arch-utils.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbtypes.h"
 #include "reggroups.h"
 #include "target.h"
@@ -475,7 +474,7 @@ target_find_description (void)
   /* The current architecture should not have any target description
      specified.  It should have been cleared, e.g. when we
      disconnected from the previous target.  */
-  gdb_assert (gdbarch_target_desc (target_gdbarch ()) == NULL);
+  gdb_assert (gdbarch_target_desc (current_inferior ()->arch ()) == NULL);
 
   /* First try to fetch an XML description from the user-specified
      file.  */
@@ -510,7 +509,7 @@ target_find_description (void)
 	{
 	  struct tdesc_arch_data *data;
 
-	  data = get_arch_data (target_gdbarch ());
+	  data = get_arch_data (current_inferior ()->arch ());
 	  if (tdesc_has_registers (tdesc_info->tdesc)
 	      && data->arch_regs.empty ())
 	    warning (_("Target-supplied registers are not supported "
@@ -1299,7 +1298,6 @@ public:
     gdb_printf ("  Original: %s */\n\n",
 		lbasename (m_filename_after_features.c_str ()));
 
-    gdb_printf ("#include \"defs.h\"\n");
     gdb_printf ("#include \"osabi.h\"\n");
     gdb_printf ("#include \"target-descriptions.h\"\n");
     gdb_printf ("\n");

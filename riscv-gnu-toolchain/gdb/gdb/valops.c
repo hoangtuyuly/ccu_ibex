@@ -1,6 +1,6 @@
 /* Perform non-arithmetic operations on values, for GDB.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "event-top.h"
+#include "extract-store-integer.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "value.h"
@@ -27,7 +28,7 @@
 #include "target.h"
 #include "demangle.h"
 #include "language.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "regcache.h"
 #include "cp-abi.h"
 #include "block.h"
@@ -52,7 +53,7 @@ static struct value *search_struct_field (const char *, struct value *,
 					  struct type *, int);
 
 static struct value *search_struct_method (const char *, struct value **,
-					   gdb::optional<gdb::array_view<value *>>,
+					   std::optional<gdb::array_view<value *>>,
 					   LONGEST, int *, struct type *);
 
 static int find_oload_champ_namespace (gdb::array_view<value *> args,
@@ -118,15 +119,9 @@ find_function_in_inferior (const char *name, struct objfile **objf_p)
 {
   struct block_symbol sym;
 
-  sym = lookup_symbol (name, 0, VAR_DOMAIN, 0);
+  sym = lookup_symbol (name, nullptr, SEARCH_TYPE_DOMAIN, nullptr);
   if (sym.symbol != NULL)
     {
-      if (sym.symbol->aclass () != LOC_BLOCK)
-	{
-	  error (_("\"%s\" exists in this program but is not a function."),
-		 name);
-	}
-
       if (objf_p)
 	*objf_p = sym.symbol->objfile ();
 
@@ -417,7 +412,8 @@ value_cast (struct type *type, struct value *arg2)
      In this case we want to preserve the LVAL of ARG2 as this allows the
      resulting value to be used in more places.  We do this by calling
      VALUE_COPY if appropriate.  */
-  if (types_deeply_equal (arg2->type (), type))
+  if (types_deeply_equal (make_unqualified_type (arg2->type ()),
+			  make_unqualified_type (type)))
     {
       /* If the types are exactly equal then we can avoid creating a new
 	 value completely.  */
@@ -603,15 +599,13 @@ value_cast (struct type *type, struct value *arg2)
 	 pointers and four byte addresses.  */
 
       int addr_bit = gdbarch_addr_bit (type2->arch ());
-      LONGEST longest = value_as_long (arg2);
+      gdb_mpz longest = value_as_mpz (arg2);
 
-      if (addr_bit < sizeof (LONGEST) * HOST_CHAR_BIT)
-	{
-	  if (longest >= ((LONGEST) 1 << addr_bit)
-	      || longest <= -((LONGEST) 1 << addr_bit))
-	    warning (_("value truncated"));
-	}
-      return value_from_longest (to_type, longest);
+      gdb_mpz addr_val = gdb_mpz (1) << addr_bit;
+      if (longest >= addr_val || longest <= -addr_val)
+	warning (_("value truncated"));
+
+      return value_from_mpz (to_type, longest);
     }
   else if (code1 == TYPE_CODE_METHODPTR && code2 == TYPE_CODE_INT
 	   && value_as_long (arg2) == 0)
@@ -702,10 +696,17 @@ value_reinterpret_cast (struct type *type, struct value *arg)
       || (dest_code == TYPE_CODE_MEMBERPTR && arg_code == TYPE_CODE_INT)
       || (dest_code == TYPE_CODE_INT && arg_code == TYPE_CODE_MEMBERPTR)
       || (dest_code == arg_code
-	  && (dest_code == TYPE_CODE_PTR
-	      || dest_code == TYPE_CODE_METHODPTR
+	  && (dest_code == TYPE_CODE_METHODPTR
 	      || dest_code == TYPE_CODE_MEMBERPTR)))
     result = value_cast (dest_type, arg);
+  else if (dest_code == TYPE_CODE_PTR && arg_code == TYPE_CODE_PTR)
+    {
+      /* Don't do any up- or downcasting.  */
+      result = arg->copy ();
+      result->deprecated_set_type (dest_type);
+      result->set_enclosing_type (dest_type);
+      result->set_pointed_to_offset (0);
+    }
   else
     error (_("Invalid reinterpret_cast"));
 
@@ -858,7 +859,7 @@ value_dynamic_cast (struct type *type, struct value *arg)
 
   /* If the classes are the same, just return the argument.  */
   if (class_types_same_p (class_type, arg_type))
-    return value_cast (type, arg);
+    return value_cast (type, original_arg);
 
   /* If the target type is a unique base class of the argument's
      declared type, just cast it.  */
@@ -890,14 +891,18 @@ value_dynamic_cast (struct type *type, struct value *arg)
       && resolved_type->target_type ()->code () == TYPE_CODE_VOID)
     return value_at_lazy (type, addr);
 
-  tem = value_at (type, addr);
-  type = tem->type ();
+  tem = value_at (resolved_type->target_type (), addr);
+  type = (is_ref
+	  ? lookup_reference_type (tem->type (), resolved_type->code ())
+	  : lookup_pointer_type (tem->type ()));
 
   /* The first dynamic check specified in 5.2.7.  */
   if (is_public_ancestor (arg_type, resolved_type->target_type ()))
     {
       if (class_types_same_p (rtti_type, resolved_type->target_type ()))
-	return tem;
+	return (is_ref
+		? value_ref (tem, resolved_type->code ())
+		: value_addr (tem));
       result = NULL;
       if (dynamic_cast_check_1 (resolved_type->target_type (),
 				tem->contents_for_printing ().data (),
@@ -980,7 +985,7 @@ value_one (struct type *type)
    e.g. in case the type is a variable length array.  */
 
 static struct value *
-get_value_at (struct type *type, CORE_ADDR addr, frame_info_ptr frame,
+get_value_at (struct type *type, CORE_ADDR addr, const frame_info_ptr &frame,
 	      int lazy)
 {
   struct value *val;
@@ -1033,7 +1038,7 @@ value_at_non_lval (struct type *type, CORE_ADDR addr)
    e.g. in case the type is a variable length array.  */
 
 struct value *
-value_at_lazy (struct type *type, CORE_ADDR addr, frame_info_ptr frame)
+value_at_lazy (struct type *type, CORE_ADDR addr, const frame_info_ptr &frame)
 {
   return get_value_at (type, addr, frame, 1);
 }
@@ -1191,26 +1196,13 @@ value_assign (struct value *toval, struct value *fromval)
 
     case lval_register:
       {
-	frame_info_ptr frame;
-	struct gdbarch *gdbarch;
-	int value_reg;
+	frame_info_ptr next_frame = frame_find_by_id (toval->next_frame_id ());
+	int value_reg = toval->regnum ();
 
-	/* Figure out which frame this register value is in.  The value
-	   holds the frame_id for the next frame, that is the frame this
-	   register value was unwound from.
-
-	   Below we will call put_frame_register_bytes which requires that
-	   we pass it the actual frame in which the register value is
-	   valid, i.e. not the next frame.  */
-	frame = frame_find_by_id (VALUE_NEXT_FRAME_ID (toval));
-	frame = get_prev_frame_always (frame);
-
-	value_reg = VALUE_REGNUM (toval);
-
-	if (!frame)
+	if (next_frame == nullptr)
 	  error (_("Value being assigned to is no longer active."));
 
-	gdbarch = get_frame_arch (frame);
+	gdbarch *gdbarch = frame_unwind_arch (next_frame);
 
 	if (toval->bitsize ())
 	  {
@@ -1230,9 +1222,9 @@ value_assign (struct value *toval, struct value *fromval)
 		       "don't fit in a %d bit word."),
 		     (int) sizeof (LONGEST) * HOST_CHAR_BIT);
 
-	    if (!get_frame_register_bytes (frame, value_reg, offset,
-					   {buffer, changed_len},
-					   &optim, &unavail))
+	    if (!get_frame_register_bytes (next_frame, value_reg, offset,
+					   { buffer, changed_len }, &optim,
+					   &unavail))
 	      {
 		if (optim)
 		  throw_error (OPTIMIZED_OUT_ERROR,
@@ -1245,28 +1237,29 @@ value_assign (struct value *toval, struct value *fromval)
 	    modify_field (type, buffer, value_as_long (fromval),
 			  toval->bitpos (), toval->bitsize ());
 
-	    put_frame_register_bytes (frame, value_reg, offset,
-				      {buffer, changed_len});
+	    put_frame_register_bytes (next_frame, value_reg, offset,
+				      { buffer, changed_len });
 	  }
 	else
 	  {
-	    if (gdbarch_convert_register_p (gdbarch, VALUE_REGNUM (toval),
-					    type))
+	    if (gdbarch_convert_register_p (gdbarch, toval->regnum (), type))
 	      {
 		/* If TOVAL is a special machine register requiring
 		   conversion of program values to a special raw
 		   format.  */
-		gdbarch_value_to_register (gdbarch, frame,
-					   VALUE_REGNUM (toval), type,
+		gdbarch_value_to_register (gdbarch,
+					   get_prev_frame_always (next_frame),
+					   toval->regnum (), type,
 					   fromval->contents ().data ());
 	      }
 	    else
-	      put_frame_register_bytes (frame, value_reg,
+	      put_frame_register_bytes (next_frame, value_reg,
 					toval->offset (),
 					fromval->contents ());
 	  }
 
-	gdb::observers::register_changed.notify (frame, value_reg);
+	gdb::observers::register_changed.notify
+	  (get_prev_frame_always (next_frame), value_reg);
 	break;
       }
 
@@ -1280,7 +1273,7 @@ value_assign (struct value *toval, struct value *fromval)
 	    break;
 	  }
       }
-      /* Fall through.  */
+      [[fallthrough]];
 
     default:
       error (_("Left operand of assignment is not an lvalue."));
@@ -1365,6 +1358,8 @@ value_repeat (struct value *arg1, int count)
 {
   struct value *val;
 
+  arg1 = coerce_ref (arg1);
+
   if (arg1->lval () != lval_memory)
     error (_("Only values in memory can be extended with '@'."));
   if (count < 1)
@@ -1418,14 +1413,13 @@ address_of_variable (struct symbol *var, const struct block *b)
     {
     case lval_register:
       {
-	frame_info_ptr frame;
 	const char *regname;
 
-	frame = frame_find_by_id (VALUE_NEXT_FRAME_ID (val));
-	gdb_assert (frame);
+	frame_info_ptr frame = frame_find_by_id (val->next_frame_id ());
+	gdb_assert (frame != nullptr);
 
-	regname = gdbarch_register_name (get_frame_arch (frame),
-					 VALUE_REGNUM (val));
+	regname
+	  = gdbarch_register_name (get_frame_arch (frame), val->regnum ());
 	gdb_assert (regname != nullptr && *regname != '\0');
 
 	error (_("Address requested for identifier "
@@ -2196,7 +2190,7 @@ search_struct_field (const char *name, struct value *arg1,
 
 static struct value *
 search_struct_method (const char *name, struct value **arg1p,
-		      gdb::optional<gdb::array_view<value *>> args,
+		      std::optional<gdb::array_view<value *>> args,
 		      LONGEST offset, int *static_memfuncp,
 		      struct type *type)
 {
@@ -2332,7 +2326,7 @@ search_struct_method (const char *name, struct value **arg1p,
 
 struct value *
 value_struct_elt (struct value **argp,
-		  gdb::optional<gdb::array_view<value *>> args,
+		  std::optional<gdb::array_view<value *>> args,
 		  const char *name, int *static_memfuncp, const char *err)
 {
   struct type *t;
@@ -2820,7 +2814,7 @@ find_overload_match (gdb::array_view<value *> args,
 		   case where a xmethod is better than the source
 		   method, except when the xmethod match quality is
 		   non-standard.  */
-		/* FALLTHROUGH */
+		[[fallthrough]];
 	      case 1: /* Src method and ext method are incompatible.  */
 		/* If ext method match is not standard, then let source method
 		   win.  Otherwise, fallthrough to let xmethod win.  */
@@ -2832,7 +2826,7 @@ find_overload_match (gdb::array_view<value *> args,
 		    method_match_quality = src_method_match_quality;
 		    break;
 		  }
-		/* FALLTHROUGH */
+		[[fallthrough]];
 	      case 2: /* Ext method is champion.  */
 		method_oload_champ = ext_method_oload_champ;
 		method_badness = ext_method_badness;
@@ -3224,6 +3218,7 @@ find_oload_champ (gdb::array_view<value *> args,
     {
       int jj;
       int static_offset = 0;
+      bool varargs = false;
       std::vector<type *> parm_types;
 
       if (xmethods != NULL)
@@ -3236,9 +3231,13 @@ find_oload_champ (gdb::array_view<value *> args,
 	    {
 	      nparms = TYPE_FN_FIELD_TYPE (methods, ix)->num_fields ();
 	      static_offset = oload_method_static_p (methods, ix);
+	      varargs = TYPE_FN_FIELD_TYPE (methods, ix)->has_varargs ();
 	    }
 	  else
-	    nparms = functions[ix]->type ()->num_fields ();
+	    {
+	      nparms = functions[ix]->type ()->num_fields ();
+	      varargs = functions[ix]->type ()->has_varargs ();
+	    }
 
 	  parm_types.reserve (nparms);
 	  for (jj = 0; jj < nparms; jj++)
@@ -3253,7 +3252,8 @@ find_oload_champ (gdb::array_view<value *> args,
       /* Compare parameter types to supplied argument types.  Skip
 	 THIS for static methods.  */
       bv = rank_function (parm_types,
-			  args.slice (static_offset));
+			  args.slice (static_offset),
+			  varargs);
 
       if (overload_debug)
 	{
@@ -3713,7 +3713,7 @@ value_struct_elt_for_reference (struct type *domain, int offset,
 	    {
 	      struct symbol *s = 
 		lookup_symbol (TYPE_FN_FIELD_PHYSNAME (f, j),
-			       0, VAR_DOMAIN, 0).symbol;
+			       0, SEARCH_FUNCTION_DOMAIN, 0).symbol;
 
 	      if (s == NULL)
 		return NULL;
@@ -3744,7 +3744,7 @@ value_struct_elt_for_reference (struct type *domain, int offset,
 	    {
 	      struct symbol *s = 
 		lookup_symbol (TYPE_FN_FIELD_PHYSNAME (f, j),
-			       0, VAR_DOMAIN, 0).symbol;
+			       0, SEARCH_FUNCTION_DOMAIN, 0).symbol;
 
 	      if (s == NULL)
 		return NULL;
@@ -3824,7 +3824,7 @@ value_maybe_namespace_elt (const struct type *curtype,
   struct value *result;
 
   sym = cp_lookup_symbol_namespace (namespace_name, name,
-				    get_selected_block (0), VAR_DOMAIN);
+				    get_selected_block (0), SEARCH_VFT);
 
   if (sym.symbol == NULL)
     return NULL;

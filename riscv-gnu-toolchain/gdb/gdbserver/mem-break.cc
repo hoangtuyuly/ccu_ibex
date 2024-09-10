@@ -1,5 +1,5 @@
 /* Memory breakpoint operations for the remote server for GDB.
-   Copyright (C) 2002-2023 Free Software Foundation, Inc.
+   Copyright (C) 2002-2024 Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
 
@@ -18,7 +18,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "server.h"
 #include "regcache.h"
 #include "ax.h"
 
@@ -976,6 +975,17 @@ static struct gdb_breakpoint *
 find_gdb_breakpoint (char z_type, CORE_ADDR addr, int kind)
 {
   struct process_info *proc = current_process ();
+
+  /* In some situations the current process exits, we inform GDB, but
+     before GDB can acknowledge that the process has exited GDB tries to
+     detach from the inferior.  As part of the detach process GDB will
+     remove all breakpoints, which means we can end up here when the
+     current process has already exited and so PROC is nullptr.  In this
+     case just claim we can't find (and so delete) the breakpoint, GDB
+     will ignore this error during detach.  */
+  if (proc == nullptr)
+    return nullptr;
+
   struct breakpoint *bp;
   enum bkpt_type type = Z_packet_to_bkpt_type (z_type);
 
@@ -1988,7 +1998,8 @@ check_mem_write (CORE_ADDR mem_addr, unsigned char *buf,
     delete_disabled_breakpoints ();
 }
 
-/* Delete all breakpoints, and un-insert them from the inferior.  */
+/* Delete all breakpoints, watchpoints, tracepoints, and catchpoints,
+   and un-insert them from the inferior.  */
 
 void
 delete_all_breakpoints (void)
@@ -2010,8 +2021,8 @@ mark_breakpoints_out (struct process_info *proc)
     raw_bp->inserted = 0;
 }
 
-/* Release all breakpoints, but do not try to un-insert them from the
-   inferior.  */
+/* Release all breakpoints, watchpoints, tracepoints, and catchpoints,
+   but do not try to un-insert them from the inferior.  */
 
 void
 free_all_breakpoints (struct process_info *proc)

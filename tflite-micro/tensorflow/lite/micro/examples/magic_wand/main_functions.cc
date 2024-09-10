@@ -61,11 +61,11 @@ void setup() {
   // incur some penalty in code space for op implementations that are not
   // needed by this graph.
   static tflite::MicroMutableOpResolver<5> micro_op_resolver;  // NOLINT
-  micro_op_resolver.AddConv2D(tflite::Register_CONV_2D_INT8());
-  micro_op_resolver.AddDepthwiseConv2D(tflite::Register_DEPTHWISE_CONV_2D_INT8());
+  micro_op_resolver.AddConv2D();
+  micro_op_resolver.AddDepthwiseConv2D();
   micro_op_resolver.AddFullyConnected();
   micro_op_resolver.AddMaxPool2D();
-  micro_op_resolver.AddSoftmax(tflite::Register_SOFTMAX_INT8());
+  micro_op_resolver.AddSoftmax();
 
   // Build an interpreter to run the model with.
   static tflite::MicroInterpreter static_interpreter(

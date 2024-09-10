@@ -1,5 +1,5 @@
 /* GDB routines for manipulating the minimal symbol tables.
-   Copyright (C) 1992-2023 Free Software Foundation, Inc.
+   Copyright (C) 1992-2024 Free Software Foundation, Inc.
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
    This file is part of GDB.
@@ -36,7 +36,6 @@
    to figure out what full symbol table entries need to be read in.  */
 
 
-#include "defs.h"
 #include <ctype.h>
 #include "symtab.h"
 #include "bfd.h"
@@ -140,7 +139,7 @@ msymbol_is_function (struct objfile *objfile, minimal_symbol *minsym,
       /* Ignore function symbol that is not a function entry.  */
       if (msymbol_is_cold_clone (minsym))
 	return false;
-      /* fallthru */
+      [[fallthrough]];
     default:
       if (func_address_p != NULL)
 	*func_address_p = msym_addr;
@@ -623,38 +622,51 @@ lookup_minimal_symbol_text (const char *name, struct objfile *objf)
 
   unsigned int hash = msymbol_hash (name) % MINIMAL_SYMBOL_HASH_SIZE;
 
-  for (objfile *objfile : current_program_space->objfiles ())
-    {
-      if (found_symbol.minsym != NULL)
-	break;
+  auto search = [&] (struct objfile *objfile)
+  {
+    for (msymbol = objfile->per_bfd->msymbol_hash[hash];
+	 msymbol != NULL && found_symbol.minsym == NULL;
+	 msymbol = msymbol->hash_next)
+      {
+	if (strcmp (msymbol->linkage_name (), name) == 0 &&
+	    (msymbol->type () == mst_text
+	     || msymbol->type () == mst_text_gnu_ifunc
+	     || msymbol->type () == mst_file_text))
+	  {
+	    switch (msymbol->type ())
+	      {
+	      case mst_file_text:
+		found_file_symbol.minsym = msymbol;
+		found_file_symbol.objfile = objfile;
+		break;
+	      default:
+		found_symbol.minsym = msymbol;
+		found_symbol.objfile = objfile;
+		break;
+	      }
+	  }
+      }
+  };
 
-      if (objf == NULL || objf == objfile
-	  || objf == objfile->separate_debug_objfile_backlink)
+  if (objf == nullptr)
+    {
+      for (objfile *objfile : current_program_space->objfiles ())
 	{
-	  for (msymbol = objfile->per_bfd->msymbol_hash[hash];
-	       msymbol != NULL && found_symbol.minsym == NULL;
-	       msymbol = msymbol->hash_next)
-	    {
-	      if (strcmp (msymbol->linkage_name (), name) == 0 &&
-		  (msymbol->type () == mst_text
-		   || msymbol->type () == mst_text_gnu_ifunc
-		   || msymbol->type () == mst_file_text))
-		{
-		  switch (msymbol->type ())
-		    {
-		    case mst_file_text:
-		      found_file_symbol.minsym = msymbol;
-		      found_file_symbol.objfile = objfile;
-		      break;
-		    default:
-		      found_symbol.minsym = msymbol;
-		      found_symbol.objfile = objfile;
-		      break;
-		    }
-		}
-	    }
+	  if (found_symbol.minsym != NULL)
+	    break;
+	  search (objfile);
 	}
     }
+  else
+    {
+      for (objfile *objfile : objf->separate_debug_objfiles ())
+	{
+	  if (found_symbol.minsym != NULL)
+	    break;
+	  search (objfile);
+	}
+    }
+
   /* External symbols are best.  */
   if (found_symbol.minsym)
     return found_symbol;
@@ -703,7 +715,7 @@ frob_address (struct objfile *objfile, CORE_ADDR pc,
 {
   for (obj_section *iter : objfile->sections ())
     {
-      if (pc >= iter->addr () && pc < iter->endaddr ())
+      if (iter->contains (pc))
 	{
 	  *unrel_addr = unrelocated_addr (pc - iter->offset ());
 	  return 1;
@@ -1170,7 +1182,7 @@ mst_str (minimal_symbol_type t)
 /* See minsyms.h.  */
 
 struct minimal_symbol *
-minimal_symbol_reader::record_full (gdb::string_view name,
+minimal_symbol_reader::record_full (std::string_view name,
 				    bool copy_name, unrelocated_addr address,
 				    enum minimal_symbol_type ms_type,
 				    int section)
@@ -1510,7 +1522,7 @@ minimal_symbol_reader::install ()
 	       {
 		 size_t idx = msym - msymbols;
 		 msym->compute_and_set_names
-		   (gdb::string_view (msym->linkage_name (),
+		   (std::string_view (msym->linkage_name (),
 				      hash_values[idx].name_length),
 		    false,
 		    m_objfile->per_bfd,
@@ -1551,7 +1563,7 @@ lookup_solib_trampoline_symbol_by_pc (CORE_ADDR pc)
    a duplicate function in case this matters someday.  */
 
 CORE_ADDR
-find_solib_trampoline_target (frame_info_ptr frame, CORE_ADDR pc)
+find_solib_trampoline_target (const frame_info_ptr &frame, CORE_ADDR pc)
 {
   struct minimal_symbol *tsymbol = lookup_solib_trampoline_symbol_by_pc (pc);
 

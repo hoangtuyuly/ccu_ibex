@@ -133,7 +133,7 @@ build_tools="build-texinfo build-flex build-bison build-m4 build-fixincludes"
 
 # these libraries are used by various programs built for the host environment
 #f
-host_libs="intl libiberty opcodes bfd readline tcl tk itcl libgui zlib libbacktrace libcpp libcody libdecnumber gmp mpfr mpc isl libiconv libctf libsframe"
+host_libs="gettext libiberty opcodes bfd readline tcl tk itcl libgui zlib libbacktrace libcpp libcody libdecnumber gmp mpfr mpc isl libiconv libctf libsframe libgrust "
 
 # these tools are built for the host environment
 # Note, the powerpc-eabi build depends on sim occurring before gdb in order to
@@ -164,6 +164,7 @@ target_libraries="target-libgcc \
 		target-libada \
 		target-libgm2 \
 		target-libgo \
+		target-libgrust \
 		target-libphobos \
 		target-zlib"
 
@@ -1867,6 +1868,20 @@ AC_ARG_WITH(boot-ldflags,
  if test "$poststage1_libs" = ""; then
    poststage1_ldflags="-static-libstdc++ -static-libgcc"
  fi])
+case $target in
+  *-darwin2* | *-darwin1[[56789]]*)
+    # For these versions, we default to using embedded rpaths.
+    if test "x$enable_darwin_at_rpath" != "xno"; then
+      poststage1_ldflags="$poststage1_ldflags -nodefaultrpaths"
+    fi
+  ;;
+  *-darwin*)
+    # For these versions, we only use embedded rpaths on demand.
+    if test "x$enable_darwin_at_rpath" = "xyes"; then
+      poststage1_ldflags="$poststage1_ldflags -nodefaultrpaths"
+    fi
+  ;;
+esac
 AC_SUBST(poststage1_ldflags)
 
 # GCC GRAPHITE dependency isl.
@@ -2469,6 +2484,17 @@ case ,${enable_languages}, in
     ;;
 esac
 
+case ,${enable_languages}, in
+  *,rust,*)
+    case " ${noconfigdirs} " in
+      *\ target-libstdc++-v3\ *)
+        # Disable target libgrust if we're not building target libstdc++.
+        noconfigdirs="$noconfigdirs target-libgrust"
+        ;;
+    esac
+    ;;
+esac
+
 # If gcc/ is not in the source tree then we'll not be building a
 # target compiler, assume in that case we don't want to build any
 # target libraries or tools.
@@ -2821,6 +2847,12 @@ target_makefile_frag=/dev/null
 case "${target}" in
   spu-*-*)
     target_makefile_frag="config/mt-spu"
+    ;;
+  loongarch*-*linux* | loongarch*-*gnu*)
+    target_makefile_frag="config/mt-loongarch-gnu"
+    ;;
+  loongarch*-*elf*)
+    target_makefile_frag="config/mt-loongarch-elf"
     ;;
   mips*-sde-elf* | mips*-mti-elf* | mips*-img-elf*)
     target_makefile_frag="config/mt-sde"
@@ -3231,7 +3263,8 @@ AC_SUBST_FILE(serialization_dependencies)
 # files altogether, and which should be passed on to subconfigures.
 # Also strip program-prefix, program-suffix, and program-transform-name,
 # so that we can pass down a consistent program-transform-name.
-baseargs=
+hbaseargs=
+bbaseargs=
 tbaseargs=
 keep_next=no
 skip_next=no
@@ -3247,7 +3280,8 @@ do
       *\'*)
 	ac_arg=`echo "$ac_arg" | sed "s/'/'\\\\\\\\''/g"` ;;
     esac
-    baseargs="$baseargs '$ac_arg'"
+    hbaseargs="$hbaseargs '$ac_arg'"
+    bbaseargs="$bbaseargs '$ac_arg'"
     tbaseargs="$tbaseargs '$ac_arg'"
     keep_next=no
     continue
@@ -3271,6 +3305,7 @@ do
   esac
 
   skip_targ=no
+  skip_barg=no
   case $ac_arg in
 changequote(,)
   --with-* | --without-*)
@@ -3282,6 +3317,12 @@ changequote(,)
       ;;
     *[-_]lib)
       lib=`echo "$libopt" | sed 's,[-_]lib$,,'`
+      ;;
+    *[-_]prefix)
+      lib=`echo "$libopt" | sed 's,[-_]prefix$,,'`
+      ;;
+    *[-_]type)
+      lib=`echo "$libopt" | sed 's,[-_]type$,,'`
       ;;
     *)
       lib=$libopt
@@ -3299,6 +3340,11 @@ changequote([,])
         skip_targ=yes
       fi
       ;;
+    libintl | libiconv)
+      # We don't want libintl (and co.) in anything but the host arguments.
+      skip_targ=yes
+      skip_barg=yes
+      ;;
     esac
     ;;
   esac
@@ -3307,7 +3353,8 @@ changequote([,])
     --cache-file=/dev/null | \
     -cache-file=/dev/null )
       # Handled here to avoid the test to skip args below.
-      baseargs="$baseargs '$ac_arg'"
+      hbaseargs="$hbaseargs '$ac_arg'"
+      bbaseargs="$bbaseargs '$ac_arg'"
       tbaseargs="$tbaseargs '$ac_arg'"
       # Assert: $separate_arg should always be no.
       keep_next=$separate_arg
@@ -3338,7 +3385,10 @@ changequote([,])
 	*\'*)
 	  ac_arg=`echo "$ac_arg" | sed "s/'/'\\\\\\\\''/g"` ;;
       esac
-      baseargs="$baseargs '$ac_arg'"
+      hbaseargs="$hbaseargs '$ac_arg'"
+      if test X"$skip_barg" = Xno; then
+	bbaseargs="$bbaseargs '$ac_arg'"
+      fi
       if test X"$skip_targ" = Xno; then
         tbaseargs="$tbaseargs '$ac_arg'"
       fi
@@ -3353,7 +3403,8 @@ changequote([,])
 done
 # Remove the initial space we just introduced and, as these will be
 # expanded by make, quote '$'.
-baseargs=`echo "x$baseargs" | sed -e 's/^x *//' -e 's,\\$,$$,g'`
+hbaseargs=`echo "x$hbaseargs" | sed -e 's/^x *//' -e 's,\\$,$$,g'`
+bbaseargs=`echo "x$bbaseargs" | sed -e 's/^x *//' -e 's,\\$,$$,g'`
 
 # Add in --program-transform-name, after --program-prefix and
 # --program-suffix have been applied to it.  Autoconf has already
@@ -3367,18 +3418,22 @@ ${program_transform_name}
 EOF_SED
 gcc_transform_name=`cat conftestsed.out`
 rm -f conftestsed.out
-baseargs="$baseargs --program-transform-name='${gcc_transform_name}'"
+hbaseargs="$hbaseargs --program-transform-name='${gcc_transform_name}'"
+bbaseargs="$bbaseargs --program-transform-name='${gcc_transform_name}'"
 tbaseargs="$tbaseargs --program-transform-name='${gcc_transform_name}'"
 if test "$silent" = yes; then
-  baseargs="$baseargs --silent"
+  bbaseargs="$bbaseargs --silent"
+  hbaseargs="$hbaseargs --silent"
   tbaseargs="$tbaseargs --silent"
 fi
 
-baseargs="$baseargs --disable-option-checking"
+bbaseargs="$bbaseargs --disable-option-checking"
+hbaseargs="$hbaseargs --disable-option-checking"
 tbaseargs="$tbaseargs --disable-option-checking"
 
 if test "$enable_year2038" = no; then
-  baseargs="$baseargs --disable-year2038"
+  bbaseargs="$bbaseargs --disable-year2038"
+  hbaseargs="$hbaseargs --disable-year2038"
   tbaseargs="$tbaseargs --disable-year2038"
 fi
 
@@ -3395,7 +3450,7 @@ AC_ARG_VAR([target_configargs],
 # desired.  We can't even use the same cache file for all build-side
 # libraries, as they're compiled differently; some with C, some with
 # C++ or with different feature-enabling options.
-build_configargs="$build_configargs --cache-file=./config.cache ${baseargs}"
+build_configargs="$build_configargs --cache-file=./config.cache ${bbaseargs}"
 
 # For host modules, accept cache file option, or specification as blank.
 case "${cache_file}" in
@@ -3409,7 +3464,7 @@ esac
 
 # Host dirs don't like to share a cache file either, horribly enough.
 # This seems to be due to autoconf 2.5x stupidity.
-host_configargs="$host_configargs --cache-file=./config.cache ${extra_host_args} ${baseargs}"
+host_configargs="$host_configargs --cache-file=./config.cache ${extra_host_args} ${hbaseargs}"
 
 target_configargs="$target_configargs ${tbaseargs}"
 

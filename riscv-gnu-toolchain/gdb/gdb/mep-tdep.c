@@ -1,6 +1,6 @@
 /* Target-dependent code for the Toshiba MeP for GDB, the GNU debugger.
 
-   Copyright (C) 2001-2023 Free Software Foundation, Inc.
+   Copyright (C) 2001-2024 Free Software Foundation, Inc.
 
    Contributed by Red Hat, Inc.
 
@@ -19,13 +19,13 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "frame.h"
 #include "frame-unwind.h"
 #include "frame-base.h"
 #include "symtab.h"
 #include "gdbtypes.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbcore.h"
 #include "value.h"
 #include "inferior.h"
@@ -263,7 +263,7 @@ me_module_register_set (CONFIG_ATTR me_module,
        specifically excluding the generic coprocessor register sets.  */
 
   mep_gdbarch_tdep *tdep
-    = gdbarch_tdep<mep_gdbarch_tdep> (target_gdbarch ());
+    = gdbarch_tdep<mep_gdbarch_tdep> (current_inferior ()->arch ());
   CGEN_CPU_DESC desc = tdep->cpu_desc;
   const CGEN_HW_ENTRY *hw;
 
@@ -852,14 +852,14 @@ current_me_module (void)
   if (target_has_registers ())
     {
       ULONGEST regval;
-      regcache_cooked_read_unsigned (get_current_regcache (),
+      regcache_cooked_read_unsigned (get_thread_regcache (inferior_thread ()),
 				     MEP_MODULE_REGNUM, &regval);
       return (CONFIG_ATTR) regval;
     }
   else
     {
       mep_gdbarch_tdep *tdep
-	= gdbarch_tdep<mep_gdbarch_tdep> (target_gdbarch ());
+	= gdbarch_tdep<mep_gdbarch_tdep> (current_inferior ()->arch ());
       return tdep->me_module;
     }
 }
@@ -879,7 +879,7 @@ current_options (void)
   if (target_has_registers ())
     {
       ULONGEST regval;
-      regcache_cooked_read_unsigned (get_current_regcache (),
+      regcache_cooked_read_unsigned (get_thread_regcache (inferior_thread ()),
 				     MEP_OPT_REGNUM, &regval);
       return regval;
     }
@@ -1913,7 +1913,7 @@ typedef BP_MANIPULATION (mep_break_insn) mep_breakpoint;
 
 
 static struct mep_prologue *
-mep_analyze_frame_prologue (frame_info_ptr this_frame,
+mep_analyze_frame_prologue (const frame_info_ptr &this_frame,
 			    void **this_prologue_cache)
 {
   if (! *this_prologue_cache)
@@ -1943,7 +1943,7 @@ mep_analyze_frame_prologue (frame_info_ptr this_frame,
 /* Given the next frame and a prologue cache, return this frame's
    base.  */
 static CORE_ADDR
-mep_frame_base (frame_info_ptr this_frame,
+mep_frame_base (const frame_info_ptr &this_frame,
 		void **this_prologue_cache)
 {
   struct mep_prologue *p
@@ -1971,7 +1971,7 @@ mep_frame_base (frame_info_ptr this_frame,
 
 
 static void
-mep_frame_this_id (frame_info_ptr this_frame,
+mep_frame_this_id (const frame_info_ptr &this_frame,
 		   void **this_prologue_cache,
 		   struct frame_id *this_id)
 {
@@ -1981,7 +1981,7 @@ mep_frame_this_id (frame_info_ptr this_frame,
 
 
 static struct value *
-mep_frame_prev_register (frame_info_ptr this_frame,
+mep_frame_prev_register (const frame_info_ptr &this_frame,
 			 void **this_prologue_cache, int regnum)
 {
   struct mep_prologue *p
@@ -2424,7 +2424,8 @@ mep_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_register_type (gdbarch, mep_register_type);
   set_gdbarch_num_pseudo_regs (gdbarch, MEP_NUM_PSEUDO_REGS);
   set_gdbarch_pseudo_register_read (gdbarch, mep_pseudo_register_read);
-  set_gdbarch_pseudo_register_write (gdbarch, mep_pseudo_register_write);
+  set_gdbarch_deprecated_pseudo_register_write (gdbarch,
+						mep_pseudo_register_write);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, mep_debug_reg_to_regnum);
   set_gdbarch_stab_reg_to_regnum (gdbarch, mep_debug_reg_to_regnum);
 

@@ -1,6 +1,6 @@
 /* Convert symbols from GDB to GCC
 
-   Copyright (C) 2014-2023 Free Software Foundation, Inc.
+   Copyright (C) 2014-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,7 +18,6 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
-#include "defs.h"
 #include "compile-internal.h"
 #include "compile-c.h"
 #include "symtab.h"
@@ -30,8 +29,8 @@
 #include "exceptions.h"
 #include "gdbtypes.h"
 #include "dwarf2/loc.h"
+#include "inferior.h"
 
-
 
 /* Compute the name of the pointer representing a local symbol's
    address.  */
@@ -95,7 +94,7 @@ convert_one_symbol (compile_c_instance *context,
 	  kind = GCC_C_SYMBOL_FUNCTION;
 	  addr = sym.symbol->value_block ()->entry_pc ();
 	  if (is_global && sym.symbol->type ()->is_gnu_ifunc ())
-	    addr = gnu_ifunc_resolve_addr (target_gdbarch (), addr);
+	    addr = gnu_ifunc_resolve_addr (current_inferior ()->arch (), addr);
 	  break;
 
 	case LOC_CONST:
@@ -136,7 +135,7 @@ convert_one_symbol (compile_c_instance *context,
 		     "be referenced from the current thread in "
 		     "compiled code."),
 		   sym.symbol->print_name ());
-	  /* FALLTHROUGH */
+	  [[fallthrough]];
 	case LOC_UNRESOLVED:
 	  /* 'symbol_name' cannot be used here as that one is used only for
 	     local variables from compile_dwarf_expr_to_c.
@@ -210,7 +209,7 @@ convert_one_symbol (compile_c_instance *context,
 
 static void
 convert_symbol_sym (compile_c_instance *context, const char *identifier,
-		    struct block_symbol sym, domain_enum domain)
+		    struct block_symbol sym, domain_search_flags domain)
 {
   int is_local_symbol;
 
@@ -286,7 +285,7 @@ convert_symbol_bmsym (compile_c_instance *context,
     case mst_text_gnu_ifunc:
       type = builtin_type (objfile)->nodebug_text_gnu_ifunc_symbol;
       kind = GCC_C_SYMBOL_FUNCTION;
-      addr = gnu_ifunc_resolve_addr (target_gdbarch (), addr);
+      addr = gnu_ifunc_resolve_addr (current_inferior ()->arch (), addr);
       break;
 
     case mst_data:
@@ -325,19 +324,19 @@ gcc_convert_symbol (void *datum,
 {
   compile_c_instance *context
     = static_cast<compile_c_instance *> (datum);
-  domain_enum domain;
+  domain_search_flags domain;
   int found = 0;
 
   switch (request)
     {
     case GCC_C_ORACLE_SYMBOL:
-      domain = VAR_DOMAIN;
+      domain = SEARCH_VFT;
       break;
     case GCC_C_ORACLE_TAG:
-      domain = STRUCT_DOMAIN;
+      domain = SEARCH_STRUCT_DOMAIN;
       break;
     case GCC_C_ORACLE_LABEL:
-      domain = LABEL_DOMAIN;
+      domain = SEARCH_LABEL_DOMAIN;
       break;
     default:
       gdb_assert_not_reached ("Unrecognized oracle request.");
@@ -355,7 +354,7 @@ gcc_convert_symbol (void *datum,
 	  convert_symbol_sym (context, identifier, sym, domain);
 	  found = 1;
 	}
-      else if (domain == VAR_DOMAIN)
+      else if (request == GCC_C_ORACLE_SYMBOL)
 	{
 	  struct bound_minimal_symbol bmsym;
 
@@ -398,8 +397,9 @@ gcc_symbol_address (void *datum, struct gcc_c_context *gcc_context,
       struct symbol *sym;
 
       /* We only need global functions here.  */
-      sym = lookup_symbol (identifier, NULL, VAR_DOMAIN, NULL).symbol;
-      if (sym != NULL && sym->aclass () == LOC_BLOCK)
+      sym = lookup_symbol (identifier, nullptr, SEARCH_FUNCTION_DOMAIN,
+			   nullptr).symbol;
+      if (sym != nullptr)
 	{
 	  if (compile_debug)
 	    gdb_printf (gdb_stdlog,
@@ -407,7 +407,8 @@ gcc_symbol_address (void *datum, struct gcc_c_context *gcc_context,
 			identifier);
 	  result = sym->value_block ()->entry_pc ();
 	  if (sym->type ()->is_gnu_ifunc ())
-	    result = gnu_ifunc_resolve_addr (target_gdbarch (), result);
+	    result = gnu_ifunc_resolve_addr (current_inferior ()->arch (),
+					     result);
 	  found = 1;
 	}
       else
@@ -424,7 +425,8 @@ gcc_symbol_address (void *datum, struct gcc_c_context *gcc_context,
 			    identifier);
 	      result = msym.value_address ();
 	      if (msym.minsym->type () == mst_text_gnu_ifunc)
-		result = gnu_ifunc_resolve_addr (target_gdbarch (), result);
+		result = gnu_ifunc_resolve_addr (current_inferior ()->arch (),
+						 result);
 	      found = 1;
 	    }
 	}
@@ -561,7 +563,8 @@ generate_c_for_for_one_variable (compile_instance *compiler,
 	  stream->write (local_file.c_str (), local_file.size ());
 	}
 
-      if (SYMBOL_COMPUTED_OPS (sym) != NULL)
+      if (const symbol_computed_ops *computed_ops = sym->computed_ops ();
+	  computed_ops != nullptr)
 	{
 	  gdb::unique_xmalloc_ptr<char> generated_name
 	    = c_symbol_substitution_name (sym);
@@ -569,11 +572,9 @@ generate_c_for_for_one_variable (compile_instance *compiler,
 	     occurs in the middle.  */
 	  string_file local_file;
 
-	  SYMBOL_COMPUTED_OPS (sym)->generate_c_location (sym, &local_file,
-							  gdbarch,
-							  registers_used,
-							  pc,
-							  generated_name.get ());
+	  computed_ops->generate_c_location (sym, &local_file, gdbarch,
+					     registers_used, pc,
+					     generated_name.get ());
 	  stream->write (local_file.c_str (), local_file.size ());
 	}
       else

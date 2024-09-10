@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux AArch64.
 
-   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+   Copyright (C) 2009-2024 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GDB.
@@ -18,8 +18,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 
+#include "extract-store-integer.h"
 #include "gdbarch.h"
 #include "glibc-tdep.h"
 #include "linux-tdep.h"
@@ -381,8 +381,8 @@ aarch64_linux_restore_vregs (struct gdbarch *gdbarch,
    SIGNAL_FRAME.  */
 
 static void
-aarch64_linux_read_signal_frame_info (frame_info_ptr this_frame,
-				  struct aarch64_linux_sigframe &signal_frame)
+aarch64_linux_read_signal_frame_info (const frame_info_ptr &this_frame,
+				      aarch64_linux_sigframe &signal_frame)
 {
   signal_frame.sp = get_frame_register_unsigned (this_frame, AARCH64_SP_REGNUM);
   signal_frame.sigcontext_address
@@ -570,7 +570,7 @@ aarch64_linux_read_signal_frame_info (frame_info_ptr this_frame,
 
 static void
 aarch64_linux_sigframe_init (const struct tramp_frame *self,
-			     frame_info_ptr this_frame,
+			     const frame_info_ptr &this_frame,
 			     struct trad_frame_cache *this_cache,
 			     CORE_ADDR func)
 {
@@ -704,7 +704,7 @@ aarch64_linux_sigframe_init (const struct tramp_frame *self,
 /* Implements the "prev_arch" method of struct tramp_frame.  */
 
 static struct gdbarch *
-aarch64_linux_sigframe_prev_arch (frame_info_ptr this_frame,
+aarch64_linux_sigframe_prev_arch (const frame_info_ptr &this_frame,
 				  void **frame_cache)
 {
   struct trad_frame_cache *cache
@@ -1497,7 +1497,9 @@ aarch64_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
       /* Create this on the fly in order to handle the ZA register size.  */
       const struct regcache_map_entry za_regmap[] =
 	{
-	  { 1, tdep->sme_za_regnum, (int) std::pow (sve_vl_from_vq (tdep->sme_svq), 2) }
+	  { 1, tdep->sme_za_regnum,
+	    (int) std::pow (sve_vl_from_vq (tdep->sme_svq), 2) },
+	  { 0 }
 	};
 
       const struct regset aarch64_linux_za_regset =
@@ -1518,7 +1520,8 @@ aarch64_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
 	{
 	  const struct regcache_map_entry zt_regmap[] =
 	    {
-	      { 1, tdep->sme2_zt0_regnum, AARCH64_SME2_ZT0_SIZE }
+	      { 1, tdep->sme2_zt0_regnum, AARCH64_SME2_ZT0_SIZE },
+	      { 0 }
 	    };
 
 	  /* We set the register set size to REGSET_VARIABLE_SIZE here because
@@ -1609,7 +1612,7 @@ static const struct target_desc *
 aarch64_linux_core_read_description (struct gdbarch *gdbarch,
 				     struct target_ops *target, bfd *abfd)
 {
-  gdb::optional<gdb::byte_vector> auxv = target_read_auxv_raw (target);
+  std::optional<gdb::byte_vector> auxv = target_read_auxv_raw (target);
   CORE_ADDR hwcap = linux_get_hwcap (auxv, target, gdbarch);
   CORE_ADDR hwcap2 = linux_get_hwcap2 (auxv, target, gdbarch);
 
@@ -2427,7 +2430,7 @@ aarch64_linux_gcc_target_options (struct gdbarch *gdbarch)
 
    Return the allocation tag if successful and nullopt otherwise.  */
 
-static gdb::optional<CORE_ADDR>
+static std::optional<CORE_ADDR>
 aarch64_mte_get_atag (CORE_ADDR address)
 {
   gdb::byte_vector tags;
@@ -2449,17 +2452,13 @@ aarch64_mte_get_atag (CORE_ADDR address)
 /* Implement the tagged_address_p gdbarch method.  */
 
 static bool
-aarch64_linux_tagged_address_p (struct gdbarch *gdbarch, struct value *address)
+aarch64_linux_tagged_address_p (struct gdbarch *gdbarch, CORE_ADDR address)
 {
-  gdb_assert (address != nullptr);
-
-  CORE_ADDR addr = value_as_address (address);
-
   /* Remove the top byte for the memory range check.  */
-  addr = gdbarch_remove_non_address_bits (gdbarch, addr);
+  address = gdbarch_remove_non_address_bits (gdbarch, address);
 
   /* Check if the page that contains ADDRESS is mapped with PROT_MTE.  */
-  if (!linux_address_in_memtag_page (addr))
+  if (!linux_address_in_memtag_page (address))
     return false;
 
   /* We have a valid tag in the top byte of the 64-bit address.  */
@@ -2474,14 +2473,10 @@ aarch64_linux_memtag_matches_p (struct gdbarch *gdbarch,
 {
   gdb_assert (address != nullptr);
 
-  /* Make sure we are dealing with a tagged address to begin with.  */
-  if (!aarch64_linux_tagged_address_p (gdbarch, address))
-    return true;
-
   CORE_ADDR addr = value_as_address (address);
 
   /* Fetch the allocation tag for ADDRESS.  */
-  gdb::optional<CORE_ADDR> atag
+  std::optional<CORE_ADDR> atag
     = aarch64_mte_get_atag (gdbarch_remove_non_address_bits (gdbarch, addr));
 
   if (!atag.has_value ())
@@ -2522,10 +2517,6 @@ aarch64_linux_set_memtags (struct gdbarch *gdbarch, struct value *address,
     {
       /* Remove the top byte.  */
       addr = gdbarch_remove_non_address_bits (gdbarch, addr);
-
-      /* Make sure we are dealing with a tagged address to begin with.  */
-      if (!aarch64_linux_tagged_address_p (gdbarch, address))
-	return false;
 
       /* With G being the number of tag granules and N the number of tags
 	 passed in, we can have the following cases:
@@ -2573,13 +2564,9 @@ aarch64_linux_get_memtag (struct gdbarch *gdbarch, struct value *address,
     tag = aarch64_mte_get_ltag (addr);
   else
     {
-      /* Make sure we are dealing with a tagged address to begin with.  */
-      if (!aarch64_linux_tagged_address_p (gdbarch, address))
-	return nullptr;
-
       /* Remove the top byte.  */
       addr = gdbarch_remove_non_address_bits (gdbarch, addr);
-      gdb::optional<CORE_ADDR> atag = aarch64_mte_get_atag (addr);
+      std::optional<CORE_ADDR> atag = aarch64_mte_get_atag (addr);
 
       if (!atag.has_value ())
 	return nullptr;
@@ -2651,7 +2638,7 @@ aarch64_linux_report_signal_info (struct gdbarch *gdbarch,
       uiout->field_core_addr ("fault-addr", gdbarch, fault_addr);
       uiout->text ("\n");
 
-      gdb::optional<CORE_ADDR> atag
+      std::optional<CORE_ADDR> atag
 	= aarch64_mte_get_atag (gdbarch_remove_non_address_bits (gdbarch,
 								 fault_addr));
       gdb_byte ltag = aarch64_mte_get_ltag (fault_addr);

@@ -1,6 +1,6 @@
 /* General utility routines for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include <ctype.h>
 #include "gdbsupport/gdb_wait.h"
 #include "event-top.h"
@@ -38,7 +37,7 @@
 #endif
 
 #include <signal.h>
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "serial.h"
 #include "bfd.h"
 #include "target.h"
@@ -68,7 +67,7 @@
 #include "gdbsupport/gdb_regex.h"
 #include "gdbsupport/job-control.h"
 #include "gdbsupport/selftest.h"
-#include "gdbsupport/gdb_optional.h"
+#include <optional>
 #include "cp-support.h"
 #include <algorithm>
 #include "gdbsupport/pathstuff.h"
@@ -128,7 +127,32 @@ show_pagination_enabled (struct ui_file *file, int from_tty,
 }
 
 
+/* Warning hook pointer.  This has to be 'static' to avoid link
+   problems with thread-locals on AIX.  */
 
+static thread_local warning_hook_handler warning_hook;
+
+/* See utils.h.  */
+
+warning_hook_handler
+get_warning_hook_handler ()
+{
+  return warning_hook;
+}
+
+/* See utils.h.  */
+
+scoped_restore_warning_hook::scoped_restore_warning_hook
+     (warning_hook_handler new_handler)
+       : m_save (warning_hook)
+{
+  warning_hook = new_handler;
+}
+
+scoped_restore_warning_hook::~scoped_restore_warning_hook ()
+{
+  warning_hook = m_save;
+}
 
 /* Print a warning message.  The first argument STRING is the warning
    message, used as an fprintf format string, the second is the
@@ -139,11 +163,11 @@ show_pagination_enabled (struct ui_file *file, int from_tty,
 void
 vwarning (const char *string, va_list args)
 {
-  if (deprecated_warning_hook)
-    (*deprecated_warning_hook) (string, args);
+  if (warning_hook != nullptr)
+    warning_hook->warn (string, args);
   else
     {
-      gdb::optional<target_terminal::scoped_restore_terminal_state> term_state;
+      std::optional<target_terminal::scoped_restore_terminal_state> term_state;
       if (target_supports_terminal_ours ())
 	{
 	  term_state.emplace ();
@@ -218,7 +242,7 @@ can_dump_core (enum resource_limit_kind limit_kind)
     case LIMIT_CUR:
       if (rlim.rlim_cur == 0)
 	return 0;
-      /* Fall through.  */
+      [[fallthrough]];
 
     case LIMIT_MAX:
       if (rlim.rlim_max == 0)
@@ -375,7 +399,7 @@ internal_vproblem (struct internal_problem *problem,
     }
 
   /* Try to get the message out and at the start of a new line.  */
-  gdb::optional<target_terminal::scoped_restore_terminal_state> term_state;
+  std::optional<target_terminal::scoped_restore_terminal_state> term_state;
   if (target_supports_terminal_ours ())
     {
       term_state.emplace ();
@@ -628,47 +652,6 @@ warning_filename_and_errno (const char *filename, int saved_errno)
 	   safe_strerror (saved_errno));
 }
 
-/* Control C eventually causes this to be called, at a convenient time.  */
-
-void
-quit (void)
-{
-  if (sync_quit_force_run)
-    {
-      sync_quit_force_run = false;
-      throw_forced_quit ("SIGTERM");
-    }
-
-#ifdef __MSDOS__
-  /* No steenking SIGINT will ever be coming our way when the
-     program is resumed.  Don't lie.  */
-  throw_quit ("Quit");
-#else
-  if (job_control
-      /* If there is no terminal switching for this target, then we can't
-	 possibly get screwed by the lack of job control.  */
-      || !target_supports_terminal_ours ())
-    throw_quit ("Quit");
-  else
-    throw_quit ("Quit (expect signal SIGINT when the program is resumed)");
-#endif
-}
-
-/* See defs.h.  */
-
-void
-maybe_quit (void)
-{
-  if (!is_main_thread ())
-    return;
-
-  if (sync_quit_force_run)
-    quit ();
-
-  quit_handler ();
-}
-
-
 /* Called when a memory allocation fails, with the number of bytes of
    memory requested in SIZE.  */
 
@@ -1110,10 +1093,6 @@ static bool filter_initialized = false;
 
 
 
-/* See readline's rlprivate.h.  */
-
-EXTERN_C int _rl_term_autowrap;
-
 /* See utils.h.  */
 
 int readline_hidden_cols = 0;
@@ -1154,10 +1133,17 @@ init_page_info (void)
 	   (because rl_change_environment defaults to 1)
 	 - may report one less than the detected screen width in
 	   rl_get_screen_size (when _rl_term_autowrap == 0).
-	 We could set readline_hidden_cols by comparing COLUMNS to cols as
-	 returned by rl_get_screen_size, but instead simply use
-	 _rl_term_autowrap.  */
-      readline_hidden_cols = _rl_term_autowrap ? 0 : 1;
+	 We could use _rl_term_autowrap, but we want to avoid introducing
+	 another dependency on readline private variables, so set
+	 readline_hidden_cols by comparing COLUMNS to cols as returned by
+	 rl_get_screen_size.  */
+      const char *columns_env_str = getenv ("COLUMNS");
+      gdb_assert (columns_env_str != nullptr);
+      int columns_env_val = atoi (columns_env_str);
+      gdb_assert (columns_env_val != 0);
+      readline_hidden_cols = columns_env_val - cols;
+      gdb_assert (readline_hidden_cols >= 0);
+      gdb_assert (readline_hidden_cols <= 1);
 
       lines_per_page = rows;
       chars_per_line = cols + readline_hidden_cols;
@@ -1809,6 +1795,12 @@ void
 gdb_puts (const char *linebuffer, struct ui_file *stream)
 {
   stream->puts (linebuffer);
+}
+
+void
+gdb_puts (const std::string &s, ui_file *stream)
+{
+  gdb_puts (s.c_str (), stream);
 }
 
 /* See utils.h.  */

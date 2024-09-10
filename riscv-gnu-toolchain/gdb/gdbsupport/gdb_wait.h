@@ -1,5 +1,5 @@
 /* Standard wait macros.
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -99,12 +99,8 @@ extern int windows_status_to_termsig (unsigned long);
 
 /* These are not defined in POSIX, but are used by our programs.  */
 
-#ifndef	WSETEXIT
-# ifdef	W_EXITCODE
-#define	WSETEXIT(w,status) ((w) = W_EXITCODE(status,0))
-# else
-#define WSETEXIT(w,status) ((w) = (0 | ((status) << 8)))
-# endif
+#ifndef W_EXITCODE
+#define W_EXITCODE(status, sig) ((status) << 8 | (sig))
 #endif
 
 #ifndef W_STOPCODE

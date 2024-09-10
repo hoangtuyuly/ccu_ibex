@@ -1,6 +1,6 @@
 ## See sim/Makefile.am
 ##
-## Copyright (C) 2009-2023 Free Software Foundation, Inc.
+## Copyright (C) 2009-2024 Free Software Foundation, Inc.
 ## Contributed by Jon Beniston <jon@beniston.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
@@ -72,15 +72,15 @@ BUILT_SOURCES += %D%/eng.h
 
 ## FIXME: Use of `mono' is wip.
 %D%/mloop.c %D%/eng.h: %D%/stamp-mloop ; @true
-%D%/stamp-mloop: $(srccom)/genmloop.sh %D%/mloop.in
-	$(AM_V_GEN)$(SHELL) $(srccom)/genmloop.sh -shell $(SHELL) \
+%D%/stamp-mloop: %D%/mloop.in $(srccom)/genmloop.sh
+	$(AM_V_GEN)$(CGEN_GEN_MLOOP) \
 		-mono -fast -pbb -switch sem-switch.c \
-		-cpu lm32bf \
-		-infile $(srcdir)/%D%/mloop.in -outfile-prefix %D%/
+		-cpu lm32bf
 	$(AM_V_at)$(SHELL) $(srcroot)/move-if-change %D%/eng.hin %D%/eng.h
 	$(AM_V_at)$(SHELL) $(srcroot)/move-if-change %D%/mloop.cin %D%/mloop.c
 	$(AM_V_at)touch $@
 
+CLEANFILES += %D%/eng.h
 MOSTLYCLEANFILES += $(%C%_BUILD_OUTPUTS)
 
 ## Target that triggers all cgen targets that works when --disable-cgen-maint.

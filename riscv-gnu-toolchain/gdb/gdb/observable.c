@@ -1,6 +1,6 @@
 /* GDB Notifications to Observers.
 
-   Copyright (C) 2003-2023 Free Software Foundation, Inc.
+   Copyright (C) 2003-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,10 +17,9 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "observable.h"
 #include "command.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 
 namespace gdb
 {
@@ -46,13 +45,14 @@ DEFINE_OBSERVABLE (all_objfiles_removed);
 DEFINE_OBSERVABLE (free_objfile);
 DEFINE_OBSERVABLE (new_thread);
 DEFINE_OBSERVABLE (thread_exit);
+DEFINE_OBSERVABLE (thread_deleted);
 DEFINE_OBSERVABLE (thread_stop_requested);
 DEFINE_OBSERVABLE (target_resumed);
 DEFINE_OBSERVABLE (about_to_proceed);
 DEFINE_OBSERVABLE (breakpoint_created);
 DEFINE_OBSERVABLE (breakpoint_deleted);
 DEFINE_OBSERVABLE (breakpoint_modified);
-DEFINE_OBSERVABLE (architecture_changed);
+DEFINE_OBSERVABLE (new_architecture);
 DEFINE_OBSERVABLE (thread_ptid_changed);
 DEFINE_OBSERVABLE (inferior_added);
 DEFINE_OBSERVABLE (inferior_appeared);

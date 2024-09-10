@@ -7,7 +7,7 @@ OUTPUT_FORMAT("elf64-bigriscv", "elf64-bigriscv",
 	      "elf64-bigriscv")
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
-SEARCH_DIR("/Users/tuhoang/CFU_IBEX/riscv32_custom/riscv32-unknown-elf/lib");
+SEARCH_DIR("/Users/tuhoang/CFU_IBEX/cfu_ibex/riscv32_custom/riscv32-unknown-elf/lib");
 SECTIONS
 {
   /* Read-only sections, merged into text segment: */

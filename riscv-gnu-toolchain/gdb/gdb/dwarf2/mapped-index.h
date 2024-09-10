@@ -1,6 +1,6 @@
 /* Base class for mapped indices
 
-   Copyright (C) 2021-2023 Free Software Foundation, Inc.
+   Copyright (C) 2021-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -127,9 +127,7 @@ struct mapped_index_base : public dwarf_scanner_base
 				 dwarf2_per_objfile *per_objfile) const;
 
   cooked_index *index_for_writing () override
-  {
-    error (_("Cannot use an index to create the index"));
-  }
+  { return nullptr; }
 };
 
 #endif /* GDB_DWARF2_MAPPED_INDEX_H */

@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+#   Copyright (C) 2009-2024 Free Software Foundation, Inc.
 #   Contributed by ARM Ltd.
 #
 # This file is part of the GNU Binutils.
@@ -355,16 +355,6 @@ EOF
 # Define some shell vars to insert bits of code into the standard elf
 # parse_args and list_options functions.
 #
-PARSE_AND_LIST_PROLOGUE='
-#define OPTION_NO_ENUM_SIZE_WARNING	309
-#define OPTION_PIC_VENEER		310
-#define OPTION_STUBGROUP_SIZE		311
-#define OPTION_NO_WCHAR_SIZE_WARNING	312
-#define OPTION_FIX_ERRATUM_835769	313
-#define OPTION_FIX_ERRATUM_843419	314
-#define OPTION_NO_APPLY_DYNAMIC_RELOCS	315
-'
-
 PARSE_AND_LIST_SHORTOPTS=p
 
 PARSE_AND_LIST_LONGOPTS='

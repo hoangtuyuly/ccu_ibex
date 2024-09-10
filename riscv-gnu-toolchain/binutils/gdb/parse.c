@@ -29,7 +29,6 @@
    during the process of parsing; the lower levels of the tree always
    come first in the result.  */
 
-#include "defs.h"
 #include <ctype.h>
 #include "arch-utils.h"
 #include "symtab.h"
@@ -40,7 +39,7 @@
 #include "command.h"
 #include "language.h"
 #include "parser-defs.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "symfile.h"
 #include "inferior.h"
 #include "target-float.h"
@@ -149,7 +148,8 @@ parser_state::push_symbol (const char *name, block_symbol sym)
       struct bound_minimal_symbol msymbol = lookup_bound_minimal_symbol (name);
       if (msymbol.minsym != NULL)
 	push_new<expr::var_msym_value_operation> (msymbol);
-      else if (!have_full_symbols () && !have_partial_symbols ())
+      else if (!have_full_symbols (current_program_space)
+	       && !have_partial_symbols (current_program_space))
 	error (_("No symbol table is loaded.  Use the \"file\" command."));
       else
 	error (_("No symbol \"%s\" in current context."), name);
@@ -225,7 +225,8 @@ parser_state::push_dollar (struct stoken str)
   /* On some systems, such as HP-UX and hppa-linux, certain system routines
      have names beginning with $ or $$.  Check for those, first.  */
 
-  sym = lookup_symbol (copy.c_str (), NULL, VAR_DOMAIN, NULL);
+  sym = lookup_symbol (copy.c_str (), nullptr,
+		       SEARCH_VAR_DOMAIN | SEARCH_FUNCTION_DOMAIN, nullptr);
   if (sym.symbol)
     {
       push_new<expr::var_value_operation> (sym);
@@ -374,8 +375,8 @@ parse_exp_in_context (const char **stringptr, CORE_ADDR pc,
 
       if (!expression_context_block)
 	{
-	  struct symtab_and_line cursal
-	    = get_current_source_symtab_and_line ();
+	  symtab_and_line cursal
+	    = get_current_source_symtab_and_line (current_program_space);
 
 	  if (cursal.symtab)
 	    expression_context_block

@@ -1,6 +1,6 @@
 /* Print values for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,12 +17,13 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "event-top.h"
+#include "extract-store-integer.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "value.h"
 #include "gdbcore.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "target.h"
 #include "language.h"
 #include "annotate.h"
@@ -1054,16 +1055,6 @@ common_val_print (struct value *value, struct ui_file *stream, int recurse,
 
   QUIT;
 
-  /* Ensure that the type is complete and not just a stub.  If the type is
-     only a stub and we can't find and substitute its complete type, then
-     print appropriate string and return.  */
-
-  if (real_type->is_stub ())
-    {
-      fprintf_styled (stream, metadata_style.style (), _("<incomplete type>"));
-      return;
-    }
-
   if (!valprint_check_validity (stream, real_type, 0, value))
     return;
 
@@ -1072,6 +1063,16 @@ common_val_print (struct value *value, struct ui_file *stream, int recurse,
       if (apply_ext_lang_val_pretty_printer (value, stream, recurse, options,
 					     language))
 	return;
+    }
+
+  /* Ensure that the type is complete and not just a stub.  If the type is
+     only a stub and we can't find and substitute its complete type, then
+     print appropriate string and return.  */
+
+  if (real_type->is_stub ())
+    {
+      fprintf_styled (stream, metadata_style.style (), _("<incomplete type>"));
+      return;
     }
 
   /* Handle summary mode.  If the value is a scalar, print it;
@@ -1153,12 +1154,6 @@ value_check_printable (struct value *val, struct ui_file *stream,
       fprintf_styled (stream, metadata_style.style (),
 		      _("<internal function %s>"),
 		      value_internal_function_name (val));
-      return 0;
-    }
-
-  if (type_not_associated (val->type ()))
-    {
-      val_print_not_associated (stream);
       return 0;
     }
 

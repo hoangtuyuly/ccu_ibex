@@ -1,5 +1,5 @@
 /* as.h - global header file
-   Copyright (C) 1987-2023 Free Software Foundation, Inc.
+   Copyright (C) 1987-2024 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -247,7 +247,9 @@ enum _relax_state
      1 constant byte: no-op fill control byte.  */
   rs_space_nop,
 
-  /* Similar to rs_fill.  It is used to implement .nop directive .  */
+  /* Similar to rs_fill.  It is used to implement .nops directive.
+     When listings are enabled, fr_opcode gets the buffer assigned, once
+     that's available.  */
   rs_fill_nop,
 
   /* A DWARF leb128 value; only ELF uses this.  The subtype is 0 for
@@ -321,6 +323,14 @@ COMMON int flag_fatal_warnings; /* --fatal-warnings */
 /* True if we should attempt to generate output even if non-fatal errors
    are detected.  */
 COMMON unsigned char flag_always_generate_output; /* -Z */
+
+enum synth_cfi_type
+{
+  SYNTH_CFI_NONE = 0,
+  SYNTH_CFI_EXPERIMENTAL,
+};
+
+COMMON enum synth_cfi_type flag_synth_cfi;
 
 /* This is true if the assembler should output time and space usage.  */
 COMMON unsigned char flag_print_statistics;

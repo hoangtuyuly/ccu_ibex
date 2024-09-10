@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "gdbsupport/common-defs.h"
 #include "nat/linux-namespaces.h"
 #include "gdbsupport/filestuff.h"
 #include <fcntl.h>
@@ -549,7 +548,7 @@ mnsh_handle_readlink (int sock, const char *filename)
 
 /* The helper process.  Never returns.  Must be async-signal-safe.  */
 
-static void mnsh_main (int sock) ATTRIBUTE_NORETURN;
+[[noreturn]] static void mnsh_main (int sock);
 
 static void
 mnsh_main (int sock)

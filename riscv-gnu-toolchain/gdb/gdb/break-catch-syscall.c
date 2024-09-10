@@ -1,6 +1,6 @@
 /* Everything about syscall catchpoints, for GDB.
 
-   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+   Copyright (C) 2009-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,10 +17,9 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include <ctype.h>
 #include "breakpoint.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "inferior.h"
 #include "cli/cli-utils.h"
 #include "annotate.h"
@@ -359,7 +358,7 @@ static std::vector<int>
 catch_syscall_split_args (const char *arg)
 {
   std::vector<int> result;
-  struct gdbarch *gdbarch = target_gdbarch ();
+  gdbarch *gdbarch = current_inferior ()->arch ();
 
   while (*arg != '\0')
     {
@@ -465,8 +464,10 @@ is_syscall_catchpoint_enabled (struct breakpoint *bp)
     return 0;
 }
 
-int
-catch_syscall_enabled (void)
+/* See breakpoint.h.  */
+
+bool
+catch_syscall_enabled ()
 {
   struct catch_syscall_inferior_data *inf_data
     = get_catch_syscall_inferior_data (current_inferior ());

@@ -38,4 +38,4 @@ dlopen=''
 dlpreopen=''
 
 # Directory that this library needs to be installed in:
-libdir='/Users/tuhoang/CFU_IBEX/riscv32_custom/riscv32-unknown-elf/lib/rv32iac/ilp32'
+libdir='/Users/tuhoang/CFU_IBEX/cfu_ibex/riscv32_custom/riscv32-unknown-elf/lib/rv32iac/ilp32'

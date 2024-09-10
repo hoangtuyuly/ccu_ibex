@@ -1,6 +1,6 @@
 /* tc-msp430.c -- Assembler code for the Texas Instruments MSP430
 
-  Copyright (C) 2002-2023 Free Software Foundation, Inc.
+  Copyright (C) 2002-2024 Free Software Foundation, Inc.
   Contributed by Dmitry Diky <diwil@mail.ru>
 
   This file is part of GAS, the GNU Assembler.
@@ -622,7 +622,7 @@ msp430_profiler (int dummy ATTRIBUTE_UNUSED)
   subseg = now_subseg;
 
   /* Now go to .profiler section.  */
-  obj_elf_change_section (".profiler", SHT_PROGBITS, 0, 0, 0, 0, 0);
+  obj_elf_change_section (".profiler", SHT_PROGBITS, 0, 0, 0, false);
 
   /* Save flags.  */
   emit_expr (& exp, 2);

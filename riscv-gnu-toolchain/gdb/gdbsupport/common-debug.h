@@ -1,6 +1,6 @@
 /* Declarations for debug printing functions.
 
-   Copyright (C) 2014-2023 Free Software Foundation, Inc.
+   Copyright (C) 2014-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,7 +20,7 @@
 #ifndef COMMON_COMMON_DEBUG_H
 #define COMMON_COMMON_DEBUG_H
 
-#include "gdbsupport/gdb_optional.h"
+#include <optional>
 #include "gdbsupport/preprocessor.h"
 
 #include <stdarg.h>
@@ -200,7 +200,7 @@ private:
   const char *m_end_prefix;
 
   /* The result of formatting the format string in the constructor.  */
-  gdb::optional<std::string> m_msg;
+  std::optional<std::string> m_msg;
 
   /* True is a non-nullptr format was passed to the constructor.  */
   bool m_with_format;

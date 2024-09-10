@@ -1,6 +1,6 @@
 /* Machine independent support for Solaris /proc (process file system) for GDB.
 
-   Copyright (C) 1999-2023 Free Software Foundation, Inc.
+   Copyright (C) 1999-2024 Free Software Foundation, Inc.
 
    Written by Michael Snyder at Cygnus Solutions.
    Based on work by Fred Fish, Stu Grossman, Geoff Noer, and others.
@@ -20,13 +20,13 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "inferior.h"
 #include "infrun.h"
 #include "target.h"
 #include "gdbcore.h"
 #include "elf-bfd.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbthread.h"
 #include "regcache.h"
 #include "inf-child.h"
@@ -174,7 +174,7 @@ procfs_target::auxv_parse (const gdb_byte **readptr,
 			   const gdb_byte *endptr, CORE_ADDR *typep,
 			   CORE_ADDR *valp)
 {
-  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  bfd_endian byte_order = gdbarch_byte_order (current_inferior ()->arch ());
   const gdb_byte *ptr = *readptr;
 
   if (endptr == ptr)
@@ -605,10 +605,8 @@ static void
 proc_error (procinfo *pi, const char *func, int line)
 {
   int saved_errno = errno;
-  error ("procfs: %s line %d, %ps: %s",
-	 func, line, styled_string (file_name_style.style (),
-				    pi->pathname),
-	 safe_strerror (saved_errno));
+  error ("procfs: %s line %d, %s: %s",
+	 func, line, pi->pathname, safe_strerror (saved_errno));
 }
 
 /* Updates the status struct in the procinfo.  There is a 'valid'
@@ -711,9 +709,10 @@ proc_watchpoint_address (procinfo *pi, CORE_ADDR *addr)
     if (!proc_get_status (pi))
       return 0;
 
-  *addr = (CORE_ADDR) gdbarch_pointer_to_address (target_gdbarch (),
-	    builtin_type (target_gdbarch ())->builtin_data_ptr,
-	    (gdb_byte *) &pi->prstatus.pr_lwp.pr_info.si_addr);
+  gdbarch *arch = current_inferior ()->arch ();
+  *addr = gdbarch_pointer_to_address
+	    (arch, builtin_type (arch)->builtin_data_ptr,
+	     (gdb_byte *) &pi->prstatus.pr_lwp.pr_info.si_addr);
   return 1;
 }
 
@@ -1517,12 +1516,12 @@ proc_parent_pid (procinfo *pi)
 static void *
 procfs_address_to_host_pointer (CORE_ADDR addr)
 {
-  struct type *ptr_type = builtin_type (target_gdbarch ())->builtin_data_ptr;
+  gdbarch *arch = current_inferior ()->arch ();
+  type *ptr_type = builtin_type (arch)->builtin_data_ptr;
   void *ptr;
 
   gdb_assert (sizeof (ptr) == ptr_type->length ());
-  gdbarch_address_to_pointer (target_gdbarch (), ptr_type,
-			      (gdb_byte *) &ptr, addr);
+  gdbarch_address_to_pointer (arch, ptr_type, (gdb_byte *) &ptr, addr);
   return ptr;
 }
 
@@ -3013,7 +3012,8 @@ procfs_target::can_use_hw_breakpoint (enum bptype type, int cnt, int othertype)
      procfs_address_to_host_pointer will reveal that an internal error
      will be generated when the host and target pointer sizes are
      different.  */
-  struct type *ptr_type = builtin_type (target_gdbarch ())->builtin_data_ptr;
+  struct type *ptr_type
+    = builtin_type (current_inferior ()->arch ())->builtin_data_ptr;
 
   if (sizeof (void *) != ptr_type->length ())
     return 0;
@@ -3061,7 +3061,7 @@ procfs_target::insert_watchpoint (CORE_ADDR addr, int len,
 				  struct expression *cond)
 {
   if (!target_have_steppable_watchpoint ()
-      && !gdbarch_have_nonsteppable_watchpoint (target_gdbarch ()))
+      && !gdbarch_have_nonsteppable_watchpoint (current_inferior ()->arch ()))
     /* When a hardware watchpoint fires off the PC will be left at
        the instruction following the one which caused the
        watchpoint.  It will *NOT* be necessary for GDB to step over
@@ -3224,7 +3224,7 @@ info_mappings_callback (struct prmap *map, find_memory_region_ftype ignore,
 
   pr_off = (unsigned int) map->pr_offset;
 
-  if (gdbarch_addr_bit (target_gdbarch ()) == 32)
+  if (gdbarch_addr_bit (current_inferior ()->arch ()) == 32)
     gdb_printf ("\t%#10lx %#10lx %#10lx %#10x %7s\n",
 		(unsigned long) map->pr_vaddr,
 		(unsigned long) map->pr_vaddr + map->pr_size - 1,
@@ -3251,7 +3251,7 @@ info_proc_mappings (procinfo *pi, int summary)
     return;	/* No output for summary mode.  */
 
   gdb_printf (_("Mapped address spaces:\n\n"));
-  if (gdbarch_ptr_bit (target_gdbarch ()) == 32)
+  if (gdbarch_ptr_bit (current_inferior ()->arch ()) == 32)
     gdb_printf ("\t%10s %10s %10s %10s %7s\n",
 		"Start Addr",
 		"  End Addr",
@@ -3603,7 +3603,7 @@ procfs_target::make_corefile_notes (bfd *obfd, int *note_size)
 
   stop_signal = find_stop_signal ();
 
-  fill_gregset (get_current_regcache (), &gregs, -1);
+  fill_gregset (get_thread_regcache (inferior_thread ()), &gregs, -1);
   note_data.reset (elfcore_write_pstatus (obfd, note_data.release (), note_size,
 					  inferior_ptid.pid (),
 					  stop_signal, &gregs));
@@ -3613,7 +3613,7 @@ procfs_target::make_corefile_notes (bfd *obfd, int *note_size)
   proc_iterate_over_threads (pi, procfs_corefile_thread_callback,
 			     &thread_args);
 
-  gdb::optional<gdb::byte_vector> auxv =
+  std::optional<gdb::byte_vector> auxv =
     target_read_alloc (current_inferior ()->top_target (),
 		       TARGET_OBJECT_AUXV, NULL);
   if (auxv && !auxv->empty ())

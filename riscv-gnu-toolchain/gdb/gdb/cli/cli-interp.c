@@ -1,6 +1,6 @@
 /* CLI Definitions for GDB, the GNU debugger.
 
-   Copyright (C) 2002-2023 Free Software Foundation, Inc.
+   Copyright (C) 2002-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "cli-interp.h"
 #include "interps.h"
 #include "event-top.h"
@@ -274,7 +273,6 @@ cli_interp_base::set_logging (ui_file_up logfile, bool logging_redirect,
       m_saved_output->err = gdb_stderr;
       m_saved_output->log = gdb_stdlog;
       m_saved_output->targ = gdb_stdtarg;
-      m_saved_output->targerr = gdb_stdtargerr;
 
       ui_file *logfile_p = logfile.get ();
       m_saved_output->logfile_holder = std::move (logfile);
@@ -300,7 +298,6 @@ cli_interp_base::set_logging (ui_file_up logfile, bool logging_redirect,
       gdb_stdlog = m_saved_output->stdlog_holder.get ();
       gdb_stderr = new_stderr;
       gdb_stdtarg = new_stderr;
-      gdb_stdtargerr = new_stderr;
     }
   else
     {
@@ -308,7 +305,6 @@ cli_interp_base::set_logging (ui_file_up logfile, bool logging_redirect,
       gdb_stderr = m_saved_output->err;
       gdb_stdlog = m_saved_output->log;
       gdb_stdtarg = m_saved_output->targ;
-      gdb_stdtargerr = m_saved_output->targerr;
 
       m_saved_output.reset (nullptr);
     }

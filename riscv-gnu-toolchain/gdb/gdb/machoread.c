@@ -1,5 +1,5 @@
 /* Darwin support for GDB, the GNU debugger.
-   Copyright (C) 2008-2023 Free Software Foundation, Inc.
+   Copyright (C) 2008-2024 Free Software Foundation, Inc.
 
    Contributed by AdaCore.
 
@@ -18,13 +18,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "bfd.h"
 #include "symfile.h"
 #include "objfiles.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbcore.h"
 #include "mach-o.h"
 #include "aout/stab_gnu.h"
@@ -292,7 +291,7 @@ macho_symtab_read (minimal_symbol_reader &reader,
 		    case N_FUN:
 		      if (sym->name == NULL || sym->name[0] == 0)
 			break;
-		      /* Fall through.  */
+		      [[fallthrough]];
 		    case N_STSYM:
 		      /* Interesting symbol.  */
 		      nbr_syms++;
@@ -785,6 +784,8 @@ macho_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
      macho_symfile_read_all_oso at the end of this function.  */
   gdb::def_vector<asymbol *> symbol_table;
 
+  dwarf2_initialize_objfile (objfile);
+
   /* Get symbols from the symbol table only if the file is an executable.
      The symbol table of object files is not relocated and is expected to
      be in the executable.  */
@@ -822,9 +823,6 @@ macho_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
 	}
 
       /* Try to read .eh_frame / .debug_frame.  */
-      /* First, locate these sections.  We ignore the result status
-	 as it only checks for debug info.  */
-      dwarf2_has_info (objfile, NULL);
       dwarf2_build_frame_info (objfile);
 
       /* Check for DSYM file.  */
@@ -852,12 +850,6 @@ macho_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
 	  /* Don't try to read dwarf2 from main file or shared libraries.  */
 	  return;
 	}
-    }
-
-  if (dwarf2_has_info (objfile, NULL))
-    {
-      /* DWARF 2 sections */
-      dwarf2_initialize_objfile (objfile);
     }
 
   /* Then the oso.  */

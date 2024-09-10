@@ -1,5 +1,5 @@
 dnl Autoconf configure script for GDB, the GNU debugger.
-dnl Copyright (C) 1995-2023 Free Software Foundation, Inc.
+dnl Copyright (C) 1995-2024 Free Software Foundation, Inc.
 dnl
 dnl This file is part of GDB.
 dnl
@@ -53,9 +53,11 @@ LT_INIT
 # link tests in the configure script.
 LT_OUTPUT
 
-# We require a C++11 compiler.  Check if one is available, and if
+# We require a C++17 compiler.  Check if one is available, and if
 # necessary, set CXX_DIALECT to some -std=xxx switch.
-AX_CXX_COMPILE_STDCXX(11, , mandatory)
+AX_CXX_COMPILE_STDCXX(17, , mandatory)
+
+GDB_AC_COMMON
 
 # Dependency checking.
 ZW_CREATE_DEPDIR
@@ -1353,7 +1355,6 @@ AC_CHECK_FUNCS([getuid getgid \
 		setrlimit getrlimit posix_madvise waitpid \
 		use_default_colors])
 AM_LANGINFO_CODESET
-GDB_AC_COMMON
 
 # Check the return and argument types of ptrace.
 GDB_AC_PTRACE
@@ -2029,16 +2030,16 @@ AC_PATH_X
 # are when --disable-sim is specified, or if the simulator directory is
 # not part of the source tree.
 #
-AC_ARG_ENABLE(sim,
-AS_HELP_STRING([--enable-sim], [link gdb with simulator]),
-[echo "enable_sim = $enable_sim";
- echo "enableval = ${enableval}";
- case "${enableval}" in
-  yes) ignore_sim=false ;;
-  no)  ignore_sim=true ;;
-  *)   ignore_sim=false ;;
- esac],
-[ignore_sim=false])
+AC_ARG_ENABLE([sim],
+	      [AS_HELP_STRING([--enable-sim], [link gdb with simulator])],
+	      [AC_MSG_NOTICE([enable_sim = $enable_sim]);
+	       AC_MSG_NOTICE([enableval = ${enableval}]);
+	       case "${enableval}" in
+		 yes) ignore_sim=false ;;
+		 no)  ignore_sim=true ;;
+		 *)   ignore_sim=false ;;
+	       esac],
+	       [ignore_sim=false])
 
 if test ! -d "${srcdir}/../sim"; then
   ignore_sim=true

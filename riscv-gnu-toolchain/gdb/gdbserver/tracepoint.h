@@ -1,5 +1,5 @@
 /* Tracepoint code for remote server for GDB.
-   Copyright (C) 1993-2023 Free Software Foundation, Inc.
+   Copyright (C) 1993-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -38,11 +38,7 @@ void initialize_tracepoint (void);
 #if defined _WIN32 || defined __CYGWIN__
 # define EXPORTED_SYMBOL __declspec (dllexport)
 #else
-# if __GNUC__ >= 4
-#  define EXPORTED_SYMBOL __attribute__ ((visibility ("default")))
-# else
-#  define EXPORTED_SYMBOL
-# endif
+# define EXPORTED_SYMBOL __attribute__ ((visibility ("default")))
 #endif
 
 /* Use these to make sure the functions and variables the IPA needs to
@@ -55,12 +51,12 @@ void initialize_tracepoint (void);
    must also be exported with C linkage.  As we can't both use extern
    "C" and initialize a variable in the same statement, variables that
    don't have a separate declaration must use
-   EXTERN_C_PUSH/EXTERN_C_POP around their definition.  */
+   extern "C" {...} around their definition.  */
 
 #ifdef IN_PROCESS_AGENT
-# define IP_AGENT_EXPORT_FUNC EXTERN_C EXPORTED_SYMBOL ATTR_NOINLINE ATTR_USED
+# define IP_AGENT_EXPORT_FUNC extern "C" EXPORTED_SYMBOL ATTR_NOINLINE ATTR_USED
 # define IP_AGENT_EXPORT_VAR EXPORTED_SYMBOL ATTR_USED
-# define IP_AGENT_EXPORT_VAR_DECL EXTERN_C EXPORTED_SYMBOL
+# define IP_AGENT_EXPORT_VAR_DECL extern "C" EXPORTED_SYMBOL
 #else
 # define IP_AGENT_EXPORT_FUNC static
 # define IP_AGENT_EXPORT_VAR

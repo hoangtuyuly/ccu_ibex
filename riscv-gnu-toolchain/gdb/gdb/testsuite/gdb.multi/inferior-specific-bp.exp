@@ -1,4 +1,4 @@
-# Copyright 2022-2023 Free Software Foundation, Inc.
+# Copyright 2022-2024 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -176,4 +176,4 @@ gdb_test "remove-inferiors 1" \
 
 # Now check 'info breakpoints' to ensure the breakpoint is gone.
 gdb_test "info breakpoints $bp_number" \
-    "No breakpoint or watchpoint matching '$bp_number'\\."
+    "No breakpoint, watchpoint, tracepoint, or catchpoint matching '$bp_number'\\."

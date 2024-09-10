@@ -94,7 +94,13 @@ module ibex_decoder #(
 
   // jump/branches
   output logic                 jump_in_dec_o,         // jump is being calculated in ALU
-  output logic                 branch_in_dec_o
+  output logic                 branch_in_dec_o,
+
+  // ccu
+  output logic [9:0]          ccu_cmd_payload_function_id_o,               
+  output logic                ccu_int_en_o                                 
+  // output logic [31:0]         ccu_cmd_payload_inputs_0_o,                   
+  // output logic [31:0]         ccu_cmd_payload_inputs_1_o                 
 );
 
   import ibex_pkg::*;
@@ -115,7 +121,7 @@ module ibex_decoder #(
 
   logic        use_rs3_d;
   logic        use_rs3_q;
-
+  logic        ccu_int_en;
   csr_op_e     csr_op;
 
   opcode_e     opcode;
@@ -203,6 +209,7 @@ module ibex_decoder #(
   /////////////
 
   always_comb begin
+    ccu_int_en            = 1'b0;
     jump_in_dec_o         = 1'b0;
     jump_set_o            = 1'b0;
     branch_in_dec_o       = 1'b0;
@@ -338,6 +345,14 @@ module ibex_decoder #(
       /////////
       // ALU //
       /////////
+
+      OPCODE_CCU: begin
+        rf_we                       =   1'b1;
+        // ccu_cmd_payload_inputs_0_o  =   instr_rdata_i[13:12];
+        // ccu_cmd_payload_inputs_1_o  =   instr_rdata_i[28:25];
+        ccu_int_en                  =   1'b1;
+        ccu_cmd_payload_function_id_o = {instr_rdata_i[31:25], instr_rdata_i[14:12]};
+      end
 
       OPCODE_LUI: begin  // Load Upper Immediate
         rf_we            = 1'b1;
@@ -1198,7 +1213,7 @@ module ibex_decoder #(
 
   // Not all bits are used
   assign unused_instr_alu = {instr_alu[19:15],instr_alu[11:7]};
-
+  assign ccu_int_en_o = ccu_int_en;
   ////////////////
   // Assertions //
   ////////////////

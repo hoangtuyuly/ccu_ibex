@@ -188,7 +188,13 @@ module ibex_id_stage #(
                                                         // access to finish before proceeding
   output logic                      perf_mul_wait_o,
   output logic                      perf_div_wait_o,
-  output logic                      instr_id_done_o
+  output logic                      instr_id_done_o,
+
+  output logic                      ccu_en_o,
+  output logic [9:0]                ccu_cmd_payload_function_id_o,
+  output logic [31:0]               ccu_cmd_payload_inputs_0_o,
+  output logic [31:0]               ccu_cmd_payload_inputs_1_o
+
 );
 
   import ibex_pkg::*;
@@ -227,6 +233,7 @@ module ibex_id_stage #(
   logic        stall_jump;
   logic        stall_id;
   logic        stall_wb;
+  logic        stall_ccu;
   logic        flush_id;
   logic        multicycle_done;
 
@@ -250,6 +257,10 @@ module ibex_id_stage #(
   logic        rf_ren_a, rf_ren_b;
   logic        rf_ren_a_dec, rf_ren_b_dec;
 
+  logic        ccu_int_en;
+  logic [9:0]  ccu_cmd_payload_function_id;
+  // logic [31:0] ccu_cmd_payload_inputs_0;
+  // logic [31:0] ccu_cmd_payload_inputs_1;
   // Read enables should only be asserted for valid and legal instructions
   assign rf_ren_a = instr_valid_i & ~instr_fetch_err_i & ~illegal_insn_o & rf_ren_a_dec;
   assign rf_ren_b = instr_valid_i & ~instr_fetch_err_i & ~illegal_insn_o & rf_ren_b_dec;
@@ -295,6 +306,8 @@ module ibex_id_stage #(
   logic [31:0] alu_operand_a;
   logic [31:0] alu_operand_b;
 
+  assign ccu_en_o = ccu_int_en;
+
   /////////////
   // LSU Mux //
   /////////////
@@ -310,6 +323,8 @@ module ibex_id_stage #(
 
   // Main ALU immediate MUX for Operand A
   assign imm_a = (imm_a_mux_sel == IMM_A_Z) ? zimm_rs1_type : '0;
+  assign ccu_cmd_payload_inputs_0_o      = rf_rdata_a_fwd;
+  assign ccu_cmd_payload_inputs_1_o      = rf_rdata_b_fwd;
 
   // Main ALU MUX for Operand A
   always_comb begin : alu_operand_a_mux
@@ -506,8 +521,16 @@ module ibex_id_stage #(
 
     // jump/branches
     .jump_in_dec_o  (jump_in_dec),
-    .branch_in_dec_o(branch_in_dec)
+    .branch_in_dec_o(branch_in_dec),
+
+    //ccu
+    .ccu_cmd_payload_function_id_o                (ccu_cmd_payload_function_id),
+    .ccu_int_en_o                                 (ccu_int_en)
+    // .ccu_cmd_payload_inputs_0_o                   (ccu_cmd_payload_inputs_0),
+    // .ccu_cmd_payload_inputs_1_o                   (ccu_cmd_payload_inputs_1)
   );
+
+  assign ccu_cmd_payload_function_id_o = ccu_cmd_payload_function_id;
 
   /////////////////////////////////
   // CSR-related pipeline flushes //
@@ -802,6 +825,7 @@ module ibex_id_stage #(
     branch_not_set          = 1'b0;
     jump_set_raw            = 1'b0;
     perf_branch_o           = 1'b0;
+    stall_ccu               = 1'b0;
 
     if (instr_executing_spec) begin
       unique case (id_fsm_q)
@@ -826,6 +850,14 @@ module ibex_id_stage #(
                 rf_we_raw     = 1'b0;
                 stall_multdiv = 1'b1;
               end
+            end
+
+            ccu_int_en: begin
+              // if (~ex_valid_i) begin
+                id_fsm_d      = MULTI_CYCLE;
+                rf_we_raw     = 1'b0;
+                stall_ccu = 1'b1;
+              // end
             end
             branch_in_dec: begin
               // cond branch operation
@@ -891,13 +923,13 @@ module ibex_id_stage #(
   // Stall ID/EX stage for reason that relates to instruction in ID/EX, update assertion below if
   // modifying this.
   assign stall_id = stall_ld_hz | stall_mem | stall_multdiv | stall_jump | stall_branch |
-                      stall_alu;
+                      stall_alu | stall_ccu;
 
   // Generally illegal instructions have no reason to stall, however they must still stall waiting
   // for outstanding memory requests so exceptions related to them take priority over the illegal
   // instruction exception.
   `ASSERT(IllegalInsnStallMustBeMemStall, illegal_insn_o & stall_id |-> stall_mem &
-    ~(stall_ld_hz | stall_multdiv | stall_jump | stall_branch | stall_alu))
+    ~(stall_ld_hz | stall_multdiv | stall_jump | stall_branch | stall_alu | stall_ccu))
 
   assign instr_done = ~stall_id & ~flush_id & instr_executing;
 

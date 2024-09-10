@@ -1,5 +1,5 @@
 /* Functions for manipulating expressions designed to be executed on the agent
-   Copyright (C) 1998-2023 Free Software Foundation, Inc.
+   Copyright (C) 1998-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,7 +21,6 @@
    dependencies, since we want to be able to use them in contexts
    outside of GDB (test suites, the stub, etc.)  */
 
-#include "defs.h"
 #include "ax.h"
 #include "gdbarch.h"
 

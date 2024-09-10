@@ -1,4 +1,4 @@
-/* Copyright (C) 2021-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2021-2024 Free Software Foundation, Inc.
    Contributed by Oracle.
 
    This file is part of GNU Binutils.
@@ -28,7 +28,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/param.h> /* MAXPATHLEN */
-
+#include <stddef.h>
 #include <jni.h>
 #include <jvmti.h>
 
@@ -36,12 +36,6 @@
 #include "collector.h"
 #include "gp-experiment.h"
 #include "tsd.h"
-
-/* TprintfT(<level>,...) definitions.  Adjust per module as needed */
-#define DBG_LT0 0 // for high-level configuration, unexpected errors/warnings
-#define DBG_LT1 1 // for configuration details, warnings
-#define DBG_LT2 2
-#define DBG_LT3 3
 
 /* ARCH_STRLEN is defined in dbe, copied here */
 #define ARCH_STRLEN(s)      ((CALL_UTIL(strlen)(s) + 4 ) & ~0x3)
@@ -367,8 +361,8 @@ JVM_OnLoad (JavaVM *vm, char *options, void *reserved)
       err = (*jvmti)->GetPotentialCapabilities (jvmti, &cpblts);
       if (err == JVMTI_ERROR_NONE)
 	{
-	  jvmtiCapabilities cpblts_set;
-	  CALL_UTIL (memset)(&cpblts_set, 0, sizeof (cpblts_set));
+	  static jvmtiCapabilities cpblts_set_0;
+	  jvmtiCapabilities cpblts_set = cpblts_set_0;
 
 	  /* Add only those capabilities that are among potential ones */
 	  cpblts_set.can_get_source_file_name = cpblts.can_get_source_file_name;
@@ -628,8 +622,8 @@ jvmti_ThreadStart (jvmtiEnv *jvmti_env, JNIEnv* jni_env, jthread thread)
 				 group_name,
 				 parent_name,
 				 (unsigned long) tid,
-				 thread,
-				 jni_env
+				 (unsigned long) thread,
+				 (unsigned long) jni_env
 				 );
   TSD_Entry *tsd = collector_interface->getKey (tsd_key);
   if (tsd)
@@ -648,8 +642,8 @@ jvmti_ThreadEnd (jvmtiEnv *jvmti_env, JNIEnv* jni_env, jthread thread)
 				 SP_JCMD_JTHREND,
 				 (unsigned) (hrt / NANOSEC), (unsigned) (hrt % NANOSEC),
 				 (unsigned long) tid,
-				 thread,
-				 jni_env
+				 (unsigned long) thread,
+				 (unsigned long) jni_env
 				 );
   TSD_Entry *tsd = collector_interface->getKey (tsd_key);
   if (tsd)

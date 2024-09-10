@@ -86,13 +86,7 @@ struct infcall_suspend_state_deleter
 	/* If we are restoring the inferior state due to an exception,
 	   some error message will be printed.  So, only warn the user
 	   when we cannot restore during normal execution.  */
-	bool unwinding;
-#if __cpp_lib_uncaught_exceptions
-	unwinding = std::uncaught_exceptions () > 0;
-#else
-	unwinding = std::uncaught_exception ();
-#endif
-	if (!unwinding)
+	if (std::uncaught_exceptions () == 0)
 	  warning (_("Failed to restore inferior state: %s"), e.what ());
       }
   }
@@ -156,7 +150,7 @@ extern void reopen_exec_file (void);
 
 extern void default_print_registers_info (struct gdbarch *gdbarch,
 					  struct ui_file *file,
-					  frame_info_ptr frame,
+					  const frame_info_ptr &frame,
 					  int regnum, int all);
 
 /* Default implementation of gdbarch_print_float_info.  Print
@@ -164,7 +158,7 @@ extern void default_print_registers_info (struct gdbarch *gdbarch,
 
 extern void default_print_float_info (struct gdbarch *gdbarch,
 				      struct ui_file *file,
-				      frame_info_ptr frame,
+				      const frame_info_ptr &frame,
 				      const char *args);
 
 /* Try to determine whether TTY is GDB's input terminal.  Returns
@@ -326,6 +320,9 @@ struct inferior_control_state
   /* See the definition of stop_kind above.  */
   enum stop_kind stop_soon;
 };
+
+/* Initialize the inferior-related global state.  */
+extern void initialize_inferiors ();
 
 /* Return a pointer to the current inferior.  */
 extern inferior *current_inferior ();

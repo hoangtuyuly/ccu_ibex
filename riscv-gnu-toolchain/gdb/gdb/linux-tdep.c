@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux, architecture independent.
 
-   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+   Copyright (C) 2009-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "gdbtypes.h"
 #include "linux-tdep.h"
 #include "auxv.h"
@@ -35,10 +34,10 @@
 #include "observable.h"
 #include "objfiles.h"
 #include "infcall.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbsupport/gdb_regex.h"
 #include "gdbsupport/enum-flags.h"
-#include "gdbsupport/gdb_optional.h"
+#include <optional>
 #include "gcore.h"
 #include "gcore-elf.h"
 #include "solib-svr4.h"
@@ -229,7 +228,7 @@ struct linux_info
   int vsyscall_range_p = 0;
 
   /* Inferior's displaced step buffers.  */
-  gdb::optional<displaced_step_buffers> disp_step_bufs;
+  std::optional<displaced_step_buffers> disp_step_bufs;
 };
 
 /* Per-inferior data key.  */
@@ -457,13 +456,13 @@ struct mapping
 {
   ULONGEST addr;
   ULONGEST endaddr;
-  gdb::string_view permissions;
+  std::string_view permissions;
   ULONGEST offset;
-  gdb::string_view device;
+  std::string_view device;
   ULONGEST inode;
 
   /* This field is guaranteed to be NULL-terminated, hence it is not a
-     gdb::string_view.  */
+     std::string_view.  */
   const char *filename;
 };
 
@@ -589,7 +588,7 @@ struct mapping_regexes
 static int
 mapping_is_anonymous_p (const char *filename)
 {
-  static gdb::optional<mapping_regexes> regexes;
+  static std::optional<mapping_regexes> regexes;
   static int init_regex_p = 0;
 
   if (!init_regex_p)
@@ -873,7 +872,7 @@ linux_info_proc (struct gdbarch *gdbarch, const char *args,
   if (cwd_f)
     {
       xsnprintf (filename, sizeof filename, "/proc/%ld/cwd", pid);
-      gdb::optional<std::string> contents
+      std::optional<std::string> contents
 	= target_fileio_readlink (NULL, filename, &target_errno);
       if (contents.has_value ())
 	gdb_printf ("cwd = '%s'\n", contents->c_str ());
@@ -883,7 +882,7 @@ linux_info_proc (struct gdbarch *gdbarch, const char *args,
   if (exe_f)
     {
       xsnprintf (filename, sizeof filename, "/proc/%ld/exe", pid);
-      gdb::optional<std::string> contents
+      std::optional<std::string> contents
 	= target_fileio_readlink (NULL, filename, &target_errno);
       if (contents.has_value ())
 	gdb_printf ("exe = '%s'\n", contents->c_str ());
@@ -1129,7 +1128,7 @@ linux_read_core_file_mappings
    read_core_file_mappings_loop_ftype  loop_cb)
 {
   /* Ensure that ULONGEST is big enough for reading 64-bit core files.  */
-  gdb_static_assert (sizeof (ULONGEST) >= 8);
+  static_assert (sizeof (ULONGEST) >= 8);
 
   /* It's not required that the NT_FILE note exists, so return silently
      if it's not found.  Beyond this point though, we'll complain
@@ -1148,9 +1147,9 @@ linux_read_core_file_mappings
       return;
     }
 
-  gdb::def_vector<gdb_byte> contents (note_size);
-  if (!bfd_get_section_contents (core_bfd, section, contents.data (),
-				 0, note_size))
+  gdb::byte_vector contents (note_size);
+  if (!bfd_get_section_contents (current_program_space->core_bfd (), section,
+				 contents.data (), 0, note_size))
     {
       warning (_("could not get core note contents"));
       return;
@@ -1165,10 +1164,13 @@ linux_read_core_file_mappings
       return;
     }
 
-  ULONGEST count = bfd_get (addr_size_bits, core_bfd, descdata);
+  ULONGEST count = bfd_get (addr_size_bits, current_program_space->core_bfd (),
+			    descdata);
   descdata += addr_size;
 
-  ULONGEST page_size = bfd_get (addr_size_bits, core_bfd, descdata);
+  ULONGEST page_size = bfd_get (addr_size_bits,
+				current_program_space->core_bfd (),
+				descdata);
   descdata += addr_size;
 
   if (note_size < 2 * addr_size + count * 3 * addr_size)
@@ -1215,12 +1217,12 @@ linux_read_core_file_mappings
 
   for (int i = 0; i < count; i++)
     {
-      ULONGEST start = bfd_get (addr_size_bits, core_bfd, descdata);
+      ULONGEST start = bfd_get (addr_size_bits, current_program_space->core_bfd (), descdata);
       descdata += addr_size;
-      ULONGEST end = bfd_get (addr_size_bits, core_bfd, descdata);
+      ULONGEST end = bfd_get (addr_size_bits, current_program_space->core_bfd (), descdata);
       descdata += addr_size;
       ULONGEST file_ofs
-	= bfd_get (addr_size_bits, core_bfd, descdata) * page_size;
+	= bfd_get (addr_size_bits, current_program_space->core_bfd (), descdata) * page_size;
       descdata += addr_size;
       char * filename = filenames;
       filenames += strlen ((char *) filenames) + 1;
@@ -1239,7 +1241,7 @@ linux_read_core_file_mappings
 static void
 linux_core_info_proc_mappings (struct gdbarch *gdbarch, const char *args)
 {
-  linux_read_core_file_mappings (gdbarch, core_bfd,
+  linux_read_core_file_mappings (gdbarch, current_program_space->core_bfd (),
     [=] (ULONGEST count)
       {
 	gdb_printf (_("Mapped address spaces:\n\n"));
@@ -1289,9 +1291,9 @@ linux_core_info_proc (struct gdbarch *gdbarch, const char *args,
 
   if (exe_f)
     {
-      const char *exe;
+      const char *exe
+	= bfd_core_file_failing_command (current_program_space->core_bfd ());
 
-      exe = bfd_core_file_failing_command (core_bfd);
       if (exe != NULL)
 	gdb_printf ("exe = '%s'\n", exe);
       else
@@ -1315,11 +1317,14 @@ linux_core_xfer_siginfo (struct gdbarch *gdbarch, gdb_byte *readbuf,
 			 ULONGEST offset, ULONGEST len)
 {
   thread_section_name section_name (".note.linuxcore.siginfo", inferior_ptid);
-  asection *section = bfd_get_section_by_name (core_bfd, section_name.c_str ());
+  asection *section
+    = bfd_get_section_by_name (current_program_space->core_bfd (),
+			       section_name.c_str ());
   if (section == NULL)
     return -1;
 
-  if (!bfd_get_section_contents (core_bfd, section, readbuf, offset, len))
+  if (!bfd_get_section_contents (current_program_space->core_bfd (), section,
+				 readbuf, offset, len))
     return -1;
 
   return len;
@@ -1384,7 +1389,7 @@ parse_smaps_data (const char *data,
 
       /* Decode permissions.  */
       auto has_perm = [&m] (char c)
-	{ return m.permissions.find (c) != gdb::string_view::npos; };
+	{ return m.permissions.find (c) != std::string_view::npos; };
       read = has_perm ('r');
       write = has_perm ('w');
       exec = has_perm ('x');
@@ -1522,11 +1527,12 @@ linux_process_address_in_memtag_page (CORE_ADDR address)
 static bool
 linux_core_file_address_in_memtag_page (CORE_ADDR address)
 {
-  if (core_bfd == nullptr)
+  if (current_program_space->core_bfd () == nullptr)
     return false;
 
   memtag_section_info info;
-  return get_next_core_memtag_section (core_bfd, nullptr, address, info);
+  return get_next_core_memtag_section (current_program_space->core_bfd (),
+				       nullptr, address, info);
 }
 
 /* See linux-tdep.h.  */
@@ -1884,13 +1890,21 @@ linux_fill_prpsinfo (struct elf_internal_linux_prpsinfo *p)
   pid = inferior_ptid.pid ();
   xsnprintf (filename, sizeof (filename), "/proc/%d/cmdline", (int) pid);
   /* The full name of the program which generated the corefile.  */
-  gdb::unique_xmalloc_ptr<char> fname
-    = target_fileio_read_stralloc (NULL, filename);
+  gdb_byte *buf = NULL;
+  size_t buf_len = target_fileio_read_alloc (NULL, filename, &buf);
+  gdb::unique_xmalloc_ptr<char> fname ((char *)buf);
 
-  if (fname == NULL || fname.get ()[0] == '\0')
+  if (buf_len < 1 || fname.get ()[0] == '\0')
     {
       /* No program name was read, so we won't be able to retrieve more
 	 information about the process.  */
+      return 0;
+    }
+  if (fname.get ()[buf_len - 1] != '\0')
+    {
+      warning (_("target file %s "
+		 "does not contain a trailing null character"),
+	       filename);
       return 0;
     }
 
@@ -2108,7 +2122,7 @@ linux_make_corefile_notes (struct gdbarch *gdbarch, bfd *obfd, int *note_size)
     return NULL;
 
   /* Auxillary vector.  */
-  gdb::optional<gdb::byte_vector> auxv =
+  std::optional<gdb::byte_vector> auxv =
     target_read_alloc (current_inferior ()->top_target (),
 		       TARGET_OBJECT_AUXV, NULL);
   if (auxv && !auxv->empty ())
@@ -2405,13 +2419,15 @@ linux_vsyscall_range_raw (struct gdbarch *gdbarch, struct mem_range *range)
       long phdrs_size;
       int num_phdrs, i;
 
-      phdrs_size = bfd_get_elf_phdr_upper_bound (core_bfd);
+      phdrs_size
+	= bfd_get_elf_phdr_upper_bound (current_program_space->core_bfd ());
       if (phdrs_size == -1)
 	return 0;
 
       gdb::unique_xmalloc_ptr<Elf_Internal_Phdr>
 	phdrs ((Elf_Internal_Phdr *) xmalloc (phdrs_size));
-      num_phdrs = bfd_get_elf_phdrs (core_bfd, phdrs.get ());
+      num_phdrs = bfd_get_elf_phdrs (current_program_space->core_bfd (),
+				     phdrs.get ());
       if (num_phdrs == -1)
 	return 0;
 
@@ -2615,7 +2631,7 @@ linux_displaced_step_prepare (gdbarch *arch, thread_info *thread,
       /* Figure out the location of the buffers.  They are contiguous, starting
 	 at DISP_STEP_BUF_ADDR.  They are all of size BUF_LEN.  */
       CORE_ADDR disp_step_buf_addr
-	= linux_displaced_step_location (thread->inf->gdbarch);
+	= linux_displaced_step_location (thread->inf->arch ());
       int buf_len = gdbarch_displaced_step_buffer_length (arch);
 
       linux_gdbarch_data *gdbarch_data = get_linux_gdbarch_data (arch);
@@ -2675,7 +2691,7 @@ linux_displaced_step_restore_all_in_ptid (inferior *parent_inf, ptid_t ptid)
 /* Helper for linux_get_hwcap and linux_get_hwcap2.  */
 
 static CORE_ADDR
-linux_get_hwcap_helper (const gdb::optional<gdb::byte_vector> &auxv,
+linux_get_hwcap_helper (const std::optional<gdb::byte_vector> &auxv,
 			target_ops *target, gdbarch *gdbarch, CORE_ADDR match)
 {
   CORE_ADDR field;
@@ -2688,7 +2704,7 @@ linux_get_hwcap_helper (const gdb::optional<gdb::byte_vector> &auxv,
 /* See linux-tdep.h.  */
 
 CORE_ADDR
-linux_get_hwcap (const gdb::optional<gdb::byte_vector> &auxv,
+linux_get_hwcap (const std::optional<gdb::byte_vector> &auxv,
 		 target_ops *target, gdbarch *gdbarch)
 {
   return linux_get_hwcap_helper (auxv, target, gdbarch, AT_HWCAP);
@@ -2701,13 +2717,13 @@ linux_get_hwcap ()
 {
   return linux_get_hwcap (target_read_auxv (),
 			  current_inferior ()->top_target (),
-			  current_inferior ()->gdbarch);
+			  current_inferior ()->arch ());
 }
 
 /* See linux-tdep.h.  */
 
 CORE_ADDR
-linux_get_hwcap2 (const gdb::optional<gdb::byte_vector> &auxv,
+linux_get_hwcap2 (const std::optional<gdb::byte_vector> &auxv,
 		  target_ops *target, gdbarch *gdbarch)
 {
   return linux_get_hwcap_helper (auxv, target, gdbarch, AT_HWCAP2);
@@ -2720,7 +2736,7 @@ linux_get_hwcap2 ()
 {
   return linux_get_hwcap2 (target_read_auxv (),
 			   current_inferior ()->top_target (),
-			   current_inferior ()->gdbarch);
+			   current_inferior ()->arch ());
 }
 
 /* Display whether the gcore command is using the

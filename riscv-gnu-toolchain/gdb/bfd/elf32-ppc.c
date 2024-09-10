@@ -1,5 +1,5 @@
 /* PowerPC-specific support for 32-bit ELF
-   Copyright (C) 1994-2023 Free Software Foundation, Inc.
+   Copyright (C) 1994-2024 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -5479,8 +5479,8 @@ static const unsigned char glink_eh_frame_cie[] =
 /* Set the sizes of the dynamic sections.  */
 
 static bool
-ppc_elf_size_dynamic_sections (bfd *output_bfd,
-			       struct bfd_link_info *info)
+ppc_elf_late_size_sections (bfd *output_bfd,
+			    struct bfd_link_info *info)
 {
   struct ppc_elf_link_hash_table *htab;
   asection *s;
@@ -5488,11 +5488,12 @@ ppc_elf_size_dynamic_sections (bfd *output_bfd,
   bfd *ibfd;
 
 #ifdef DEBUG
-  fprintf (stderr, "ppc_elf_size_dynamic_sections called\n");
+  fprintf (stderr, "ppc_elf_late_size_sections called\n");
 #endif
 
   htab = ppc_elf_hash_table (info);
-  BFD_ASSERT (htab->elf.dynobj != NULL);
+  if (htab->elf.dynobj == NULL)
+    return true;
 
   if (elf_hash_table (info)->dynamic_sections_created)
     {
@@ -6169,7 +6170,7 @@ ppc_elf_relax_section (bfd *abfd,
 	  asection *tsec;
 	  struct one_branch_fixup *f;
 	  size_t insn_offset = 0;
-	  bfd_vma max_branch_offset = 0, val;
+	  bfd_vma max_branch_offset = 0, val, reladdr;
 	  bfd_byte *hit_addr;
 	  unsigned long t0;
 	  struct elf_link_hash_entry *h;
@@ -6415,6 +6416,7 @@ ppc_elf_relax_section (bfd *abfd,
 	    continue;
 
 	  roff = irel->r_offset;
+	  reladdr = isec->output_section->vma + isec->output_offset + roff;
 
 	  /* Avoid creating a lot of unnecessary fixups when
 	     relocatable if the output section size is such that a
@@ -6433,10 +6435,9 @@ ppc_elf_relax_section (bfd *abfd,
 		     final link, so do not presume they remain in range.  */
 		  || tsec->output_section == isec->output_section))
 	    {
-	      bfd_vma symaddr, reladdr;
+	      bfd_vma symaddr;
 
 	      symaddr = tsec->output_section->vma + tsec->output_offset + toff;
-	      reladdr = isec->output_section->vma + isec->output_offset + roff;
 	      if (symaddr - reladdr + max_branch_offset
 		  < 2 * max_branch_offset)
 		continue;
@@ -6506,6 +6507,12 @@ ppc_elf_relax_section (bfd *abfd,
 	      /* Nop out the reloc, since we're finalizing things here.  */
 	      irel->r_info = ELF32_R_INFO (0, R_PPC_NONE);
 	    }
+
+	  link_info->callbacks->minfo
+	    (_("%pB: Adjusting branch at 0x%V towards \"%s\" in section %s\n"),
+	     abfd, reladdr,
+	     (h && h->root.root.string? h->root.root.string : "<unknown>"),
+	     f->tsec->name);
 
 	  /* Get the section contents.  */
 	  if (contents == NULL)
@@ -10427,7 +10434,7 @@ ppc_elf_finish_dynamic_sections (bfd *output_bfd,
 #define elf_backend_copy_indirect_symbol	ppc_elf_copy_indirect_symbol
 #define elf_backend_adjust_dynamic_symbol	ppc_elf_adjust_dynamic_symbol
 #define elf_backend_add_symbol_hook		ppc_elf_add_symbol_hook
-#define elf_backend_size_dynamic_sections	ppc_elf_size_dynamic_sections
+#define elf_backend_late_size_sections		ppc_elf_late_size_sections
 #define elf_backend_hash_symbol			ppc_elf_hash_symbol
 #define elf_backend_finish_dynamic_symbol	ppc_elf_finish_dynamic_symbol
 #define elf_backend_finish_dynamic_sections	ppc_elf_finish_dynamic_sections

@@ -1,3 +1,75 @@
+2024-02-12  Frederic Cambus  <fred@statdns.com>
+
+	* readelf.c (get_segment_type): Handle PT_OPENBSD_SYSCALLS segment
+	type.
+
+2024-01-26  Nick Clifton  <nickc@redhat.com>
+
+	PR 31250
+	* objcopy.c (copy_archive): Improve the handling of archives that
+	contain elements with invalid pathnames.
+
+2024-01-15  Nick Clifton  <nickc@redhat.com>
+
+	* 2.42 branch point.
+
+2023-12-04  Tom Tromey  <tom@tromey.com>
+
+	* dwarf.c (display_debug_names): Handle empty .debug_names hash
+	table.  Name entries start at 1.
+
+2023-11-15  Arsen Arsenović  <arsen@aarsen.me>
+
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
+	* po/Make-in ($(srcdir)/$(PACKAGE).pot): Output to a .pot
+	temporary file, to suppress xgettext checking charset names.
+
+2023-11-14  Nick Clifton  <nickc@redhat.com>
+
+	PR 31062
+	* objdump.c (decompressed_dumps): New local variable.
+	(usage): Mention the -z/--decompress option.
+	(long_options): Add --decompress.
+	(dump_section_header): Add "COMPRESSED" to the Flags field of any
+	compressed section.
+	(dump_section): Warn users when dumping a compressed section.
+	(display_any_bfd): Decompress the section if decompressed_dumps is
+	true.
+	(main): Handle the -z/--decompress option.
+	* NEWS: Mention the new feature.
+	* doc/binutils.texi: Document the new feature.
+	* testsuite/binutils-all/objdump.s: Update expected output.
+	* testsuite/binutils-all/objdump.exp: Add test of -Z -s.
+	* testsuite/binutils-all/objdump.Zs: New file.
+
+	* readelf.c (maybe_expand_or_relocate_section): New function.
+	Contains common code found in dump functions.  Adds a note message
+	if a compressed section is not being decompressed.
+	(dump_section_as_strings): Use new function.
+	(dump_section_as_bytes): Likewise.
+
+2023-11-10  Simon Marchi  <simon.marchi@efficios.com>
+
+	* readelf.c (decode_AMDGPU_machine_flags): Handle gfx1100,
+	gfx1101, gfx1102.
+
+2023-11-10  Vsevolod Alekseyev  <sevaa@sprynet.com>
+
+	PR 30880
+	* dwarf.c (read_and_display_attr_value): Fix loclist handling.
+	(display_loclists_list): Likewise.
+
+2023-10-24  Tom de Vries  <tdevries@suse.de>
+
+	* dwarf.c (display_gdb_index): Handle unknown name of main.
+
+2023-10-10  Tom de Vries  <tdevries@suse.de>
+
+	* dwarf.c (display_lang): New function, factored out of ...
+	(read_and_display_attr_value): ... here.
+	(display_gdb_index): Handle v9 .gdb_index.
+
 2023-10-05  A. Wilcox  <awilfox@adelielinux.org>w
 
 	PR 30916
@@ -2290,7 +2362,7 @@
 
 For older changes see ChangeLog-2020
 
-Copyright (C) 2021-2023 Free Software Foundation, Inc.
+Copyright (C) 2021-2024 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

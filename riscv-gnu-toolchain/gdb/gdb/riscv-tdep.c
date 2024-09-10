@@ -1,6 +1,6 @@
 /* Target-dependent code for the RISC-V architecture, for GDB.
 
-   Copyright (C) 2018-2023 Free Software Foundation, Inc.
+   Copyright (C) 2018-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,12 +17,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "frame.h"
 #include "inferior.h"
 #include "symtab.h"
 #include "value.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "language.h"
 #include "gdbcore.h"
 #include "symfile.h"
@@ -49,7 +49,6 @@
 #include "dwarf2/frame.h"
 #include "user-regs.h"
 #include "valprint.h"
-#include "gdbsupport/common-defs.h"
 #include "opcode/riscv-opc.h"
 #include "cli/cli-decode.h"
 #include "observable.h"
@@ -133,7 +132,7 @@ static const char *riscv_feature_name_virtual = "org.gnu.gdb.riscv.virtual";
 static const char *riscv_feature_name_vector = "org.gnu.gdb.riscv.vector";
 
 /* The current set of options to be passed to the disassembler.  */
-static char *riscv_disassembler_options;
+static std::string riscv_disassembler_options;
 
 /* Cached information about a frame.  */
 
@@ -165,10 +164,10 @@ static const reggroup *csr_reggroup = nullptr;
 /* Callback function for user_reg_add.  */
 
 static struct value *
-value_of_riscv_user_reg (frame_info_ptr frame, const void *baton)
+value_of_riscv_user_reg (const frame_info_ptr &frame, const void *baton)
 {
   const int *reg_p = (const int *) baton;
-  return value_of_register (*reg_p, frame);
+  return value_of_register (*reg_p, get_next_frame_sentinel_okay (frame));
 }
 
 /* Information about a register alias that needs to be set up for this
@@ -441,7 +440,7 @@ struct riscv_freg_feature : public riscv_register_feature
      RISCV_LAST_FP_REGNUM.  */
   const char *register_name (int regnum) const
   {
-    gdb_static_assert (RISCV_LAST_FP_REGNUM == RISCV_FIRST_FP_REGNUM + 31);
+    static_assert (RISCV_LAST_FP_REGNUM == RISCV_FIRST_FP_REGNUM + 31);
     gdb_assert (regnum >= RISCV_FIRST_FP_REGNUM
 		&& regnum <= RISCV_LAST_FP_REGNUM);
     regnum -= RISCV_FIRST_FP_REGNUM;
@@ -1002,9 +1001,9 @@ riscv_pseudo_register_read (struct gdbarch *gdbarch,
   return REG_UNKNOWN;
 }
 
-/* Implement gdbarch_pseudo_register_write.  Write the contents of BUF into
-   pseudo-register REGNUM in REGCACHE.  BUF is sized based on the type of
-   register REGNUM.  */
+/* Implement gdbarch_deprecated_pseudo_register_write.  Write the contents of
+   BUF into pseudo-register REGNUM in REGCACHE.  BUF is sized based on the type
+   of register REGNUM.  */
 
 static void
 riscv_pseudo_register_write (struct gdbarch *gdbarch,
@@ -1135,7 +1134,7 @@ riscv_register_type (struct gdbarch *gdbarch, int regnum)
 static void
 riscv_print_one_register_info (struct gdbarch *gdbarch,
 			       struct ui_file *file,
-			       frame_info_ptr frame,
+			       const frame_info_ptr &frame,
 			       int regnum)
 {
   const char *name = gdbarch_register_name (gdbarch, regnum);
@@ -1149,7 +1148,7 @@ riscv_print_one_register_info (struct gdbarch *gdbarch,
 
   try
     {
-      val = value_of_register (regnum, frame);
+      val = value_of_register (regnum, get_next_frame_sentinel_okay (frame));
       regtype = val->type ();
     }
   catch (const gdb_exception_error &ex)
@@ -1504,7 +1503,7 @@ riscv_pseudo_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 static void
 riscv_print_registers_info (struct gdbarch *gdbarch,
 			    struct ui_file *file,
-			    frame_info_ptr frame,
+			    const frame_info_ptr &frame,
 			    int regnum, int print_all)
 {
   if (regnum != -1)
@@ -1578,8 +1577,34 @@ public:
       BLTU,
       BGEU,
       /* These are needed for stepping over atomic sequences.  */
-      LR,
-      SC,
+      SLTI,
+      SLTIU,
+      XORI,
+      ORI,
+      ANDI,
+      SLLI,
+      SLLIW,
+      SRLI,
+      SRLIW,
+      SRAI,
+      SRAIW,
+      SUB,
+      SUBW,
+      SLL,
+      SLLW,
+      SLT,
+      SLTU,
+      XOR,
+      SRL,
+      SRLW,
+      SRA,
+      SRAW,
+      OR,
+      AND,
+      LR_W,
+      LR_D,
+      SC_W,
+      SC_D,
       /* This instruction is used to do a syscall.  */
       ECALL,
 
@@ -1676,7 +1701,7 @@ private:
      passed, is the value to place in rs1, otherwise rd is duplicated into
      rs1.  */
   void decode_ci_type_insn (enum opcode opcode, ULONGEST ival,
-			    gdb::optional<int> rs1_regnum = {})
+			    std::optional<int> rs1_regnum = {})
   {
     m_opcode = opcode;
     m_rd = decode_register_index (ival, OP_SH_CRS1S);
@@ -1766,6 +1791,13 @@ private:
     m_opcode = opcode;
     m_rs1 = decode_register_index_short (ival, OP_SH_CRS1S);
     m_imm.s = EXTRACT_CBTYPE_IMM (ival);
+  }
+
+  void decode_ca_type_insn (enum opcode opcode, ULONGEST ival)
+  {
+    m_opcode = opcode;
+    m_rs1 = decode_register_index_short (ival, OP_SH_CRS1S);
+    m_rs2 = decode_register_index_short (ival, OP_SH_CRS2S);
   }
 
   /* Fetch instruction from target memory at ADDR, return the content of
@@ -1882,14 +1914,62 @@ riscv_insn::decode (struct gdbarch *gdbarch, CORE_ADDR pc)
 	decode_b_type_insn (BLTU, ival);
       else if (is_bgeu_insn (ival))
 	decode_b_type_insn (BGEU, ival);
+      else if (is_slti_insn(ival))
+	decode_i_type_insn (SLTI, ival);
+      else if (is_sltiu_insn(ival))
+	decode_i_type_insn (SLTIU, ival);
+      else if (is_xori_insn(ival))
+	decode_i_type_insn (XORI, ival);
+      else if (is_ori_insn(ival))
+	decode_i_type_insn (ORI, ival);
+      else if (is_andi_insn(ival))
+	decode_i_type_insn (ANDI, ival);
+      else if (is_slli_insn(ival))
+	decode_i_type_insn (SLLI, ival);
+      else if (is_slliw_insn(ival))
+	decode_i_type_insn (SLLIW, ival);
+      else if (is_srli_insn(ival))
+	decode_i_type_insn (SRLI, ival);
+      else if (is_srliw_insn(ival))
+	decode_i_type_insn (SRLIW, ival);
+      else if (is_srai_insn(ival))
+	decode_i_type_insn (SRAI, ival);
+      else if (is_sraiw_insn(ival))
+	decode_i_type_insn (SRAIW, ival);
+      else if (is_sub_insn(ival))
+	decode_r_type_insn (SUB, ival);
+      else if (is_subw_insn(ival))
+	decode_r_type_insn (SUBW, ival);
+      else if (is_sll_insn(ival))
+	decode_r_type_insn (SLL, ival);
+      else if (is_sllw_insn(ival))
+	decode_r_type_insn (SLLW, ival);
+      else if (is_slt_insn(ival))
+	decode_r_type_insn (SLT, ival);
+      else if (is_sltu_insn(ival))
+	decode_r_type_insn (SLTU, ival);
+      else if (is_xor_insn(ival))
+	decode_r_type_insn (XOR, ival);
+      else if (is_srl_insn(ival))
+	decode_r_type_insn (SRL, ival);
+      else if (is_srlw_insn(ival))
+	decode_r_type_insn (SRLW, ival);
+      else if (is_sra_insn(ival))
+	decode_r_type_insn (SRA, ival);
+      else if (is_sraw_insn(ival))
+	decode_r_type_insn (SRAW, ival);
+      else if (is_or_insn(ival))
+	decode_r_type_insn (OR, ival);
+      else if (is_and_insn(ival))
+	decode_r_type_insn (AND, ival);
       else if (is_lr_w_insn (ival))
-	decode_r_type_insn (LR, ival);
+	decode_r_type_insn (LR_W, ival);
       else if (is_lr_d_insn (ival))
-	decode_r_type_insn (LR, ival);
+	decode_r_type_insn (LR_D, ival);
       else if (is_sc_w_insn (ival))
-	decode_r_type_insn (SC, ival);
+	decode_r_type_insn (SC_W, ival);
       else if (is_sc_d_insn (ival))
-	decode_r_type_insn (SC, ival);
+	decode_r_type_insn (SC_D, ival);
       else if (is_ecall_insn (ival))
 	decode_i_type_insn (ECALL, ival);
       else if (is_ld_insn (ival))
@@ -1944,6 +2024,24 @@ riscv_insn::decode (struct gdbarch *gdbarch, CORE_ADDR pc)
 	  m_rd = decode_register_index (ival, OP_SH_CRS1S);
 	  m_imm.s = EXTRACT_CITYPE_LUI_IMM (ival);
 	}
+      else if (is_c_srli_insn (ival))
+	decode_cb_type_insn (SRLI, ival);
+      else if (is_c_srai_insn (ival))
+	decode_cb_type_insn (SRAI, ival);
+      else if (is_c_andi_insn (ival))
+	decode_cb_type_insn (ANDI, ival);
+      else if (is_c_sub_insn (ival))
+	decode_ca_type_insn (SUB, ival);
+      else if (is_c_xor_insn (ival))
+	decode_ca_type_insn (XOR, ival);
+      else if (is_c_or_insn (ival))
+	decode_ca_type_insn (OR, ival);
+      else if (is_c_and_insn (ival))
+	decode_ca_type_insn (AND, ival);
+      else if (is_c_subw_insn (ival))
+	decode_ca_type_insn (SUBW, ival);
+      else if (is_c_addw_insn (ival))
+	decode_ca_type_insn (ADDW, ival);
       else if (is_c_li_insn (ival))
 	decode_ci_type_insn (LI, ival);
       /* C_SD and C_FSW have the same opcode.  C_SD is RV64 and RV128 only,
@@ -3183,7 +3281,7 @@ riscv_arg_location (struct gdbarch *gdbarch,
 	  riscv_call_arg_struct (ainfo, cinfo);
 	  break;
 	}
-      /* FALLTHROUGH */
+      [[fallthrough]];
 
     default:
       riscv_call_arg_scalar_int (ainfo, cinfo);
@@ -3707,7 +3805,7 @@ riscv_frame_align (struct gdbarch *gdbarch, CORE_ADDR addr)
    unwinder.  */
 
 static struct riscv_unwind_cache *
-riscv_frame_cache (frame_info_ptr this_frame, void **this_cache)
+riscv_frame_cache (const frame_info_ptr &this_frame, void **this_cache)
 {
   CORE_ADDR pc, start_addr;
   struct riscv_unwind_cache *cache;
@@ -3767,7 +3865,7 @@ riscv_frame_cache (frame_info_ptr this_frame, void **this_cache)
 /* Implement the this_id callback for RiscV frame unwinder.  */
 
 static void
-riscv_frame_this_id (frame_info_ptr this_frame,
+riscv_frame_this_id (const frame_info_ptr &this_frame,
 		     void **prologue_cache,
 		     struct frame_id *this_id)
 {
@@ -3788,7 +3886,7 @@ riscv_frame_this_id (frame_info_ptr this_frame,
 /* Implement the prev_register callback for RiscV frame unwinder.  */
 
 static struct value *
-riscv_frame_prev_register (frame_info_ptr this_frame,
+riscv_frame_prev_register (const frame_info_ptr &this_frame,
 			   void **prologue_cache,
 			   int regnum)
 {
@@ -4229,7 +4327,8 @@ riscv_gdbarch_init (struct gdbarch_info info,
   set_tdesc_pseudo_register_reggroup_p (gdbarch,
 					riscv_pseudo_register_reggroup_p);
   set_gdbarch_pseudo_register_read (gdbarch, riscv_pseudo_register_read);
-  set_gdbarch_pseudo_register_write (gdbarch, riscv_pseudo_register_write);
+  set_gdbarch_deprecated_pseudo_register_write (gdbarch,
+						riscv_pseudo_register_write);
 
   /* Finalise the target description registers.  */
   tdesc_use_registers (gdbarch, tdesc, std::move (tdesc_data),
@@ -4404,51 +4503,164 @@ riscv_next_pc (struct regcache *regcache, CORE_ADDR pc)
   return next_pc;
 }
 
+/* Return true if INSN is not a control transfer instruction and is allowed to
+   appear in the middle of the lr/sc sequence.  */
+
+static bool
+riscv_insn_is_non_cti_and_allowed_in_atomic_sequence
+  (const struct riscv_insn &insn)
+{
+  switch (insn.opcode ())
+    {
+    case riscv_insn::LUI:
+    case riscv_insn::AUIPC:
+    case riscv_insn::ADDI:
+    case riscv_insn::ADDIW:
+    case riscv_insn::SLTI:
+    case riscv_insn::SLTIU:
+    case riscv_insn::XORI:
+    case riscv_insn::ORI:
+    case riscv_insn::ANDI:
+    case riscv_insn::SLLI:
+    case riscv_insn::SLLIW:
+    case riscv_insn::SRLI:
+    case riscv_insn::SRLIW:
+    case riscv_insn::SRAI:
+    case riscv_insn::ADD:
+    case riscv_insn::ADDW:
+    case riscv_insn::SRAIW:
+    case riscv_insn::SUB:
+    case riscv_insn::SUBW:
+    case riscv_insn::SLL:
+    case riscv_insn::SLLW:
+    case riscv_insn::SLT:
+    case riscv_insn::SLTU:
+    case riscv_insn::XOR:
+    case riscv_insn::SRL:
+    case riscv_insn::SRLW:
+    case riscv_insn::SRA:
+    case riscv_insn::SRAW:
+    case riscv_insn::OR:
+    case riscv_insn::AND:
+      return true;
+    }
+
+    return false;
+}
+
+/* Return true if INSN is a direct branch instruction.  */
+
+static bool
+riscv_insn_is_direct_branch (const struct riscv_insn &insn)
+{
+  switch (insn.opcode ())
+    {
+    case riscv_insn::BEQ:
+    case riscv_insn::BNE:
+    case riscv_insn::BLT:
+    case riscv_insn::BGE:
+    case riscv_insn::BLTU:
+    case riscv_insn::BGEU:
+    case riscv_insn::JAL:
+      return true;
+    }
+
+    return false;
+}
+
 /* We can't put a breakpoint in the middle of a lr/sc atomic sequence, so look
    for the end of the sequence and put the breakpoint there.  */
 
-static bool
-riscv_next_pc_atomic_sequence (struct regcache *regcache, CORE_ADDR pc,
-			       CORE_ADDR *next_pc)
+static std::vector<CORE_ADDR>
+riscv_deal_with_atomic_sequence (struct regcache *regcache, CORE_ADDR pc)
 {
   struct gdbarch *gdbarch = regcache->arch ();
   struct riscv_insn insn;
-  CORE_ADDR cur_step_pc = pc;
-  CORE_ADDR last_addr = 0;
+  CORE_ADDR cur_step_pc = pc, next_pc;
+  std::vector<CORE_ADDR> next_pcs;
+  bool found_valid_atomic_sequence = false;
+  enum riscv_insn::opcode lr_opcode;
 
   /* First instruction has to be a load reserved.  */
   insn.decode (gdbarch, cur_step_pc);
-  if (insn.opcode () != riscv_insn::LR)
-    return false;
-  cur_step_pc = cur_step_pc + insn.length ();
+  lr_opcode = insn.opcode ();
+  if (lr_opcode != riscv_insn::LR_D && lr_opcode != riscv_insn::LR_W)
+    return {};
 
-  /* Next instruction should be branch to exit.  */
-  insn.decode (gdbarch, cur_step_pc);
-  if (insn.opcode () != riscv_insn::BNE)
-    return false;
-  last_addr = cur_step_pc + insn.imm_signed ();
-  cur_step_pc = cur_step_pc + insn.length ();
+  /* The loop comprises only an LR/SC sequence and code to retry the sequence in
+     the case of failure, and must comprise at most 16 instructions placed
+     sequentially in memory.  While our code tries to follow these restrictions,
+     it has the following limitations:
 
-  /* Next instruction should be store conditional.  */
-  insn.decode (gdbarch, cur_step_pc);
-  if (insn.opcode () != riscv_insn::SC)
-    return false;
-  cur_step_pc = cur_step_pc + insn.length ();
+       (a) We expect the loop to start with an LR and end with a BNE.
+	   Apparently this does not cover all cases for a valid sequence.
+       (b) The atomic limitations only apply to the code that is actually
+	   executed, so here again it's overly restrictive.
+       (c) The lr/sc are required to be for the same target address, but this
+	   information is only known at runtime.  Same as (b), in order to check
+	   this we will end up needing to simulate the sequence, which is more
+	   complicated than what we're doing right now.
+
+     Also note that we only expect a maximum of (16-2) instructions in the for
+     loop as we have assumed the presence of LR and BNE at the beginning and end
+     respectively.  */
+  for (int insn_count = 0; insn_count < 16 - 2; ++insn_count)
+    {
+      cur_step_pc += insn.length ();
+      insn.decode (gdbarch, cur_step_pc);
+
+      /* The dynamic code executed between lr/sc can only contain instructions
+	 from the base I instruction set, excluding loads, stores, backward
+	 jumps, taken backward branches, JALR, FENCE, FENCE.I, and SYSTEM
+	 instructions.  If the C extension is supported, then compressed forms
+	 of the aforementioned I instructions are also permitted.  */
+
+      if (riscv_insn_is_non_cti_and_allowed_in_atomic_sequence (insn))
+	continue;
+      /* Look for a conditional branch instruction, check if it's taken forward
+	 or not.  */
+      else if (riscv_insn_is_direct_branch (insn))
+	{
+	  if (insn.imm_signed () > 0)
+	    {
+	      next_pc = cur_step_pc + insn.imm_signed ();
+	      next_pcs.push_back (next_pc);
+	    }
+	  else
+	    break;
+	}
+      /* Look for a paired SC instruction which closes the atomic sequence.  */
+      else if ((insn.opcode () == riscv_insn::SC_D
+		&& lr_opcode == riscv_insn::LR_D)
+	       || (insn.opcode () == riscv_insn::SC_W
+		   && lr_opcode == riscv_insn::LR_W))
+	found_valid_atomic_sequence = true;
+      else
+	break;
+    }
+
+  if (!found_valid_atomic_sequence)
+    return {};
 
   /* Next instruction should be branch to start.  */
   insn.decode (gdbarch, cur_step_pc);
   if (insn.opcode () != riscv_insn::BNE)
-    return false;
+    return {};
   if (pc != (cur_step_pc + insn.imm_signed ()))
-    return false;
-  cur_step_pc = cur_step_pc + insn.length ();
+    return {};
+  cur_step_pc += insn.length ();
 
-  /* We should now be at the end of the sequence.  */
-  if (cur_step_pc != last_addr)
-    return false;
+  /* Remove all PCs that jump within the sequence.  */
+  auto matcher = [cur_step_pc] (const CORE_ADDR addr) -> bool
+    {
+      return addr < cur_step_pc;
+    };
+  auto it = std::remove_if (next_pcs.begin (), next_pcs.end (), matcher);
+  next_pcs.erase (it, next_pcs.end ());
 
-  *next_pc = cur_step_pc;
-  return true;
+  next_pc = cur_step_pc;
+  next_pcs.push_back (next_pc);
+  return next_pcs;
 }
 
 /* This is called just before we want to resume the inferior, if we want to
@@ -4458,14 +4670,14 @@ riscv_next_pc_atomic_sequence (struct regcache *regcache, CORE_ADDR pc,
 std::vector<CORE_ADDR>
 riscv_software_single_step (struct regcache *regcache)
 {
-  CORE_ADDR pc, next_pc;
+  CORE_ADDR cur_pc = regcache_read_pc (regcache), next_pc;
+  std::vector<CORE_ADDR> next_pcs
+    = riscv_deal_with_atomic_sequence (regcache, cur_pc);
 
-  pc = regcache_read_pc (regcache);
+  if (!next_pcs.empty ())
+    return next_pcs;
 
-  if (riscv_next_pc_atomic_sequence (regcache, pc, &next_pc))
-    return {next_pc};
-
-  next_pc = riscv_next_pc (regcache, pc);
+  next_pc = riscv_next_pc (regcache, cur_pc);
 
   return {next_pc};
 }
@@ -4610,7 +4822,7 @@ initialisation process."),
   add_setshow_auto_boolean_cmd ("use-compressed-breakpoints", no_class,
 				&use_compressed_breakpoints,
 				_("\
-Set debugger's use of compressed breakpoints."), _("	\
+Set debugger's use of compressed breakpoints."), _("\
 Show debugger's use of compressed breakpoints."), _("\
 Debugging compressed code requires compressed breakpoints to be used. If\n\
 left to 'auto' then gdb will use them if the existing instruction is a\n\

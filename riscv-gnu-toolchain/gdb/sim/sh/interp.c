@@ -822,7 +822,7 @@ static int
 strswaplen (int str)
 {
   unsigned char *memory = saved_state.asregs.memory;
-  int start, end;
+  int end;
   int endian = endianb;
 
   if (! endian)
@@ -1046,8 +1046,8 @@ trap (SIM_DESC sd, int i, int *regs, unsigned char *insn_ptr,
 	    if (regs[5] < countargv (prog_argv))
 	      {
 		/* Include the termination byte.  */
-		int i = strlen (prog_argv[regs[5]]) + 1;
-		regs[0] = sim_write (0, regs[6], prog_argv[regs[5]], i);
+		int len = strlen (prog_argv[regs[5]]) + 1;
+		regs[0] = sim_write (0, regs[6], prog_argv[regs[5]], len);
 	      }
 	    else
 	      regs[0] = -1;
@@ -1499,8 +1499,6 @@ get_loop_bounds (int rs, int re, unsigned char *memory, unsigned char *mem_end,
 static void *
 mcalloc (size_t nmemb, size_t size)
 {
-  void *page;
-
   if (nmemb != 1)
     size *= nmemb;
   return mmap (0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
@@ -1667,10 +1665,8 @@ dump_profile (void)
 {
   unsigned int minpc;
   unsigned int maxpc;
-  unsigned short *p;
   int i;
 
-  p = saved_state.asregs.profile_hist;
   minpc = 0;
   maxpc = (1 << sim_profile_size);
 

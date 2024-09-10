@@ -1,6 +1,6 @@
 /* Target-dependent code for the Fujitsu FR-V, for GDB, the GNU Debugger.
 
-   Copyright (C) 2002-2023 Free Software Foundation, Inc.
+   Copyright (C) 2002-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "inferior.h"
 #include "gdbcore.h"
 #include "arch-utils.h"
@@ -114,7 +114,7 @@ frv_fdpic_loadmap_addresses (struct gdbarch *gdbarch, CORE_ADDR *interp_addr,
     return -1;
   else
     {
-      struct regcache *regcache = get_current_regcache ();
+      regcache *regcache = get_thread_regcache (inferior_thread ());
 
       if (interp_addr != NULL)
 	{
@@ -510,7 +510,7 @@ is_argument_reg (int reg)
    prologue analysis.  */
 static CORE_ADDR
 frv_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
-		      frame_info_ptr this_frame,
+		      const frame_info_ptr &this_frame,
 		      struct frv_unwind_cache *info)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -1084,7 +1084,7 @@ frv_skip_main_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 
 
 static struct frv_unwind_cache *
-frv_frame_unwind_cache (frame_info_ptr this_frame,
+frv_frame_unwind_cache (const frame_info_ptr &this_frame,
 			 void **this_prologue_cache)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
@@ -1367,7 +1367,7 @@ frv_return_value (struct gdbarch *gdbarch, struct value *function,
    frame.  This will be used to create a new GDB frame struct.  */
 
 static void
-frv_frame_this_id (frame_info_ptr this_frame,
+frv_frame_this_id (const frame_info_ptr &this_frame,
 		    void **this_prologue_cache, struct frame_id *this_id)
 {
   struct frv_unwind_cache *info
@@ -1397,7 +1397,7 @@ frv_frame_this_id (frame_info_ptr this_frame,
 }
 
 static struct value *
-frv_frame_prev_register (frame_info_ptr this_frame,
+frv_frame_prev_register (const frame_info_ptr &this_frame,
 			 void **this_prologue_cache, int regnum)
 {
   struct frv_unwind_cache *info
@@ -1416,7 +1416,7 @@ static const struct frame_unwind frv_frame_unwind = {
 };
 
 static CORE_ADDR
-frv_frame_base_address (frame_info_ptr this_frame, void **this_cache)
+frv_frame_base_address (const frame_info_ptr &this_frame, void **this_cache)
 {
   struct frv_unwind_cache *info
     = frv_frame_unwind_cache (this_frame, this_cache);
@@ -1499,7 +1499,8 @@ frv_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_register_sim_regno (gdbarch, frv_register_sim_regno);
 
   set_gdbarch_pseudo_register_read (gdbarch, frv_pseudo_register_read);
-  set_gdbarch_pseudo_register_write (gdbarch, frv_pseudo_register_write);
+  set_gdbarch_deprecated_pseudo_register_write (gdbarch,
+						frv_pseudo_register_write);
 
   set_gdbarch_skip_prologue (gdbarch, frv_skip_prologue);
   set_gdbarch_skip_main_prologue (gdbarch, frv_skip_main_prologue);

@@ -21,6 +21,7 @@
 
 #include "dis-asm.h"
 #include "disasm-flags.h"
+#include "ui-out.h"
 
 struct gdbarch;
 struct ui_out;
@@ -385,7 +386,7 @@ extern int gdb_buffered_insn_length (struct gdbarch *gdbarch,
 
 /* Returns GDBARCH's disassembler options.  */
 
-extern char *get_disassembler_options (struct gdbarch *gdbarch);
+extern const char *get_disassembler_options (struct gdbarch *gdbarch);
 
 /* Sets the active gdbarch's disassembler options to OPTIONS.  */
 

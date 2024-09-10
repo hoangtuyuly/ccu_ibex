@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "python-internal.h"
 #include "charset.h"
 #include "objfiles.h"
@@ -184,7 +183,7 @@ objfpy_get_progspace (PyObject *self, void *closure)
   objfile_object *obj = (objfile_object *) self;
 
   if (obj->objfile)
-    return pspace_to_pspace_object (obj->objfile->pspace).release ();
+    return pspace_to_pspace_object (obj->objfile->pspace ()).release ();
 
   Py_RETURN_NONE;
 }
@@ -479,8 +478,9 @@ objfpy_lookup_global_symbol (PyObject *self, PyObject *args, PyObject *kw)
 
   try
     {
+      domain_search_flags flags = from_scripting_domain (domain);
       struct symbol *sym = lookup_global_symbol_from_objfile
-	(obj->objfile, GLOBAL_BLOCK, symbol_name, (domain_enum) domain).symbol;
+	(obj->objfile, GLOBAL_BLOCK, symbol_name, flags).symbol;
       if (sym == nullptr)
 	Py_RETURN_NONE;
 
@@ -513,8 +513,9 @@ objfpy_lookup_static_symbol (PyObject *self, PyObject *args, PyObject *kw)
 
   try
     {
+      domain_search_flags flags = from_scripting_domain (domain);
       struct symbol *sym = lookup_global_symbol_from_objfile
-	(obj->objfile, STATIC_BLOCK, symbol_name, (domain_enum) domain).symbol;
+	(obj->objfile, STATIC_BLOCK, symbol_name, flags).symbol;
       if (sym == nullptr)
 	Py_RETURN_NONE;
 

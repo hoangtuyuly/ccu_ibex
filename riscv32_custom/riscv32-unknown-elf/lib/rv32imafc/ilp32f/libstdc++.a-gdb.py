@@ -19,8 +19,8 @@ import gdb
 import os
 import os.path
 
-pythondir = '/Users/tuhoang/CFU_IBEX/riscv32_custom/share/gcc-13.2.0/python'
-libdir = '/Users/tuhoang/CFU_IBEX/riscv32_custom/riscv32-unknown-elf/lib/rv32imafc/ilp32f'
+pythondir = '/Users/tuhoang/CFU_IBEX/cfu_ibex/riscv32_custom/share/gcc-13.2.0/python'
+libdir = '/Users/tuhoang/CFU_IBEX/cfu_ibex/riscv32_custom/riscv32-unknown-elf/lib/rv32imafc/ilp32f'
 
 # This file might be loaded when there is no current objfile.  This
 # can happen if the user loads it manually.  In this case we don't

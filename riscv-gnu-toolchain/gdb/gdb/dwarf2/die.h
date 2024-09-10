@@ -1,6 +1,6 @@
 /* DWARF DIEs
 
-   Copyright (C) 2003-2023 Free Software Foundation, Inc.
+   Copyright (C) 2003-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,6 +22,7 @@
 
 #include "complaints.h"
 #include "dwarf2/attribute.h"
+#include "hashtab.h"
 
 /* This data structure holds a complete die structure.  */
 struct die_info
@@ -59,7 +60,7 @@ struct die_info
   /* Return the address base of the compile unit, which, if exists, is
      stored either at the attribute DW_AT_GNU_addr_base, or
      DW_AT_addr_base.  */
-  gdb::optional<ULONGEST> addr_base ()
+  std::optional<ULONGEST> addr_base ()
   {
     for (unsigned i = 0; i < num_attrs; ++i)
       if (attrs[i].name == DW_AT_addr_base
@@ -73,7 +74,7 @@ struct die_info
 	  complaint (_("address base attribute (offset %s) as wrong form"),
 		     sect_offset_str (sect_off));
 	}
-    return gdb::optional<ULONGEST> ();
+    return std::optional<ULONGEST> ();
   }
 
   /* Return the base address of the compile unit into the .debug_ranges section,

@@ -1,6 +1,6 @@
 /* Do various things to symbol tables (other than lookup), for GDB.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "event-top.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "bfd.h"
@@ -34,7 +34,7 @@
 #include <sys/stat.h>
 #include "dictionary.h"
 #include "typeprint.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "source.h"
 #include "readline/tilde.h"
 #include <cli/cli-style.h>
@@ -919,8 +919,7 @@ maintenance_expand_symtabs (const char *args, int from_tty)
 	 NULL,
 	 NULL,
 	 SEARCH_GLOBAL_BLOCK | SEARCH_STATIC_BLOCK,
-	 UNDEF_DOMAIN,
-	 ALL_DOMAIN);
+	 SEARCH_ALL_DOMAINS);
 }
 
 
@@ -973,13 +972,14 @@ maintenance_print_one_line_table (struct symtab *symtab, void *data)
       /* Leave space for 6 digits of index and line number.  After that the
 	 tables will just not format as well.  */
       struct ui_out *uiout = current_uiout;
-      ui_out_emit_table table_emitter (uiout, 6, -1, "line-table");
+      ui_out_emit_table table_emitter (uiout, 7, -1, "line-table");
       uiout->table_header (6, ui_left, "index", _("INDEX"));
       uiout->table_header (6, ui_left, "line", _("LINE"));
       uiout->table_header (18, ui_left, "rel-address", _("REL-ADDRESS"));
       uiout->table_header (18, ui_left, "unrel-address", _("UNREL-ADDRESS"));
       uiout->table_header (7, ui_left, "is-stmt", _("IS-STMT"));
       uiout->table_header (12, ui_left, "prologue-end", _("PROLOGUE-END"));
+      uiout->table_header (14, ui_left, "epilogue-begin", _("EPILOGUE-BEGIN"));
       uiout->table_body ();
 
       for (int i = 0; i < linetable->nitems; ++i)
@@ -999,6 +999,7 @@ maintenance_print_one_line_table (struct symtab *symtab, void *data)
 				  CORE_ADDR (item->unrelocated_pc ()));
 	  uiout->field_string ("is-stmt", item->is_stmt ? "Y" : "");
 	  uiout->field_string ("prologue-end", item->prologue_end ? "Y" : "");
+	  uiout->field_string ("epilogue-begin", item->epilogue_begin ? "Y" : "");
 	  uiout->text ("\n");
 	}
     }

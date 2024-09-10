@@ -1,5 +1,5 @@
 /* Multi-process/thread control defs for GDB, the GNU debugger.
-   Copyright (C) 1987-2023 Free Software Foundation, Inc.
+   Copyright (C) 1987-2024 Free Software Foundation, Inc.
    Contributed by Lynx Real-Time Systems, Inc.  Los Gatos, CA.
    
 
@@ -28,6 +28,7 @@ struct symtab;
 #include "ui-out.h"
 #include "btrace.h"
 #include "target/waitstatus.h"
+#include "target/target.h"
 #include "cli/cli-utils.h"
 #include "gdbsupport/refcounted-object.h"
 #include "gdbsupport/common-gdbthread.h"
@@ -35,6 +36,7 @@ struct symtab;
 #include "displaced-stepping.h"
 #include "gdbsupport/intrusive_list.h"
 #include "thread-fsm.h"
+#include "language.h"
 
 struct inferior;
 struct process_stratum_target;
@@ -171,6 +173,9 @@ struct thread_control_state
      command.  This is used to decide whether "set scheduler-locking
      step" behaves like "on" or "off".  */
   int stepping_command = 0;
+
+  /* True if the thread is evaluating a BP condition.  */
+  bool in_cond_eval = false;
 };
 
 /* Inferior thread specific part of `struct infcall_suspend_state'.  */
@@ -210,10 +215,10 @@ struct thread_suspend_state
 
      - If the thread is running, then this field has its value removed by
        calling stop_pc.reset() (see thread_info::set_executing()).
-       Attempting to read a gdb::optional with no value is undefined
+       Attempting to read a std::optional with no value is undefined
        behaviour and will trigger an assertion error when _GLIBCXX_DEBUG is
        defined, which should make error easier to track down.  */
-  gdb::optional<CORE_ADDR> stop_pc;
+  std::optional<CORE_ADDR> stop_pc;
 };
 
 /* Base class for target-specific thread data.  */
@@ -242,10 +247,11 @@ using private_thread_info_up = std::unique_ptr<private_thread_info>;
    strong reference, and is thus not accounted for in the thread's
    refcount.
 
-   The intrusive_list_node base links threads in a per-inferior list.  */
+   The intrusive_list_node base links threads in a per-inferior list.
+   We place it first in the inherit order to work around PR gcc/113599.  */
 
-class thread_info : public refcounted_object,
-		    public intrusive_list_node<thread_info>
+class thread_info : public intrusive_list_node<thread_info>,
+		    public refcounted_object
 {
 public:
   explicit thread_info (inferior *inf, ptid_t ptid);
@@ -473,6 +479,17 @@ public:
     m_thread_fsm = std::move (fsm);
   }
 
+  /* Record the thread options last set for this thread.  */
+
+  void set_thread_options (gdb_thread_options thread_options);
+
+  /* Get the thread options last set for this thread.  */
+
+  gdb_thread_options thread_options () const
+  {
+    return m_thread_options;
+  }
+
   int current_line = 0;
   struct symtab *current_symtab = NULL;
 
@@ -580,6 +597,10 @@ private:
      left to do for the thread's execution command after the target
      stops.  Several execution commands use it.  */
   std::unique_ptr<struct thread_fsm> m_thread_fsm;
+
+  /* The thread options as last set with a call to
+     set_thread_options.  */
+  gdb_thread_options m_thread_options;
 };
 
 using thread_info_resumed_with_pending_wait_status_node
@@ -645,7 +666,7 @@ extern void delete_thread_silent (struct thread_info *thread);
    available.  If SILENT, then don't inform the CLI about the
    exit.  */
 extern void set_thread_exited (thread_info *tp,
-			       gdb::optional<ULONGEST> exit_code = {},
+			       std::optional<ULONGEST> exit_code = {},
 			       bool silent = false);
 
 /* Delete a step_resume_breakpoint from the thread database.  */
@@ -888,7 +909,7 @@ private:
   /* Save/restore the language as well, because selecting a frame
      changes the current language to the frame's language if "set
      language auto".  */
-  enum language m_lang;
+  scoped_restore_current_language m_lang;
 };
 
 /* Returns a pointer into the thread_info corresponding to
@@ -1042,7 +1063,7 @@ extern bool switch_to_thread_if_alive (thread_info *thr);
    exception if !FLAGS.SILENT and !FLAGS.CONT and CMD fails.  */
 
 extern void thread_try_catch_cmd (thread_info *thr,
-				  gdb::optional<int> ada_task,
+				  std::optional<int> ada_task,
 				  const char *cmd, int from_tty,
 				  const qcs_flags &flags);
 

@@ -1,6 +1,6 @@
 /* Rust expression parsing for GDB, the GNU debugger.
 
-   Copyright (C) 2016-2023 Free Software Foundation, Inc.
+   Copyright (C) 2016-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 
 #include "block.h"
 #include "charset.h"
@@ -30,6 +29,7 @@
 #include "value.h"
 #include "gdbarch.h"
 #include "rust-exp.h"
+#include "inferior.h"
 
 using namespace expr;
 
@@ -307,7 +307,7 @@ struct rust_parser
   void update_innermost_block (struct block_symbol sym);
   struct block_symbol lookup_symbol (const char *name,
 				     const struct block *block,
-				     const domain_enum domain);
+				     const domain_search_flags domain);
   struct type *rust_lookup_type (const char *name);
 
   /* Clear some state.  This is only used for testing.  */
@@ -430,7 +430,7 @@ munge_name_and_block (const char **name, const struct block **block)
 
 struct block_symbol
 rust_parser::lookup_symbol (const char *name, const struct block *block,
-			    const domain_enum domain)
+			    const domain_search_flags domain)
 {
   struct block_symbol result;
 
@@ -453,7 +453,7 @@ rust_parser::rust_lookup_type (const char *name)
   const struct block *block = pstate->expression_context_block;
   munge_name_and_block (&name, &block);
 
-  result = ::lookup_symbol (name, block, STRUCT_DOMAIN, NULL);
+  result = ::lookup_symbol (name, block, SEARCH_TYPE_DOMAIN, nullptr);
   if (result.symbol != NULL)
     {
       update_innermost_block (result);
@@ -1220,7 +1220,7 @@ rust_parser::name_to_operation (const std::string &name)
 {
   struct block_symbol sym = lookup_symbol (name.c_str (),
 					   pstate->expression_context_block,
-					   VAR_DOMAIN);
+					   SEARCH_VFT);
   if (sym.symbol != nullptr && sym.symbol->aclass () != LOC_TYPEDEF)
     return make_operation<var_value_operation> (sym);
 
@@ -1385,7 +1385,7 @@ rust_parser::parse_binop (bool required)
 
 	case COMPOUND_ASSIGN:
 	  compound_assign_op = current_opcode;
-	  /* FALLTHROUGH */
+	  [[fallthrough]];
 	case '=':
 	  precedence = ASSIGN_PREC;
 	  lex ();
@@ -1830,7 +1830,7 @@ rust_parser::parse_path (bool for_expr)
       if (current_token != COLONCOLON)
 	return "self";
       lex ();
-      /* FALLTHROUGH */
+      [[fallthrough]];
     case KW_SUPER:
       while (current_token == KW_SUPER)
 	{
@@ -2309,8 +2309,8 @@ static void
 rust_lex_tests (void)
 {
   /* Set up dummy "parser", so that rust_type works.  */
-  struct parser_state ps (language_def (language_rust), target_gdbarch (),
-			  nullptr, 0, 0, nullptr, 0, nullptr);
+  parser_state ps (language_def (language_rust), current_inferior ()->arch (),
+		   nullptr, 0, 0, nullptr, 0, nullptr);
   rust_parser parser (&ps);
 
   rust_lex_test_one (&parser, "", 0);

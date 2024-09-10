@@ -1,6 +1,6 @@
 /* DWARF 2 debugging format support for GDB.
 
-   Copyright (C) 1994-2023 Free Software Foundation, Inc.
+   Copyright (C) 1994-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,7 +23,6 @@
 #include <queue>
 #include <unordered_map>
 #include "dwarf2/comp-unit-head.h"
-#include "dwarf2/cooked-index.h"
 #include "dwarf2/file-and-dir.h"
 #include "dwarf2/index-cache.h"
 #include "dwarf2/mapped-index.h"
@@ -183,6 +182,15 @@ private:
   /* The language of this CU.  */
   std::atomic<packed<language, LANGUAGE_BYTES>> m_lang {language_unknown};
 
+  /* The original DW_LANG_* value of the CU, as provided to us by
+     DW_AT_language.  It is interesting to keep this value around in cases where
+     we can't use the values from the language enum, as the mapping to them is
+     lossy, and, while that is usually fine, things like the index have an
+     understandable bias towards not exposing internal GDB structures to the
+     outside world, and so prefer to use DWARF constants in their stead. */
+  std::atomic<packed<dwarf_source_language, 2>> m_dw_lang
+       { (dwarf_source_language) 0 };
+
 public:
   /* True if this CU has been scanned by the indexer; false if
      not.  */
@@ -219,10 +227,7 @@ public:
      NOTE: This points into dwarf2_per_objfile->per_bfd->quick_file_names_table.  */
   struct quick_file_names *file_names = nullptr;
 
-  /* The CUs we import using DW_TAG_imported_unit.  This is filled in
-     while reading psymtabs, used to compute the psymtab dependencies,
-     and then cleared.  Then it is filled in again while reading full
-     symbols, and only deleted when the objfile is destroyed.
+  /* The CUs we import using DW_TAG_imported_unit.
 
      This is also used to work around a difference between the way gold
      generates .gdb_index version <=7 and the way gdb does.  Arguably this
@@ -236,45 +241,8 @@ public:
      .gdb_index version <=7 this also records the TUs that the CU referred
      to.  Concurrently with this change gdb was modified to emit version 8
      indices so we only pay a price for gold generated indices.
-     http://sourceware.org/bugzilla/show_bug.cgi?id=15021.
-
-     This currently needs to be a public member due to how
-     dwarf2_per_cu_data is allocated and used.  Ideally in future things
-     could be refactored to make this private.  Until then please try to
-     avoid direct access to this member, and instead use the helper
-     functions above.  */
-  std::vector <dwarf2_per_cu_data *> *imported_symtabs = nullptr;
-
-  /* Return true of IMPORTED_SYMTABS is empty or not yet allocated.  */
-  bool imported_symtabs_empty () const
-  {
-    return (imported_symtabs == nullptr || imported_symtabs->empty ());
-  }
-
-  /* Push P to the back of IMPORTED_SYMTABS, allocated IMPORTED_SYMTABS
-     first if required.  */
-  void imported_symtabs_push (dwarf2_per_cu_data *p)
-  {
-    if (imported_symtabs == nullptr)
-      imported_symtabs = new std::vector <dwarf2_per_cu_data *>;
-    imported_symtabs->push_back (p);
-  }
-
-  /* Return the size of IMPORTED_SYMTABS if it is allocated, otherwise
-     return 0.  */
-  size_t imported_symtabs_size () const
-  {
-    if (imported_symtabs == nullptr)
-      return 0;
-    return imported_symtabs->size ();
-  }
-
-  /* Delete IMPORTED_SYMTABS and set the pointer back to nullptr.  */
-  void imported_symtabs_free ()
-  {
-    delete imported_symtabs;
-    imported_symtabs = nullptr;
-  }
+     http://sourceware.org/bugzilla/show_bug.cgi?id=15021.  */
+  std::vector<dwarf2_per_cu_data *> imported_symtabs;
 
   /* Get the header of this per_cu, reading it if necessary.  */
   const comp_unit_head *get_header () const;
@@ -357,20 +325,16 @@ public:
     return l;
   }
 
-  void set_lang (enum language lang)
-  {
-    if (unit_type () == DW_UT_partial)
-      return;
-    /* Set if not set already.  */
-    packed<language, LANGUAGE_BYTES> nope = language_unknown;
-    if (m_lang.compare_exchange_strong (nope, lang))
-      return;
-    /* If already set, verify that it's the same value.  */
-    nope = lang;
-    if (m_lang.compare_exchange_strong (nope, lang))
-      return;
-    gdb_assert_not_reached ();
-  }
+  /* Return the language of this CU, as a DWARF DW_LANG_* value.  This
+     may be 0 in some situations.  */
+  dwarf_source_language dw_lang () const
+  { return m_dw_lang.load (); }
+
+  /* Set the language of this CU.  LANG is the language in gdb terms,
+     and DW_LANG is the language as a DW_LANG_* value.  These may
+     differ, as DW_LANG can be 0 for included units, whereas in this
+     situation LANG would be set by the importing CU.  */
+  void set_lang (enum language lang, dwarf_source_language dw_lang);
 
   /* Free any cached file names.  */
   void free_cached_file_names ();
@@ -436,6 +400,20 @@ struct dwarf2_per_bfd
     return this->all_units[index].get ();
   }
 
+  /* Return the CU given its index in the CU table in the index.  */
+  dwarf2_per_cu_data *get_index_cu (int index) const
+  {
+    if (this->all_comp_units_index_cus.empty ())
+      return get_cu (index);
+
+    return this->all_comp_units_index_cus[index];
+  }
+
+  dwarf2_per_cu_data *get_index_tu (int index) const
+  {
+    return this->all_comp_units_index_tus[index];
+  }
+
   /* A convenience function to allocate a dwarf2_per_cu_data.  The
      returned object has its "index" field set properly.  The object
      is allocated on the dwarf2_per_bfd obstack.  */
@@ -496,6 +474,9 @@ public:
   gdb::array_view<dwarf2_per_cu_data_up> all_comp_units;
   gdb::array_view<dwarf2_per_cu_data_up> all_type_units;
 
+  std::vector<dwarf2_per_cu_data*> all_comp_units_index_cus;
+  std::vector<dwarf2_per_cu_data*> all_comp_units_index_tus;
+
   /* Table of struct type_unit_group objects.
      The hash key is the DW_AT_stmt_list value.  */
   htab_up type_unit_groups;
@@ -520,7 +501,7 @@ public:
 
   /* The shared '.dwz' file, if one exists.  This is used when the
      original data was compressed using 'dwz -m'.  */
-  std::unique_ptr<struct dwz_file> dwz_file;
+  std::optional<std::unique_ptr<struct dwz_file>> dwz_file;
 
   /* Whether copy relocations are supported by this object format.  */
   bool can_copy;
@@ -555,7 +536,7 @@ public:
     abstract_to_concrete;
 
   /* The address map that is used by the DWARF index code.  */
-  struct addrmap *index_addrmap = nullptr;
+  addrmap_fixed *index_addrmap = nullptr;
 };
 
 /* An iterator for all_units that is based on index.  This
@@ -711,10 +692,6 @@ struct dwarf2_per_objfile
      any that are too old.  */
   void age_comp_units ();
 
-  /* Apply any needed adjustments to ADDR, returning an adjusted but
-     still unrelocated address.  */
-  unrelocated_addr adjust (unrelocated_addr addr);
-
   /* Apply any needed adjustments to ADDR and then relocate the
      address according to the objfile's section offsets, returning a
      relocated address.  */
@@ -739,7 +716,7 @@ struct dwarf2_per_objfile
   dwarf2_cu *sym_cu = nullptr;
 
   /* CUs that are queued to be read.  */
-  gdb::optional<std::queue<dwarf2_queue_item>> queue;
+  std::optional<std::queue<dwarf2_queue_item>> queue;
 
 private:
   /* Hold the corresponding compunit_symtab for each CU or TU.  This
@@ -763,6 +740,10 @@ private:
   std::unordered_map<dwarf2_per_cu_data *,
 		     std::unique_ptr<dwarf2_cu>> m_dwarf2_cus;
 };
+
+/* Converts DWARF language names to GDB language names.  */
+
+enum language dwarf_lang_to_enum_language (unsigned int lang);
 
 /* Get the dwarf2_per_objfile associated to OBJFILE.  */
 
@@ -854,7 +835,7 @@ struct dwarf2_base_index_functions : public quick_symbol_functions
 
   enum language lookup_global_symbol_language (struct objfile *objfile,
 					       const char *name,
-					       domain_enum domain,
+					       domain_search_flags domain,
 					       bool *symbol_found_p) override
   {
     *symbol_found_p = false;
@@ -868,12 +849,12 @@ struct dwarf2_base_index_functions : public quick_symbol_functions
   /* A helper function that finds the per-cu object from an "adjusted"
      PC -- a PC with the base text offset removed.  */
   virtual dwarf2_per_cu_data *find_per_cu (dwarf2_per_bfd *per_bfd,
-					   CORE_ADDR adjusted_pc);
+					   unrelocated_addr adjusted_pc);
 
   struct compunit_symtab *find_pc_sect_compunit_symtab
     (struct objfile *objfile, struct bound_minimal_symbol msymbol,
      CORE_ADDR pc, struct obj_section *section, int warn_if_readin)
-       override final;
+       override;
 
   struct compunit_symtab *find_compunit_symtab_by_address
     (struct objfile *objfile, CORE_ADDR address) override
@@ -939,16 +920,12 @@ extern dwarf2_per_cu_data_up create_cu_from_index_list
 
 extern void finalize_all_units (dwarf2_per_bfd *per_bfd);
 
+/* Create a list of all compilation units in OBJFILE.  */
+
+extern void create_all_units (dwarf2_per_objfile *per_objfile);
+
 /* Create a quick_file_names hash table.  */
 
 extern htab_up create_quick_file_names_table (unsigned int nr_initial_entries);
-
-/* Read the address map data from DWARF-5 .debug_aranges, and use it
-   to populate given addrmap.  Returns true on success, false on
-   failure.  */
-
-extern bool read_addrmap_from_aranges (dwarf2_per_objfile *per_objfile,
-				       dwarf2_section_info *section,
-				       addrmap *mutable_map);
 
 #endif /* DWARF2READ_H */

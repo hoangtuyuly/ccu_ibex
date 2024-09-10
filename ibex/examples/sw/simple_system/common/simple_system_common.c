@@ -183,3 +183,22 @@ void simple_timer_handler(void) {
   increment_timecmp(time_increment);
   time_elapsed++;
 }
+
+int putint(int num) {
+  if (num == 0) {
+      putchar('0'+ 0);
+      return;
+  }
+  
+  if (num < 0) {
+    putchar('-');
+    num = -num;
+  }
+
+  while(num) {
+      putchar('0' + (num % 10));
+      num /= 10;
+  }
+
+  return 0;
+}

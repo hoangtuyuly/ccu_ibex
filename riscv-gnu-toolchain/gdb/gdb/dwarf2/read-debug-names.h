@@ -1,6 +1,6 @@
 /* Reading code for .debug_names
 
-   Copyright (C) 2023 Free Software Foundation, Inc.
+   Copyright (C) 2023-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,6 +21,8 @@
 #define DWARF2_READ_DEBUG_NAMES_H
 
 struct dwarf2_per_objfile;
+
+extern const gdb_byte dwarf5_augmentation[8];
 
 /* Read .debug_names.  If everything went ok, initialize the "quick"
    elements of all the CUs and return true.  Otherwise, return false.  */

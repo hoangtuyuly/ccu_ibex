@@ -1,4 +1,4 @@
-/* Copyright (C) 2021-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2021-2024 Free Software Foundation, Inc.
    Contributed by Oracle.
 
    This file is part of GNU Binutils.
@@ -59,12 +59,6 @@ struct frame
   unsigned long fr_savpc;
 };
 #endif
-
-/* Set the debug trace level */
-#define DBG_LT0 0
-#define DBG_LT1	1
-#define DBG_LT2	2
-#define DBG_LT3	3
 
 int (*__collector_VM_ReadByteInstruction)(unsigned char *) = NULL;
 #define VM_NO_ACCESS        (-1)
@@ -231,6 +225,10 @@ memory_error_func (int status ATTRIBUTE_UNUSED, bfd_vma addr ATTRIBUTE_UNUSED,
 	}
 
 #elif ARCH(Aarch64)
+#if defined(__MUSL_LIBC)
+typedef uint64_t __u64;
+#endif
+
 #define FILL_CONTEXT(context) \
     { CALL_UTIL (getcontext) (context);  \
       context->uc_mcontext.sp = (__u64) __builtin_frame_address(0); \

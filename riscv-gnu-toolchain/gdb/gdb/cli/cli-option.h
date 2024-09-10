@@ -1,6 +1,6 @@
 /* CLI options framework, for GDB.
 
-   Copyright (C) 2017-2023 Free Software Foundation, Inc.
+   Copyright (C) 2017-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,7 +20,7 @@
 #ifndef CLI_OPTION_H
 #define CLI_OPTION_H 1
 
-#include "gdbsupport/gdb_optional.h"
+#include <optional>
 #include "gdbsupport/array-view.h"
 #include "completer.h"
 #include <string>
@@ -304,7 +304,7 @@ struct string_option_def : option_def
 		  show_cmd_cb_,
 		  set_doc_, show_doc_, help_doc_)
   {
-    var_address.enumeration = detail::get_var_address<const char *, Context>;
+    var_address.string = detail::get_var_address<std::string, Context>;
   }
 };
 

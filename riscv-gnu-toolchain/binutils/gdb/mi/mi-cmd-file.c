@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "mi-cmds.h"
 #include "mi-getopt.h"
 #include "mi-interp.h"
@@ -36,7 +35,6 @@ void
 mi_cmd_file_list_exec_source_file (const char *command,
 				   const char *const *argv, int argc)
 {
-  struct symtab_and_line st;
   struct ui_out *uiout = current_uiout;
   
   if (!mi_valid_noargs ("-file-list-exec-source-file", argc, argv))
@@ -44,7 +42,8 @@ mi_cmd_file_list_exec_source_file (const char *command,
 
   /* Set the default file and line, also get them.  */
   set_default_source_symtab_and_line ();
-  st = get_current_source_symtab_and_line ();
+  symtab_and_line st
+    = get_current_source_symtab_and_line (current_program_space);
 
   /* We should always get a symtab.  Apparently, filename does not
      need to be tested for NULL.  The documentation in symtab.h
@@ -163,7 +162,7 @@ mi_cmd_file_list_shared_libraries (const char *command,
   /* Print the table header.  */
   ui_out_emit_list list_emitter (uiout, "shared-libraries");
 
-  for (const shobj &so : current_program_space->solibs ())
+  for (const solib &so : current_program_space->solibs ())
     {
       if (so.so_name.empty ())
 	continue;

@@ -1,6 +1,6 @@
 /* Header file for GDB command decoding library.
 
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2024 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -233,7 +233,7 @@ struct cmd_list_element
   void (*destroyer) (struct cmd_list_element *self, void *context) = nullptr;
 
   /* Setting affected by "set" and "show".  Not used if type is not_set_cmd.  */
-  gdb::optional<setting> var;
+  std::optional<setting> var;
 
   /* Pointer to NULL terminated list of enumerated values (like
      argv).  */

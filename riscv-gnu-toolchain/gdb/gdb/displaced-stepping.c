@@ -1,6 +1,6 @@
 /* Displaced stepping related things.
 
-   Copyright (C) 2020-2023 Free Software Foundation, Inc.
+   Copyright (C) 2020-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "displaced-stepping.h"
 
 #include "cli/cli-cmds.h"
@@ -53,7 +52,6 @@ displaced_step_buffers::prepare (thread_info *thread, CORE_ADDR &displaced_pc)
     gdb_assert (buf.current_thread != thread);
 
   regcache *regcache = get_thread_regcache (thread);
-  const address_space *aspace = regcache->aspace ();
   gdbarch *arch = regcache->arch ();
   ULONGEST len = gdbarch_displaced_step_buffer_length (arch);
 
@@ -64,7 +62,8 @@ displaced_step_buffers::prepare (thread_info *thread, CORE_ADDR &displaced_pc)
 
   for (displaced_step_buffer &candidate : m_buffers)
     {
-      bool bp_in_range = breakpoint_in_range_p (aspace, candidate.addr, len);
+      bool bp_in_range = breakpoint_in_range_p (thread->inf->aspace.get (),
+						candidate.addr, len);
       bool is_free = candidate.current_thread == nullptr;
 
       if (!bp_in_range)
@@ -257,6 +256,13 @@ displaced_step_buffers::finish (gdbarch *arch, thread_info *thread,
   displaced_debug_printf ("restored %s %s",
 			  thread->ptid.to_string ().c_str (),
 			  paddress (arch, buffer->addr));
+
+  /* If the thread exited while stepping, we are done.  The code above
+     made the buffer available again, and we restored the bytes in the
+     buffer.  We don't want to run the fixup: since the thread is now
+     dead there's nothing to adjust.  */
+  if (status.kind () == TARGET_WAITKIND_THREAD_EXITED)
+    return DISPLACED_STEP_FINISH_STATUS_OK;
 
   regcache *rc = get_thread_regcache (thread);
 

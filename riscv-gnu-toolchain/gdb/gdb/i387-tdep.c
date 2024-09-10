@@ -1,6 +1,6 @@
 /* Intel 387 floating point stuff.
 
-   Copyright (C) 1988-2023 Free Software Foundation, Inc.
+   Copyright (C) 1988-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "frame.h"
 #include "gdbcore.h"
 #include "inferior.h"
@@ -202,7 +202,7 @@ print_i387_control_word (int control_p,
 
 void
 i387_print_float_info (struct gdbarch *gdbarch, struct ui_file *file,
-		       frame_info_ptr frame, const char *args)
+		       const frame_info_ptr &frame, const char *args)
 {
   i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
   ULONGEST fctrl;
@@ -345,7 +345,7 @@ i387_convert_register_p (struct gdbarch *gdbarch, int regnum,
    return its contents in TO.  */
 
 int
-i387_register_to_value (frame_info_ptr frame, int regnum,
+i387_register_to_value (const frame_info_ptr &frame, int regnum,
 			struct type *type, gdb_byte *to,
 			int *optimizedp, int *unavailablep)
 {
@@ -364,11 +364,11 @@ i387_register_to_value (frame_info_ptr frame, int regnum,
     }
 
   /* Convert to TYPE.  */
-  if (!get_frame_register_bytes (frame, regnum, 0,
-				 gdb::make_array_view (from,
-						       register_size (gdbarch,
-								      regnum)),
-				 optimizedp, unavailablep))
+  auto from_view
+    = gdb::make_array_view (from, register_size (gdbarch, regnum));
+  frame_info_ptr next_frame = get_next_frame_sentinel_okay (frame);
+  if (!get_frame_register_bytes (next_frame, regnum, 0, from_view, optimizedp,
+				 unavailablep))
     return 0;
 
   target_float_convert (from, i387_ext_type (gdbarch), to, type);
@@ -380,7 +380,7 @@ i387_register_to_value (frame_info_ptr frame, int regnum,
    REGNUM in frame FRAME.  */
 
 void
-i387_value_to_register (frame_info_ptr frame, int regnum,
+i387_value_to_register (const frame_info_ptr &frame, int regnum,
 			struct type *type, const gdb_byte *from)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
@@ -397,8 +397,10 @@ i387_value_to_register (frame_info_ptr frame, int regnum,
     }
 
   /* Convert from TYPE.  */
-  target_float_convert (from, type, to, i387_ext_type (gdbarch));
-  put_frame_register (frame, regnum, to);
+  struct type *to_type = i387_ext_type (gdbarch);
+  target_float_convert (from, type, to, to_type);
+  auto to_view = gdb::make_array_view (to, to_type->length ());
+  put_frame_register (get_next_frame_sentinel_okay (frame), regnum, to_view);
 }
 
 

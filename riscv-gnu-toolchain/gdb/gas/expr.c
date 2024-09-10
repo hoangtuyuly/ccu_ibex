@@ -1,5 +1,5 @@
 /* expr.c -operands, expressions-
-   Copyright (C) 1987-2023 Free Software Foundation, Inc.
+   Copyright (C) 1987-2024 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -279,12 +279,11 @@ integer_constant (int radix, expressionS *expressionP)
   char c;
   valueT number;	/* Offset or (absolute) value.  */
   short int digit;	/* Value of next digit in current radix.  */
-  short int maxdig = 0;	/* Highest permitted digit value.  */
   int too_many_digits = 0;	/* If we see >= this number of.  */
   char *name;		/* Points to name of symbol.  */
   symbolS *symbolP;	/* Points to symbol.  */
 
-  int small;			/* True if fits in 32 bits.  */
+  bool small;		/* True if fits in 32 bits (64 bits with BFD64).  */
 
   /* May be bignum, or may fit in 32 bits.  */
   /* Most numbers fit into 32 bits, and we want this case to be fast.
@@ -365,26 +364,23 @@ integer_constant (int radix, expressionS *expressionP)
   switch (radix)
     {
     case 2:
-      maxdig = 2;
       too_many_digits = valuesize + 1;
       break;
     case 8:
-      maxdig = radix = 8;
       too_many_digits = (valuesize + 2) / 3 + 1;
       break;
     case 16:
-      maxdig = radix = 16;
       too_many_digits = (valuesize + 3) / 4 + 1;
       break;
     case 10:
-      maxdig = radix = 10;
       too_many_digits = (valuesize + 11) / 4; /* Very rough.  */
+      break;
     }
 #undef valuesize
   start = input_line_pointer;
   c = *input_line_pointer++;
   for (number = 0;
-       (digit = hex_value (c)) < maxdig;
+       (digit = hex_value (c)) < radix;
        c = *input_line_pointer++)
     {
       number = number * radix + digit;
@@ -411,7 +407,7 @@ integer_constant (int radix, expressionS *expressionP)
 	  int ndigit = 0;
 	  number = 0;
 	  for (c = *input_line_pointer++;
-	       (digit = hex_value (c)) < maxdig;
+	       (digit = hex_value (c)) < radix;
 	       c = *(input_line_pointer++))
 	    {
 	      number = number * radix + digit;
@@ -487,7 +483,7 @@ integer_constant (int radix, expressionS *expressionP)
       generic_bignum[3] = 0;
       input_line_pointer = start;	/* -> 1st digit.  */
       c = *input_line_pointer++;
-      for (; (carry = hex_value (c)) < maxdig; c = *input_line_pointer++)
+      for (; (carry = hex_value (c)) < radix; c = *input_line_pointer++)
 	{
 	  for (pointer = generic_bignum; pointer <= leader; pointer++)
 	    {
@@ -538,27 +534,39 @@ integer_constant (int radix, expressionS *expressionP)
 #ifndef tc_allow_U_suffix
 #define tc_allow_U_suffix 1
 #endif
+  bool u_seen = !tc_allow_U_suffix;
   /* PR 19910: Look for, and ignore, a U suffix to the number.  */
-  if (tc_allow_U_suffix && (c == 'U' || c == 'u'))
-    c = * input_line_pointer++;
+  if (!u_seen && (c == 'U' || c == 'u'))
+    {
+      c = *input_line_pointer++;
+      u_seen = true;
+    }
 
 #ifndef tc_allow_L_suffix
 #define tc_allow_L_suffix 1
 #endif
+  bool l_seen = !tc_allow_L_suffix;
   /* PR 20732: Look for, and ignore, a L or LL suffix to the number.  */
-  if (tc_allow_L_suffix)
-    while (c == 'L' || c == 'l')
+  if (tc_allow_L_suffix && (c == 'L' || c == 'l'))
+    {
       c = * input_line_pointer++;
+      l_seen = true;
+      if (c == 'L' || c == 'l')
+	c = *input_line_pointer++;
+      if (!u_seen && (c == 'U' || c == 'u'))
+	c = *input_line_pointer++;
+    }
 
   if (small)
     {
-      /* Here with number, in correct radix. c is the next char.
-	 Note that unlike un*x, we allow "011f" "0x9f" to both mean
-	 the same as the (conventional) "9f".
-	 This is simply easier than checking for strict canonical
-	 form.  Syntax sux!  */
+      /* Here with number, in correct radix. c is the next char.  */
+      bool maybe_label = suffix == NULL
+			 && (!tc_allow_U_suffix || !u_seen)
+			 && (!tc_allow_L_suffix || !l_seen)
+			 && (radix == 10 ||
+			     (radix == 8 && input_line_pointer == start + 1));
 
-      if (LOCAL_LABELS_FB && c == 'b')
+      if (LOCAL_LABELS_FB && c == 'b' && maybe_label)
 	{
 	  /* Backward ref to local label.
 	     Because it is backward, expect it to be defined.  */
@@ -584,7 +592,7 @@ integer_constant (int radix, expressionS *expressionP)
 
 	  expressionP->X_add_number = 0;
 	}			/* case 'b' */
-      else if (LOCAL_LABELS_FB && c == 'f')
+      else if (LOCAL_LABELS_FB && c == 'f' && maybe_label)
 	{
 	  /* Forward reference.  Expect symbol to be undefined or
 	     unknown.  undefined: seen it before.  unknown: never seen
@@ -600,7 +608,7 @@ integer_constant (int radix, expressionS *expressionP)
 	  expressionP->X_add_symbol = symbolP;
 	  expressionP->X_add_number = 0;
 	}			/* case 'f' */
-      else if (LOCAL_LABELS_DOLLAR && c == '$')
+      else if (LOCAL_LABELS_DOLLAR && c == '$' && maybe_label)
 	{
 	  /* If the dollar label is *currently* defined, then this is just
 	     another reference to it.  If it is not *currently* defined,
@@ -888,6 +896,19 @@ operand (expressionS *expressionP, enum expr_mode mode)
 	    input_line_pointer++;
 	  goto default_case;
 
+	case 'l':
+	case 'L':
+	  /* Accept an L suffix to the zero.  */
+	  if (tc_allow_L_suffix)
+	    goto numeric;
+	  goto default_case;
+
+	case 'u':
+	case 'U':
+	  /* Accept a U suffix to the zero.  */
+	  if (!tc_allow_U_suffix)
+	    goto default_case;
+	  /* Fall through.  */
 	case '0':
 	case '1':
 	case '2':
@@ -896,6 +917,7 @@ operand (expressionS *expressionP, enum expr_mode mode)
 	case '5':
 	case '6':
 	case '7':
+	numeric:
 	  integer_constant ((flag_m68k_mri || NUMBERS_WITH_SUFFIX)
 			    ? 0 : 8,
 			    expressionP);

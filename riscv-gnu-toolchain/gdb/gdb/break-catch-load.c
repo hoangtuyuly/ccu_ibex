@@ -1,6 +1,6 @@
 /* Everything about load/unload catchpoints, for GDB.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 
 #include "annotate.h"
 #include "arch-utils.h"
@@ -117,10 +116,10 @@ solib_catchpoint::check_status (struct bpstat *bs)
 {
   if (is_load)
     {
-      for (so_list *iter : current_program_space->added_solibs)
+      for (solib *iter : current_program_space->added_solibs)
 	{
 	  if (!regex
-	      || compiled->exec (iter->so_name, 0, NULL, 0) == 0)
+	      || compiled->exec (iter->so_name.c_str (), 0, nullptr, 0) == 0)
 	    return;
 	}
     }
@@ -230,7 +229,7 @@ add_solib_catchpoint (const char *arg, bool is_load, bool is_temp, bool enabled)
   if (*arg == '\0')
     arg = nullptr;
 
-  auto c = gdb::make_unique<solib_catchpoint> (gdbarch, is_temp, nullptr,
+  auto c = std::make_unique<solib_catchpoint> (gdbarch, is_temp, nullptr,
 					       is_load, arg);
 
   c->enable_state = enabled ? bp_enabled : bp_disabled;

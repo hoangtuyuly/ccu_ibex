@@ -1,5 +1,5 @@
 /* BFD back-end for s-record objects.
-   Copyright (C) 1990-2023 Free Software Foundation, Inc.
+   Copyright (C) 1990-2024 Free Software Foundation, Inc.
    Written by Steve Chamberlain of Cygnus Support <sac@cygnus.com>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -1257,7 +1257,6 @@ srec_print_symbol (bfd *abfd,
 #define srec_bfd_make_debug_symbol		  _bfd_nosymbols_bfd_make_debug_symbol
 #define srec_read_minisymbols			  _bfd_generic_read_minisymbols
 #define srec_minisymbol_to_symbol		  _bfd_generic_minisymbol_to_symbol
-#define srec_get_section_contents_in_window	  _bfd_generic_get_section_contents_in_window
 #define srec_bfd_get_relocated_section_contents	  bfd_generic_get_relocated_section_contents
 #define srec_bfd_relax_section			  bfd_generic_relax_section
 #define srec_bfd_gc_sections			  bfd_generic_gc_sections

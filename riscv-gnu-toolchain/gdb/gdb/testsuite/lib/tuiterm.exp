@@ -1,4 +1,4 @@
-# Copyright 2019-2023 Free Software Foundation, Inc.
+# Copyright 2019-2024 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -1099,6 +1099,21 @@ namespace eval Term {
 	    pass $test_name
 	} else {
 	    fail "$test_name ($why)"
+	}
+    }
+
+    # Wait until a box appears at the given coordinates.
+    proc wait_for_box {test_name x y width height} {
+	while 1 {
+	    if { [accept_gdb_output] == 0 } {
+		return 0
+	    }
+
+	    set why [_check_box $x $y $width $height]
+	    if {$why == ""} {
+		pass $test_name
+		break
+	    }
 	}
     }
 

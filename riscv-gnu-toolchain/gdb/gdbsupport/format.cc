@@ -1,6 +1,6 @@
 /* Parse a printf-style format string.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "common-defs.h"
 #include "format.h"
 
 format_pieces::format_pieces (const char **arg, bool gdb_extensions,
@@ -257,14 +256,14 @@ format_pieces::format_pieces (const char **arg, bool gdb_extensions,
 	  case 'u':
 	    if (seen_hash)
 	      bad = 1;
-	    /* FALLTHROUGH */
+	    [[fallthrough]];
 
 	  case 'o':
 	  case 'x':
 	  case 'X':
 	    if (seen_space || seen_plus)
 	      bad = 1;
-	  /* FALLTHROUGH */
+	  [[fallthrough]];
 
 	  case 'd':
 	  case 'i':

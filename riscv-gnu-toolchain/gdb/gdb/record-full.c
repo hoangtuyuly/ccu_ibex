@@ -1,6 +1,6 @@
 /* Process record and replay target for GDB, the GNU debugger.
 
-   Copyright (C) 2013-2023 Free Software Foundation, Inc.
+   Copyright (C) 2013-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,8 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
-#include "gdbcmd.h"
+#include "extract-store-integer.h"
+#include "cli/cli-cmds.h"
 #include "regcache.h"
 #include "gdbthread.h"
 #include "inferior.h"
@@ -39,6 +39,7 @@
 #include "gdbsupport/gdb_unlinker.h"
 #include "gdbsupport/byte-vector.h"
 #include "async-event.h"
+#include "top.h"
 #include "valprint.h"
 #include "interps.h"
 
@@ -173,7 +174,7 @@ struct record_full_core_buf_entry
 
 /* Record buf with core target.  */
 static detached_regcache *record_full_core_regbuf = NULL;
-static target_section_table record_full_core_sections;
+static std::vector<target_section> record_full_core_sections;
 static struct record_full_core_buf_entry *record_full_core_buf_list = NULL;
 
 /* The following variables are used for managing the linked list that
@@ -640,14 +641,14 @@ record_full_arch_list_add_mem (CORE_ADDR addr, int len)
     gdb_printf (gdb_stdlog,
 		"Process record: add mem addr = %s len = %d to "
 		"record list.\n",
-		paddress (target_gdbarch (), addr), len);
+		paddress (current_inferior ()->arch (), addr), len);
 
   if (!addr)	/* FIXME: Why?  Some arch must permit it...  */
     return 0;
 
   rec = record_full_mem_alloc (addr, len);
 
-  if (record_read_memory (target_gdbarch (), addr,
+  if (record_read_memory (current_inferior ()->arch (), addr,
 			  record_full_get_loc (rec), len))
     {
       record_full_mem_release (rec);
@@ -884,7 +885,7 @@ record_full_exec_insn (struct regcache *regcache,
 		       not doing the change at all if the watchpoint
 		       traps.  */
 		    if (hardware_watchpoint_inserted_in_range
-			(regcache->aspace (),
+			(current_inferior ()->aspace.get (),
 			 entry->u.mem.addr, entry->u.mem.len))
 		      record_full_stop_reason = TARGET_STOPPED_BY_WATCHPOINT;
 		  }
@@ -911,9 +912,9 @@ record_full_async_inferior_event_handler (gdb_client_data data)
 /* Open the process record target for 'core' files.  */
 
 static void
-record_full_core_open_1 (const char *name, int from_tty)
+record_full_core_open_1 ()
 {
-  struct regcache *regcache = get_current_regcache ();
+  regcache *regcache = get_thread_regcache (inferior_thread ());
   int regnum = gdbarch_num_regs (regcache->arch ());
   int i;
 
@@ -924,7 +925,8 @@ record_full_core_open_1 (const char *name, int from_tty)
   for (i = 0; i < regnum; i ++)
     record_full_core_regbuf->raw_supply (i, *regcache);
 
-  record_full_core_sections = build_section_table (core_bfd);
+  record_full_core_sections
+    = build_section_table (current_program_space->core_bfd ());
 
   current_inferior ()->push_target (&record_full_core_ops);
   record_full_restore ();
@@ -933,7 +935,7 @@ record_full_core_open_1 (const char *name, int from_tty)
 /* Open the process record target for 'live' processes.  */
 
 static void
-record_full_open_1 (const char *name, int from_tty)
+record_full_open_1 ()
 {
   if (record_debug)
     gdb_printf (gdb_stdlog, "Process record: record_full_open_1\n");
@@ -945,7 +947,7 @@ record_full_open_1 (const char *name, int from_tty)
     error (_("Process record target can't debug inferior in non-stop mode "
 	     "(non-stop)."));
 
-  if (!gdbarch_process_record_p (target_gdbarch ()))
+  if (!gdbarch_process_record_p (current_inferior ()->arch ()))
     error (_("Process record: the current architecture doesn't support "
 	     "record function."));
 
@@ -957,10 +959,13 @@ static void record_full_init_record_breakpoints (void);
 /* Open the process record target.  */
 
 static void
-record_full_open (const char *name, int from_tty)
+record_full_open (const char *args, int from_tty)
 {
   if (record_debug)
     gdb_printf (gdb_stdlog, "Process record: record_full_open\n");
+
+  if (args != nullptr)
+    error (_("Trailing junk: '%s'"), args);
 
   record_preopen ();
 
@@ -970,10 +975,10 @@ record_full_open (const char *name, int from_tty)
   record_full_list = &record_full_first;
   record_full_list->next = NULL;
 
-  if (core_bfd)
-    record_full_core_open_1 (name, from_tty);
+  if (current_program_space->core_bfd ())
+    record_full_core_open_1 ();
   else
-    record_full_open_1 (name, from_tty);
+    record_full_open_1 ();
 
   /* Register extra event sources in the event loop.  */
   record_full_async_inferior_event_token
@@ -1069,7 +1074,7 @@ record_full_target::resume (ptid_t ptid, int step, enum gdb_signal signal)
     {
       struct gdbarch *gdbarch = target_thread_architecture (ptid);
 
-      record_full_message (get_current_regcache (), signal);
+      record_full_message (get_thread_regcache (inferior_thread ()), signal);
 
       if (!step)
 	{
@@ -1216,9 +1221,10 @@ record_full_wait_1 (struct target_ops *ops,
 		  registers_changed ();
 		  switch_to_thread (current_inferior ()->process_target (),
 				    ret);
-		  regcache = get_current_regcache ();
+		  regcache = get_thread_regcache (inferior_thread ());
 		  tmp_pc = regcache_read_pc (regcache);
-		  const struct address_space *aspace = regcache->aspace ();
+		  const address_space *aspace
+		    = current_inferior ()->aspace.get ();
 
 		  if (target_stopped_by_watchpoint ())
 		    {
@@ -1286,9 +1292,9 @@ record_full_wait_1 (struct target_ops *ops,
     {
       switch_to_thread (current_inferior ()->process_target (),
 			record_full_resume_ptid);
-      struct regcache *regcache = get_current_regcache ();
+      regcache *regcache = get_thread_regcache (inferior_thread ());
       struct gdbarch *gdbarch = regcache->arch ();
-      const struct address_space *aspace = regcache->aspace ();
+      const address_space *aspace = current_inferior ()->aspace.get ();
       int continue_flag = 1;
       int first_record_full_end = 1;
 
@@ -1650,7 +1656,7 @@ record_full_target::xfer_partial (enum target_object object,
 	  if (!query (_("Because GDB is in replay mode, writing to memory "
 			"will make the execution log unusable from this "
 			"point onward.  Write memory at address %s?"),
-		       paddress (target_gdbarch (), offset)))
+		       paddress (current_inferior ()->arch (), offset)))
 	    error (_("Process record canceled the operation."));
 
 	  /* Destroy the record from here forward.  */
@@ -2001,7 +2007,9 @@ record_full_goto_entry (struct record_full_entry *p)
 
   registers_changed ();
   reinit_frame_cache ();
-  inferior_thread ()->set_stop_pc (regcache_read_pc (get_current_regcache ()));
+  
+  thread_info *thr = inferior_thread ();
+  thr->set_stop_pc (regcache_read_pc (get_thread_regcache (thr)));
   print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC, 1);
 }
 
@@ -2322,11 +2330,10 @@ record_full_restore (void)
   asection *osec;
   uint32_t osec_size;
   int bfd_offset = 0;
-  struct regcache *regcache;
 
   /* We restore the execution log from the open core bfd,
      if there is one.  */
-  if (core_bfd == NULL)
+  if (current_program_space->core_bfd () == nullptr)
     return;
 
   /* "record_full_restore" can only be called when record list is empty.  */
@@ -2336,7 +2343,7 @@ record_full_restore (void)
     gdb_printf (gdb_stdlog, "Restoring recording from core file.\n");
 
   /* Now need to find our special note section.  */
-  osec = bfd_get_section_by_name (core_bfd, "null0");
+  osec = bfd_get_section_by_name (current_program_space->core_bfd (), "null0");
   if (record_debug)
     gdb_printf (gdb_stdlog, "Find precord section %s.\n",
 		osec ? "succeeded" : "failed");
@@ -2347,10 +2354,11 @@ record_full_restore (void)
     gdb_printf (gdb_stdlog, "%s", bfd_section_name (osec));
 
   /* Check the magic code.  */
-  bfdcore_read (core_bfd, osec, &magic, sizeof (magic), &bfd_offset);
+  bfdcore_read (current_program_space->core_bfd (), osec, &magic,
+		sizeof (magic), &bfd_offset);
   if (magic != RECORD_FULL_FILE_MAGIC)
     error (_("Version mis-match or file format error in core file %s."),
-	   bfd_get_filename (core_bfd));
+	   bfd_get_filename (current_program_space->core_bfd ()));
   if (record_debug)
     gdb_printf (gdb_stdlog,
 		"  Reading 4-byte magic cookie "
@@ -2365,7 +2373,7 @@ record_full_restore (void)
 
   try
     {
-      regcache = get_current_regcache ();
+      regcache *regcache = get_thread_regcache (inferior_thread ());
 
       while (1)
 	{
@@ -2376,21 +2384,23 @@ record_full_restore (void)
 	  /* We are finished when offset reaches osec_size.  */
 	  if (bfd_offset >= osec_size)
 	    break;
-	  bfdcore_read (core_bfd, osec, &rectype, sizeof (rectype), &bfd_offset);
+	  bfdcore_read (current_program_space->core_bfd (), osec, &rectype,
+			sizeof (rectype), &bfd_offset);
 
 	  switch (rectype)
 	    {
 	    case record_full_reg: /* reg */
 	      /* Get register number to regnum.  */
-	      bfdcore_read (core_bfd, osec, &regnum,
+	      bfdcore_read (current_program_space->core_bfd (), osec, &regnum,
 			    sizeof (regnum), &bfd_offset);
 	      regnum = netorder32 (regnum);
 
 	      rec = record_full_reg_alloc (regcache, regnum);
 
 	      /* Get val.  */
-	      bfdcore_read (core_bfd, osec, record_full_get_loc (rec),
-			    rec->u.reg.len, &bfd_offset);
+	      bfdcore_read (current_program_space->core_bfd (), osec,
+			    record_full_get_loc (rec), rec->u.reg.len,
+			    &bfd_offset);
 
 	      if (record_debug)
 		gdb_printf (gdb_stdlog,
@@ -2403,20 +2413,21 @@ record_full_restore (void)
 
 	    case record_full_mem: /* mem */
 	      /* Get len.  */
-	      bfdcore_read (core_bfd, osec, &len,
+	      bfdcore_read (current_program_space->core_bfd (), osec, &len,
 			    sizeof (len), &bfd_offset);
 	      len = netorder32 (len);
 
 	      /* Get addr.  */
-	      bfdcore_read (core_bfd, osec, &addr,
+	      bfdcore_read (current_program_space->core_bfd (), osec, &addr,
 			    sizeof (addr), &bfd_offset);
 	      addr = netorder64 (addr);
 
 	      rec = record_full_mem_alloc (addr, len);
 
 	      /* Get val.  */
-	      bfdcore_read (core_bfd, osec, record_full_get_loc (rec),
-			    rec->u.mem.len, &bfd_offset);
+	      bfdcore_read (current_program_space->core_bfd (), osec,
+			    record_full_get_loc (rec), rec->u.mem.len,
+			    &bfd_offset);
 
 	      if (record_debug)
 		gdb_printf (gdb_stdlog,
@@ -2434,13 +2445,13 @@ record_full_restore (void)
 	      record_full_insn_num ++;
 
 	      /* Get signal value.  */
-	      bfdcore_read (core_bfd, osec, &signal,
+	      bfdcore_read (current_program_space->core_bfd (), osec, &signal,
 			    sizeof (signal), &bfd_offset);
 	      signal = netorder32 (signal);
 	      rec->u.end.sigval = (enum gdb_signal) signal;
 
 	      /* Get insn count.  */
-	      bfdcore_read (core_bfd, osec, &count,
+	      bfdcore_read (current_program_space->core_bfd (), osec, &count,
 			    sizeof (count), &bfd_offset);
 	      count = netorder32 (count);
 	      rec->u.end.insn_num = count;
@@ -2457,7 +2468,7 @@ record_full_restore (void)
 
 	    default:
 	      error (_("Bad entry type in core file %s."),
-		     bfd_get_filename (core_bfd));
+		     bfd_get_filename (current_program_space->core_bfd ()));
 	      break;
 	    }
 
@@ -2487,7 +2498,7 @@ record_full_restore (void)
 
   /* Succeeded.  */
   gdb_printf (_("Restored records from core file %s.\n"),
-	      bfd_get_filename (core_bfd));
+	      bfd_get_filename (current_program_space->core_bfd ()));
 
   print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC, 1);
 }
@@ -2514,7 +2525,7 @@ static void
 cmd_record_full_restore (const char *args, int from_tty)
 {
   core_file_command (args, from_tty);
-  record_full_open (args, from_tty);
+  record_full_open (nullptr, from_tty);
 }
 
 /* Save the execution log to a file.  We use a modified elf corefile
@@ -2525,7 +2536,6 @@ record_full_base_target::save_record (const char *recfilename)
 {
   struct record_full_entry *cur_record_full_list;
   uint32_t magic;
-  struct regcache *regcache;
   struct gdbarch *gdbarch;
   int save_size = 0;
   asection *osec = NULL;
@@ -2546,7 +2556,7 @@ record_full_base_target::save_record (const char *recfilename)
   cur_record_full_list = record_full_list;
 
   /* Get the values of regcache and gdbarch.  */
-  regcache = get_current_regcache ();
+  regcache *regcache = get_thread_regcache (inferior_thread ());
   gdbarch = regcache->arch ();
 
   /* Disable the GDB operation record.  */
@@ -2731,7 +2741,7 @@ record_full_goto_insn (struct record_full_entry *entry,
 {
   scoped_restore restore_operation_disable
     = record_full_gdb_operation_disable_set ();
-  struct regcache *regcache = get_current_regcache ();
+  regcache *regcache = get_thread_regcache (inferior_thread ());
   struct gdbarch *gdbarch = regcache->arch ();
 
   /* Assume everything is valid: we will hit the entry,
@@ -2810,6 +2820,8 @@ maintenance_print_record_instruction (const char *args, int from_tty)
     }
   gdb_assert (to_print != nullptr);
 
+  gdbarch *arch = current_inferior ()->arch ();
+
   /* Go back to the start of the instruction.  */
   while (to_print->prev != nullptr && to_print->prev->type != record_full_end)
     to_print = to_print->prev;
@@ -2825,14 +2837,12 @@ maintenance_print_record_instruction (const char *args, int from_tty)
 	{
 	  case record_full_reg:
 	    {
-	      type *regtype = gdbarch_register_type (target_gdbarch (),
-						     to_print->u.reg.num);
+	      type *regtype = gdbarch_register_type (arch, to_print->u.reg.num);
 	      value *val
 		  = value_from_contents (regtype,
 					 record_full_get_loc (to_print));
 	      gdb_printf ("Register %s changed: ",
-			  gdbarch_register_name (target_gdbarch (),
-						 to_print->u.reg.num));
+			  gdbarch_register_name (arch, to_print->u.reg.num));
 	      struct value_print_options opts;
 	      get_user_print_options (&opts);
 	      opts.raw = true;
@@ -2845,8 +2855,7 @@ maintenance_print_record_instruction (const char *args, int from_tty)
 	      gdb_byte *b = record_full_get_loc (to_print);
 	      gdb_printf ("%d bytes of memory at address %s changed from:",
 			  to_print->u.mem.len,
-			  print_core_address (target_gdbarch (),
-					      to_print->u.mem.addr));
+			  print_core_address (arch, to_print->u.mem.addr));
 	      for (int i = 0; i < to_print->u.mem.len; i++)
 		gdb_printf (" %02x", b[i]);
 	      gdb_printf ("\n");

@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 
 #include "amd-dbgapi-target.h"
 #include "amdgpu-tdep.h"
@@ -270,7 +269,7 @@ struct amd_dbgapi_target final : public target_ops
 
   struct gdbarch *thread_architecture (ptid_t) override;
 
-  void thread_events (int enable) override;
+  void thread_events (bool enable) override;
 
   std::string pid_to_str (ptid_t ptid) override;
 
@@ -1400,7 +1399,7 @@ consume_one_event (int pid)
 
 ptid_t
 amd_dbgapi_target::wait (ptid_t ptid, struct target_waitstatus *ws,
-		       target_wait_flags target_options)
+			 target_wait_flags target_options)
 {
   gdb_assert (!current_inferior ()->process_target ()->commit_resumed_state);
   gdb_assert (ptid == minus_one_ptid || ptid.is_pid ());
@@ -1806,7 +1805,7 @@ amd_dbgapi_target::thread_architecture (ptid_t ptid)
 }
 
 void
-amd_dbgapi_target::thread_events (int enable)
+amd_dbgapi_target::thread_events (bool enable)
 {
   m_report_thread_events = enable;
   beneath ()->thread_events (enable);

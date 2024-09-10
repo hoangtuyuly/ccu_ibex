@@ -1,5 +1,5 @@
 /* ELF support for BFD.
-   Copyright (C) 1991-2023 Free Software Foundation, Inc.
+   Copyright (C) 1991-2024 Free Software Foundation, Inc.
 
    Written by Fred Fish @ Cygnus Support, from information published
    in "UNIX System V Release 4, Programmers Guide: ANSI C and
@@ -496,6 +496,7 @@
 #define PT_OPENBSD_RANDOMIZE (PT_LOOS + 0x5a3dbe6)  /* Fill with random data.  */
 #define PT_OPENBSD_WXNEEDED  (PT_LOOS + 0x5a3dbe7)  /* Program does W^X violations.  */
 #define PT_OPENBSD_NOBTCFI   (PT_LOOS + 0x5a3dbe8)  /* No branch target CFI.  */
+#define PT_OPENBSD_SYSCALLS  (PT_LOOS + 0x5a3dbe9)  /* System call sites.  */
 #define PT_OPENBSD_BOOTDATA  (PT_LOOS + 0x5a41be6)  /* Section for boot arguments.  */
 
 /* Mbind segments */
@@ -644,6 +645,9 @@
 #define NT_X86_XSTATE	0x202		/* x86 XSAVE extended state */
 					/*   note name must be "LINUX".  */
 #define NT_X86_CET	0x203		/* x86 CET state.  */
+					/*   note name must be "LINUX".  */
+#define NT_X86_SHSTK	0x204		/* x86 SHSTK state.  */
+					/* This replaces NT_X86_CET (0x203).  */
 					/*   note name must be "LINUX".  */
 #define NT_S390_HIGH_GPRS 0x300		/* S/390 upper halves of GPRs  */
 					/*   note name must be "LINUX".  */
@@ -1032,6 +1036,9 @@
 
 /* Values for FDO .note.package notes as defined on https://systemd.io/COREDUMP_PACKAGE_METADATA/  */
 #define FDO_PACKAGING_METADATA	0xcafe1a7e
+
+/* Values for FDO .note.dlopen notes as defined on https://systemd.io/ELF_DLOPEN_METADATA/  */
+#define FDO_DLOPEN_METADATA 0x407c0c0a
 
 /* These three macros disassemble and assemble a symbol table st_info field,
    which contains the symbol binding and symbol type.  The STB_ and STT_

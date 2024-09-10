@@ -17,7 +17,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "expression.h"
@@ -935,9 +935,11 @@ public:
   }
 
   /* See language.h.  */
-  struct type *lookup_transparent_type (const char *name) const override
+  struct type *lookup_transparent_type (const char *name,
+					domain_search_flags flags)
+    const override
   {
-    return cp_lookup_transparent_type (name);
+    return cp_lookup_transparent_type (name, flags);
   }
 
   /* See language.h.  */
@@ -1012,9 +1014,20 @@ public:
 
   /* See language.h.  */
 
+  struct block_symbol lookup_symbol_local
+       (const char *scope,
+	const char *name,
+	const struct block *block,
+	const domain_search_flags domain) const override
+  {
+    return cp_lookup_symbol_imports (scope, name, block, domain);
+  }
+
+  /* See language.h.  */
+
   struct block_symbol lookup_symbol_nonlocal
 	(const char *name, const struct block *block,
-	 const domain_enum domain) const override
+	 const domain_search_flags domain) const override
   {
     return cp_lookup_symbol_nonlocal (this, name, block, domain);
   }

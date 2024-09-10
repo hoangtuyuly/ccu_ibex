@@ -1,6 +1,6 @@
 This is stabs.info, produced by makeinfo version 7.1 from stabs.texinfo.
 
-Copyright © 1992-2023 Free Software Foundation, Inc.  Contributed by
+Copyright © 1992-2024 Free Software Foundation, Inc.  Contributed by
 Cygnus Support.  Written by Julia Menapace, Jim Kingdon, and David
 MacKenzie.
 
@@ -17,7 +17,7 @@ END-INFO-DIR-ENTRY
 
    This document describes the stabs debugging symbol tables.
 
-   Copyright © 1992-2023 Free Software Foundation, Inc.  Contributed by
+   Copyright © 1992-2024 Free Software Foundation, Inc.  Contributed by
 Cygnus Support.  Written by Julia Menapace, Jim Kingdon, and David
 MacKenzie.
 

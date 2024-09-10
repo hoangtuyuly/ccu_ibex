@@ -1,5 +1,5 @@
 /* Build symbol tables in GDB's internal format.
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,7 +25,6 @@
 
 struct objfile;
 struct symbol;
-struct addrmap;
 struct compunit_symtab;
 enum language;
 
@@ -131,6 +130,10 @@ enum linetable_entry_flag : unsigned
   /* Indicates this PC is a good location to place a breakpoint at the first
      instruction past a function prologue.  */
   LEF_PROLOGUE_END = 1 << 2,
+
+  /* Indicated that this PC is part of the epilogue of a function, making
+     software watchpoints unreliable.  */
+  LEF_EPILOGUE_BEGIN = 1 << 3,
 };
 DEF_ENUM_FLAGS_TYPE (enum linetable_entry_flag, linetable_entry_flags);
 

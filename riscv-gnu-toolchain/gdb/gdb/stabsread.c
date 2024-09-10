@@ -1,6 +1,6 @@
 /* Support routines for decoding "stabs" debugging information format.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,8 +24,8 @@
    format).  Avoid placing any object file format specific code in
    this file.  */
 
-#include "defs.h"
 #include "bfd.h"
+#include "event-top.h"
 #include "gdbsupport/gdb_obstack.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -64,11 +64,6 @@ int n_allocated_this_object_header_files;
 struct stabs_nextfield
 {
   struct stabs_nextfield *next;
-
-  /* This is the raw visibility from the stab.  It is not checked
-     for being one of the visibilities we recognize, so code which
-     examines this field better be able to deal.  */
-  int visibility;
 
   struct field field;
 };
@@ -748,7 +743,7 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
       if (new_name != nullptr)
 	sym->compute_and_set_names (new_name.get (), true, objfile->per_bfd);
       else
-	sym->compute_and_set_names (gdb::string_view (string, p - string), true,
+	sym->compute_and_set_names (std::string_view (string, p - string), true,
 				    objfile->per_bfd);
 
       if (sym->language () == language_cplus)
@@ -945,7 +940,7 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
       /* A static function definition.  */
       sym->set_type (read_type (&p, objfile));
       sym->set_aclass_index (LOC_BLOCK);
-      sym->set_domain (VAR_DOMAIN);
+      sym->set_domain (FUNCTION_DOMAIN);
       add_symbol_to_list (sym, get_file_symbols ());
       /* fall into process_function_types.  */
 
@@ -1016,7 +1011,7 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
       /* A global function definition.  */
       sym->set_type (read_type (&p, objfile));
       sym->set_aclass_index (LOC_BLOCK);
-      sym->set_domain (VAR_DOMAIN);
+      sym->set_domain (FUNCTION_DOMAIN);
       add_symbol_to_list (sym, get_global_symbols ());
       goto process_function_types;
 
@@ -1100,7 +1095,7 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
 	    }
 	  break;
 	}
-      /* Fall through.  */
+      [[fallthrough]];
 
     case 'P':
       /* acc seems to use P to declare the prototypes of functions that
@@ -1111,7 +1106,7 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
 	  sym->set_type (read_type (&p, objfile));
 	  goto process_prototype_types;
 	}
-      /*FALLTHROUGH */
+      [[fallthrough]];
 
     case 'R':
       /* Parameter which is in a register.  */
@@ -1214,7 +1209,7 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
 
       sym->set_aclass_index (LOC_TYPEDEF);
       sym->set_value_longest (valu);
-      sym->set_domain (VAR_DOMAIN);
+      sym->set_domain (TYPE_DOMAIN);
       /* C++ vagaries: we may have a type which is derived from
 	 a base type which did not have its name defined when the
 	 derived class was output.  We fill in the derived class's
@@ -1333,7 +1328,7 @@ define_symbol (CORE_ADDR valu, const char *string, int desc, int type,
 	  *typedef_sym = *sym;
 	  typedef_sym->set_aclass_index (LOC_TYPEDEF);
 	  typedef_sym->set_value_longest (valu);
-	  typedef_sym->set_domain (VAR_DOMAIN);
+	  typedef_sym->set_domain (TYPE_DOMAIN);
 	  if (sym->type ()->name () == 0)
 	    sym->type ()->set_name
 	      (obconcat (&objfile->objfile_obstack, sym->linkage_name (),
@@ -2377,10 +2372,10 @@ read_member_functions (struct stab_field_info *fip, const char **pp,
 	  switch (*(*pp)++)
 	    {
 	    case VISIBILITY_PRIVATE:
-	      new_sublist->fn_field.is_private = 1;
+	      new_sublist->fn_field.accessibility = accessibility::PRIVATE;
 	      break;
 	    case VISIBILITY_PROTECTED:
-	      new_sublist->fn_field.is_protected = 1;
+	      new_sublist->fn_field.accessibility = accessibility::PROTECTED;
 	      break;
 	    }
 
@@ -2499,7 +2494,7 @@ read_member_functions (struct stab_field_info *fip, const char **pp,
 	      complaint (_("member function type missing, got '%c'"),
 			 (*pp)[-1]);
 	      /* Normal member function.  */
-	      /* Fall through.  */
+	      [[fallthrough]];
 
 	    case '.':
 	      /* normal member function.  */
@@ -2789,7 +2784,7 @@ read_cpp_abbrev (struct stab_field_info *fip, const char **pp,
       }
       /* This field is unpacked.  */
       fip->list->field.set_bitsize (0);
-      fip->list->visibility = VISIBILITY_PRIVATE;
+      fip->list->field.set_accessibility (accessibility::PRIVATE);
     }
   else
     {
@@ -2814,15 +2809,42 @@ read_one_struct_field (struct stab_field_info *fip, const char **pp,
   *pp = p + 1;
 
   /* This means we have a visibility for a field coming.  */
+  int visibility;
   if (**pp == '/')
     {
       (*pp)++;
-      fip->list->visibility = *(*pp)++;
+      visibility = *(*pp)++;
     }
   else
     {
       /* normal dbx-style format, no explicit visibility */
-      fip->list->visibility = VISIBILITY_PUBLIC;
+      visibility = VISIBILITY_PUBLIC;
+    }
+
+  switch (visibility)
+    {
+    case VISIBILITY_PRIVATE:
+      fip->list->field.set_accessibility (accessibility::PRIVATE);
+      break;
+
+    case VISIBILITY_PROTECTED:
+      fip->list->field.set_accessibility (accessibility::PROTECTED);
+      break;
+
+    case VISIBILITY_IGNORE:
+      fip->list->field.set_ignored ();
+      break;
+
+    case VISIBILITY_PUBLIC:
+      break;
+
+    default:
+      /* Unknown visibility.  Complain and treat it as public.  */
+      {
+	complaint (_("Unknown visibility `%c' for field"),
+		   visibility);
+      }
+      break;
     }
 
   fip->list->field.set_type (read_type (pp, objfile));
@@ -2892,7 +2914,7 @@ read_one_struct_field (struct stab_field_info *fip, const char **pp,
 	 for dbx compatibility.  */
 
       /* Ignore this field.  */
-      fip->list->visibility = VISIBILITY_IGNORE;
+      fip->list->field.set_ignored ();
     }
   else
     {
@@ -3066,21 +3088,6 @@ read_baseclasses (struct stab_field_info *fip, const char **pp,
       return 0;
   }
 
-#if 0
-  /* Some stupid compilers have trouble with the following, so break
-     it up into simpler expressions.  */
-  TYPE_FIELD_VIRTUAL_BITS (type) = (B_TYPE *)
-    TYPE_ZALLOC (type, B_BYTES (TYPE_N_BASECLASSES (type)));
-#else
-  {
-    int num_bytes = B_BYTES (TYPE_N_BASECLASSES (type));
-    char *pointer;
-
-    pointer = (char *) TYPE_ZALLOC (type, num_bytes);
-    TYPE_FIELD_VIRTUAL_BITS (type) = (B_TYPE *) pointer;
-  }
-#endif /* 0 */
-
   for (i = 0; i < TYPE_N_BASECLASSES (type); i++)
     {
       newobj = OBSTACK_ZALLOC (&fip->obstack, struct stabs_nextfield);
@@ -3097,7 +3104,7 @@ read_baseclasses (struct stab_field_info *fip, const char **pp,
 	  /* Nothing to do.  */
 	  break;
 	case '1':
-	  SET_TYPE_FIELD_VIRTUAL (type, i);
+	  newobj->field.set_virtual ();
 	  break;
 	default:
 	  /* Unknown character.  Complain and treat it as non-virtual.  */
@@ -3108,11 +3115,15 @@ read_baseclasses (struct stab_field_info *fip, const char **pp,
 	}
       ++(*pp);
 
-      newobj->visibility = *(*pp)++;
-      switch (newobj->visibility)
+      int visibility = *(*pp)++;
+      switch (visibility)
 	{
 	case VISIBILITY_PRIVATE:
+	  newobj->field.set_accessibility (accessibility::PRIVATE);
+	  break;
 	case VISIBILITY_PROTECTED:
+	  newobj->field.set_accessibility (accessibility::PROTECTED);
+	  break;
 	case VISIBILITY_PUBLIC:
 	  break;
 	default:
@@ -3120,8 +3131,7 @@ read_baseclasses (struct stab_field_info *fip, const char **pp,
 	     public.  */
 	  {
 	    complaint (_("Unknown visibility `%c' for baseclass"),
-		       newobj->visibility);
-	    newobj->visibility = VISIBILITY_PUBLIC;
+		       visibility);
 	  }
 	}
 
@@ -3268,42 +3278,18 @@ attach_fields_to_type (struct stab_field_info *fip, struct type *type,
 		       struct objfile *objfile)
 {
   int nfields = 0;
-  int non_public_fields = 0;
   struct stabs_nextfield *scan;
 
-  /* Count up the number of fields that we have, as well as taking note of
-     whether or not there are any non-public fields, which requires us to
-     allocate and build the private_field_bits and protected_field_bits
-     bitfields.  */
+  /* Count up the number of fields that we have.  */
 
   for (scan = fip->list; scan != NULL; scan = scan->next)
-    {
-      nfields++;
-      if (scan->visibility != VISIBILITY_PUBLIC)
-	{
-	  non_public_fields++;
-	}
-    }
+    nfields++;
 
   /* Now we know how many fields there are, and whether or not there are any
      non-public fields.  Record the field count, allocate space for the
-     array of fields, and create blank visibility bitfields if necessary.  */
+     array of fields.  */
 
   type->alloc_fields (nfields);
-
-  if (non_public_fields)
-    {
-      ALLOCATE_CPLUS_STRUCT_TYPE (type);
-
-      TYPE_FIELD_PRIVATE_BITS (type) =
-	(B_TYPE *) TYPE_ZALLOC (type, B_BYTES (nfields));
-
-      TYPE_FIELD_PROTECTED_BITS (type) =
-	(B_TYPE *) TYPE_ZALLOC (type, B_BYTES (nfields));
-
-      TYPE_FIELD_IGNORE_BITS (type) =
-	(B_TYPE *) TYPE_ZALLOC (type, B_BYTES (nfields));
-    }
 
   /* Copy the saved-up fields into the field vector.  Start from the
      head of the list, adding to the tail of the field array, so that
@@ -3313,31 +3299,6 @@ attach_fields_to_type (struct stab_field_info *fip, struct type *type,
   while (nfields-- > 0)
     {
       type->field (nfields) = fip->list->field;
-      switch (fip->list->visibility)
-	{
-	case VISIBILITY_PRIVATE:
-	  SET_TYPE_FIELD_PRIVATE (type, nfields);
-	  break;
-
-	case VISIBILITY_PROTECTED:
-	  SET_TYPE_FIELD_PROTECTED (type, nfields);
-	  break;
-
-	case VISIBILITY_IGNORE:
-	  SET_TYPE_FIELD_IGNORE (type, nfields);
-	  break;
-
-	case VISIBILITY_PUBLIC:
-	  break;
-
-	default:
-	  /* Unknown visibility.  Complain and treat it as public.  */
-	  {
-	    complaint (_("Unknown visibility `%c' for field"),
-		       fip->list->visibility);
-	  }
-	  break;
-	}
       fip->list = fip->list->next;
     }
   return 1;

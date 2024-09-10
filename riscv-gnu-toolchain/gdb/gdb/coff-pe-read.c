@@ -2,7 +2,7 @@
    convert to internal format, for GDB. Used as a last resort if no
    debugging symbols recognized.
 
-   Copyright (C) 2003-2023 Free Software Foundation, Inc.
+   Copyright (C) 2003-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,7 +21,6 @@
 
    Contributed by Raoul M. Gough (RaoulGough@yahoo.co.uk).  */
 
-#include "defs.h"
 
 #include "coff-pe-read.h"
 
@@ -29,7 +28,7 @@
 #include "gdbtypes.h"
 
 #include "command.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "symtab.h"
 #include "symfile.h"
 #include "objfiles.h"

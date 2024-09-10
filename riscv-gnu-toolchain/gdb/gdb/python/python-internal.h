@@ -1,6 +1,6 @@
 /* Gdb/Python header for private use by Python module.
 
-   Copyright (C) 2008-2023 Free Software Foundation, Inc.
+   Copyright (C) 2008-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -356,6 +356,10 @@ struct thread_object
 
   /* The Inferior object to which this thread belongs.  */
   PyObject *inf_obj;
+
+  /* Dictionary holding user-added attributes.  This is the __dict__
+     attribute of the object.  */
+  PyObject *dict;
 };
 
 struct inferior_object;
@@ -380,7 +384,7 @@ extern enum ext_lang_rc gdbpy_apply_val_pretty_printer
    const struct language_defn *language);
 extern enum ext_lang_bt_status gdbpy_apply_frame_filter
   (const struct extension_language_defn *,
-   frame_info_ptr frame, frame_filter_flags flags,
+   const frame_info_ptr &frame, frame_filter_flags flags,
    enum ext_lang_frame_args args_type,
    struct ui_out *out, int frame_low, int frame_high);
 extern void gdbpy_preserve_values (const struct extension_language_defn *,
@@ -440,7 +444,7 @@ PyObject *block_to_block_object (const struct block *block,
 				 struct objfile *objfile);
 PyObject *value_to_value_object (struct value *v);
 PyObject *type_to_type_object (struct type *);
-PyObject *frame_info_to_frame_object (frame_info_ptr frame);
+PyObject *frame_info_to_frame_object (const frame_info_ptr &frame);
 PyObject *symtab_to_linetable_object (PyObject *symtab);
 gdbpy_ref<> pspace_to_pspace_object (struct program_space *);
 PyObject *pspy_get_printers (PyObject *, void *);
@@ -485,6 +489,24 @@ struct gdbarch *arch_object_to_gdbarch (PyObject *obj);
 
 extern PyObject *gdbpy_execute_mi_command (PyObject *self, PyObject *args,
 					   PyObject *kw);
+
+/* Serialize RESULTS and print it in MI format to the current_uiout.
+
+   This function handles the top-level results passed as a dictionary.
+   The caller is responsible for ensuring that.  The values within this
+   dictionary can be a wider range of types.  Handling the values of the top-level
+   dictionary is done by serialize_mi_result_1, see that function for more
+   details.
+
+   If anything goes wrong while parsing and printing the MI output then an
+   error is thrown.  */
+
+extern void serialize_mi_results (PyObject *results);
+
+/* Implementation of the gdb.notify_mi function.  */
+
+extern PyObject *gdbpy_notify_mi (PyObject *self, PyObject *args,
+				  PyObject *kw);
 
 /* Convert Python object OBJ to a program_space pointer.  OBJ must be a
    gdb.Progspace reference.  Return nullptr if the gdb.Progspace is not
@@ -618,12 +640,18 @@ public:
 
   gdbpy_err_fetch ()
   {
+#if PY_VERSION_HEX < 0x030c0000
     PyObject *error_type, *error_value, *error_traceback;
 
     PyErr_Fetch (&error_type, &error_value, &error_traceback);
     m_error_type.reset (error_type);
     m_error_value.reset (error_value);
     m_error_traceback.reset (error_traceback);
+#else
+    /* PyErr_Fetch is deprecated in python 3.12, use PyErr_GetRaisedException
+       instead.  */
+    m_exc.reset (PyErr_GetRaisedException ());
+#endif
   }
 
   /* Call PyErr_Restore using the values stashed in this object.
@@ -632,9 +660,15 @@ public:
 
   void restore ()
   {
+#if PY_VERSION_HEX < 0x030c0000
     PyErr_Restore (m_error_type.release (),
 		   m_error_value.release (),
 		   m_error_traceback.release ());
+#else
+    /* PyErr_Restore is deprecated in python 3.12, use PyErr_SetRaisedException
+       instead.  */
+    PyErr_SetRaisedException (m_exc.release ());
+#endif
   }
 
   /* Return the string representation of the exception represented by
@@ -653,19 +687,54 @@ public:
 
   bool type_matches (PyObject *type) const
   {
-    return PyErr_GivenExceptionMatches (m_error_type.get (), type);
+    gdbpy_ref<> err_type = this->type ();
+    return PyErr_GivenExceptionMatches (err_type.get (), type);
   }
 
   /* Return a new reference to the exception value object.  */
 
-  gdbpy_ref<> value ()
+  gdbpy_ref<> value () const
   {
+#if PY_VERSION_HEX < 0x030c0000
+    if (!m_normalized)
+      {
+	PyObject *error_type, *error_value, *error_traceback;
+	error_type = m_error_type.release ();
+	error_value = m_error_value.release ();
+	error_traceback = m_error_traceback.release ();
+	PyErr_NormalizeException (&error_type, &error_value, &error_traceback);
+	m_error_type.reset (error_type);
+	m_error_value.reset (error_value);
+	m_error_traceback.reset (error_traceback);
+	m_normalized = true;
+      }
     return m_error_value;
+#else
+    return m_exc;
+#endif
+  }
+
+  /* Return a new reference to the exception type object.  */
+
+  gdbpy_ref<> type () const
+  {
+#if PY_VERSION_HEX < 0x030c0000
+    return m_error_type;
+#else
+    if (m_exc.get() == nullptr)
+      return nullptr;
+    return gdbpy_ref<>::new_reference ((PyObject *)Py_TYPE (m_exc.get ()));
+#endif
   }
 
 private:
 
-  gdbpy_ref<> m_error_type, m_error_value, m_error_traceback;
+#if PY_VERSION_HEX < 0x030c0000
+  mutable gdbpy_ref<> m_error_type, m_error_value, m_error_traceback;
+  mutable bool m_normalized = false;
+#else
+  gdbpy_ref<> m_exc;
+#endif
 };
 
 /* Called before entering the Python interpreter to install the
@@ -714,7 +783,7 @@ class gdbpy_enter
 
   /* An optional is used here because we don't want to call
      PyErr_Fetch too early.  */
-  gdb::optional<gdbpy_err_fetch> m_error;
+  std::optional<gdbpy_err_fetch> m_error;
 };
 
 /* Like gdbpy_enter, but takes a varobj.  This is a subclass just to
@@ -754,26 +823,44 @@ private:
   PyThreadState *m_save;
 };
 
-/* Use this after a TRY_EXCEPT to throw the appropriate Python
-   exception.  */
+/* A helper class to save and restore the GIL, but without touching
+   the other globals that are handled by gdbpy_enter.  */
+
+class gdbpy_gil
+{
+public:
+
+  gdbpy_gil ()
+    : m_state (PyGILState_Ensure ())
+  {
+  }
+
+  ~gdbpy_gil ()
+  {
+    PyGILState_Release (m_state);
+  }
+
+  DISABLE_COPY_AND_ASSIGN (gdbpy_gil);
+
+private:
+
+  PyGILState_STATE m_state;
+};
+
+/* Use this in a 'catch' block to convert the exception to a Python
+   exception and return nullptr.  */
 #define GDB_PY_HANDLE_EXCEPTION(Exception)	\
   do {						\
-    if (Exception.reason < 0)			\
-      {						\
-	gdbpy_convert_exception (Exception);	\
-	return NULL;				\
-      }						\
+    gdbpy_convert_exception (Exception);	\
+    return nullptr;				\
   } while (0)
 
-/* Use this after a TRY_EXCEPT to throw the appropriate Python
-   exception.  This macro is for use inside setter functions.  */
+/* Use this in a 'catch' block to convert the exception to a Python
+   exception and return -1.  */
 #define GDB_PY_SET_HANDLE_EXCEPTION(Exception)				\
     do {								\
-      if (Exception.reason < 0)						\
-	{								\
-	  gdbpy_convert_exception (Exception);				\
-	  return -1;							\
-	}								\
+      gdbpy_convert_exception (Exception);				\
+      return -1;							\
     } while (0)
 
 int gdbpy_print_python_errors_p (void);
@@ -855,6 +942,15 @@ int gdb_pymodule_addobject (PyObject *module, const char *name,
 			    PyObject *object)
   CPYCHECKER_NEGATIVE_RESULT_SETS_EXCEPTION;
 
+
+/* Return a Python string (str) object that represents SELF.  SELF can be
+   any object type, but should be in an "invalid" state.  What "invalid"
+   means is up to the caller.  The returned string will take the form
+   "<TYPENAME (invalid)>", without the quotes, and with TYPENAME replaced
+   with the type of SELF.  */
+
+PyObject *gdb_py_invalid_object_repr (PyObject *self);
+
 struct varobj_iter;
 struct varobj;
 std::unique_ptr<varobj_iter> py_varobj_get_iterator
@@ -935,7 +1031,7 @@ extern gdb::unique_xmalloc_ptr<char> gdbpy_fix_doc_string_indentation
 
    If no instruction can be disassembled then return an empty value.  */
 
-extern gdb::optional<int> gdbpy_print_insn (struct gdbarch *gdbarch,
+extern std::optional<int> gdbpy_print_insn (struct gdbarch *gdbarch,
 					    CORE_ADDR address,
 					    disassemble_info *info);
 

@@ -1,6 +1,6 @@
 /* Target-dependent code for the LoongArch architecture, for GDB.
 
-   Copyright (C) 2022-2023 Free Software Foundation, Inc.
+   Copyright (C) 2022-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,10 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "arch-utils.h"
 #include "dwarf2/frame.h"
 #include "elf-bfd.h"
+#include "extract-store-integer.h"
 #include "frame-unwind.h"
 #include "gdbcore.h"
 #include "loongarch-tdep.h"
@@ -113,7 +113,7 @@ loongarch_insn_is_sc (insn_t insn)
 
 static CORE_ADDR
 loongarch_scan_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc,
-			 CORE_ADDR limit_pc, frame_info_ptr this_frame,
+			 CORE_ADDR limit_pc, const frame_info_ptr &this_frame,
 			 struct trad_frame_cache *this_cache)
 {
   CORE_ADDR cur_pc = start_pc, prologue_end = 0;
@@ -390,9 +390,10 @@ loongarch_software_single_step (struct regcache *regcache)
 /* Callback function for user_reg_add.  */
 
 static struct value *
-value_of_loongarch_user_reg (frame_info_ptr frame, const void *baton)
+value_of_loongarch_user_reg (const frame_info_ptr &frame, const void *baton)
 {
-  return value_of_register ((long long) baton, frame);
+  return value_of_register ((long long) baton,
+			    get_next_frame_sentinel_okay (frame));
 }
 
 /* Implement the frame_align gdbarch method.  */
@@ -406,7 +407,7 @@ loongarch_frame_align (struct gdbarch *gdbarch, CORE_ADDR addr)
 /* Generate, or return the cached frame cache for frame unwinder.  */
 
 static struct trad_frame_cache *
-loongarch_frame_cache (frame_info_ptr this_frame, void **this_cache)
+loongarch_frame_cache (const frame_info_ptr &this_frame, void **this_cache)
 {
   struct trad_frame_cache *cache;
   CORE_ADDR pc;
@@ -428,7 +429,7 @@ loongarch_frame_cache (frame_info_ptr this_frame, void **this_cache)
 /* Implement the this_id callback for frame unwinder.  */
 
 static void
-loongarch_frame_this_id (frame_info_ptr this_frame, void **prologue_cache,
+loongarch_frame_this_id (const frame_info_ptr &this_frame, void **prologue_cache,
 			 struct frame_id *this_id)
 {
   struct trad_frame_cache *info;
@@ -440,7 +441,7 @@ loongarch_frame_this_id (frame_info_ptr this_frame, void **prologue_cache,
 /* Implement the prev_register callback for frame unwinder.  */
 
 static struct value *
-loongarch_frame_prev_register (frame_info_ptr this_frame,
+loongarch_frame_prev_register (const frame_info_ptr &this_frame,
 			       void **prologue_cache, int regnum)
 {
   struct trad_frame_cache *info;
@@ -516,7 +517,8 @@ static void
 compute_struct_member (struct type *type,
 		       unsigned int *fixed_point_members,
 		       unsigned int *floating_point_members,
-		       bool *first_member_is_fixed_point)
+		       bool *first_member_is_fixed_point,
+		       bool *has_long_double)
 {
   for (int i = 0; i < type->num_fields (); i++)
     {
@@ -525,6 +527,12 @@ compute_struct_member (struct type *type,
 	continue;
 
       struct type *field_type = check_typedef (type->field (i).type ());
+
+      if ((field_type->code () == TYPE_CODE_FLT
+	   && field_type->length () == 16)
+	  || (field_type->code () == TYPE_CODE_COMPLEX
+	      && field_type->length () == 32))
+	*has_long_double = true;
 
       if (field_type->code () == TYPE_CODE_INT
 	  || field_type->code () == TYPE_CODE_BOOL
@@ -544,9 +552,76 @@ compute_struct_member (struct type *type,
 	compute_struct_member (field_type,
 			       fixed_point_members,
 			       floating_point_members,
-			       first_member_is_fixed_point);
+			       first_member_is_fixed_point,
+			       has_long_double);
       else if (field_type->code () == TYPE_CODE_COMPLEX)
 	(*floating_point_members) += 2;
+    }
+}
+
+/* Compute the lengths and offsets of struct member.  */
+
+static void
+struct_member_info (struct type *type,
+		    unsigned int *member_offsets,
+		    unsigned int *member_lens,
+		    unsigned int offset,
+		    unsigned int *fields)
+{
+  unsigned int count = type->num_fields ();
+  unsigned int i;
+
+  for (i = 0; i < count; ++i)
+    {
+      if (type->field (i).loc_kind () != FIELD_LOC_KIND_BITPOS)
+	continue;
+
+      struct type *field_type = check_typedef (type->field (i).type ());
+      int field_offset
+	= offset + type->field (i).loc_bitpos () / TARGET_CHAR_BIT;
+
+      switch (field_type->code ())
+	{
+	case TYPE_CODE_STRUCT:
+	  struct_member_info (field_type, member_offsets, member_lens,
+			      field_offset, fields);
+	  break;
+
+	case TYPE_CODE_COMPLEX:
+	  if (*fields == 0)
+	    {
+	      /* _Complex float */
+	      if (field_type->length () == 8)
+		{
+		  member_offsets[0] = field_offset;
+		  member_offsets[1] = field_offset + 4;
+		  member_lens[0] = member_lens[1] = 4;
+		  *fields = 2;
+		}
+	      /* _Complex double */
+	      else if (field_type->length () == 16)
+		{
+		  member_offsets[0] = field_offset;
+		  member_offsets[1] = field_offset + 8;
+		  member_lens[0] = member_lens[1] = 8;
+		  *fields = 2;
+		}
+	    }
+	  break;
+
+	default:
+	  if (*fields < 2)
+	    {
+	      member_offsets[*fields] = field_offset;
+	      member_lens[*fields] = field_type->length ();
+	    }
+	  (*fields)++;
+	  break;
+	}
+
+      /* only has special handling for structures with 1 or 2 fields. */
+      if (*fields > 2)
+	return;
     }
 }
 
@@ -569,6 +644,10 @@ loongarch_push_dummy_call (struct gdbarch *gdbarch,
   unsigned int fixed_point_members;
   unsigned int floating_point_members;
   bool first_member_is_fixed_point;
+  bool has_long_double;
+  unsigned int member_offsets[2];
+  unsigned int member_lens[2];
+  unsigned int fields;
   gdb_byte buf[1024] = { 0 };
   gdb_byte *addr = buf;
 
@@ -698,12 +777,55 @@ loongarch_push_dummy_call (struct gdbarch *gdbarch,
 	    fixed_point_members = 0;
 	    floating_point_members = 0;
 	    first_member_is_fixed_point = false;
+	    has_long_double = false;
+	    member_offsets[0] = member_offsets[1] = 0;
+	    member_lens[0] = member_offsets[1] = 0;
+	    fields = 0;
 	    compute_struct_member (type,
 				   &fixed_point_members,
 				   &floating_point_members,
-				   &first_member_is_fixed_point);
-
-	    if (len > 0 && len <= regsize)
+				   &first_member_is_fixed_point,
+				   &has_long_double);
+	    struct_member_info (type, member_offsets, member_lens, 0, &fields);
+	    /* If the structure consists of one floating-point member within
+	       FRLEN bits wide, it is passed in an FAR if available. If the
+	       structure consists of two floating-point members both within
+	       FRLEN bits wide, it is passed in two FARs if available. If the
+	       structure consists of one integer member within GRLEN bits wide
+	       and one floating-point member within FRLEN bits wide, it is
+	       passed in a GAR and an FAR if available. */
+	    if (has_long_double == false
+		&& ((fixed_point_members == 0 && floating_point_members == 1
+		     && far >= 1)
+		    || (fixed_point_members == 0 && floating_point_members == 2
+			&& far >= 2)
+		    || (fixed_point_members == 1 && floating_point_members == 1
+			&& far >= 1 && gar >= 1)))
+	      {
+		if (fixed_point_members == 0 && floating_point_members == 1)
+		  {
+		    pass_in_far (regcache, far--, val + member_offsets[0]);
+		  }
+		else if (fixed_point_members == 0 && floating_point_members == 2)
+		  {
+		    pass_in_far (regcache, far--, val + member_offsets[0]);
+		    pass_in_far (regcache, far--, val + member_offsets[1]);
+		  }
+		else if (fixed_point_members == 1 && floating_point_members == 1)
+		  {
+		    if (first_member_is_fixed_point == false)
+		      {
+			pass_in_far (regcache, far--, val + member_offsets[0]);
+			pass_in_gar (regcache, gar--, val + member_offsets[1]);
+		      }
+		    else
+		      {
+			pass_in_gar (regcache, gar--, val + member_offsets[0]);
+			pass_in_far (regcache, far--, val + member_offsets[1]);
+		      }
+		  }
+	      }
+	    else if (len > 0 && len <= regsize)
 	      {
 		/* The structure has only fixed-point members.  */
 		if (fixed_point_members > 0 && floating_point_members == 0)
@@ -1160,13 +1282,14 @@ loongarch_return_value (struct gdbarch *gdbarch, struct value *function,
   unsigned int fixed_point_members;
   unsigned int floating_point_members;
   bool first_member_is_fixed_point;
+  bool has_long_double;
+  unsigned int member_offsets[2];
+  unsigned int member_lens[2];
+  unsigned int fields;
   int a0 = LOONGARCH_A0_REGNUM;
   int a1 = LOONGARCH_A0_REGNUM + 1;
   int f0 = LOONGARCH_FIRST_FP_REGNUM;
   int f1 = LOONGARCH_FIRST_FP_REGNUM + 1;
-
-  if (len > 2 * regsize)
-    return RETURN_VALUE_STRUCT_CONVENTION;
 
   switch (code)
     {
@@ -1220,12 +1343,56 @@ loongarch_return_value (struct gdbarch *gdbarch, struct value *function,
 	fixed_point_members = 0;
 	floating_point_members = 0;
 	first_member_is_fixed_point = false;
+	has_long_double = false;
+	member_offsets[0] = member_offsets[1] = 0;
+	member_lens[0] = member_offsets[1] = 0;
+	fields = 0;
 	compute_struct_member (type,
 			       &fixed_point_members,
 			       &floating_point_members,
-			       &first_member_is_fixed_point);
-
-	if (len > 0 && len <= regsize)
+			       &first_member_is_fixed_point,
+			       &has_long_double);
+	struct_member_info (type, member_offsets, member_lens, 0, &fields);
+	/* struct consists of one floating-point member;
+	   struct consists of two floating-point members;
+	   struct consists of one floating-point member
+	   and one integer member. */
+	if (has_long_double == false
+	    && ((fixed_point_members == 0 && floating_point_members == 1)
+		|| (fixed_point_members == 0 && floating_point_members == 2)
+		|| (fixed_point_members == 1 && floating_point_members == 1)))
+	  {
+	    if (fixed_point_members == 0 && floating_point_members == 1)
+	      {
+		loongarch_xfer_reg (regcache, f0, member_lens[0], readbuf,
+				    writebuf, member_offsets[0]);
+	      }
+	    else if (fixed_point_members == 0 && floating_point_members == 2)
+	      {
+		loongarch_xfer_reg (regcache, f0, member_lens[0], readbuf,
+				    writebuf, member_offsets[0]);
+		loongarch_xfer_reg (regcache, f1, member_lens[1], readbuf,
+				    writebuf, member_offsets[1]);
+	      }
+	    else if (fixed_point_members == 1 && floating_point_members == 1)
+	      {
+		if (first_member_is_fixed_point == false)
+		  {
+		    loongarch_xfer_reg (regcache, f0, member_lens[0], readbuf,
+					writebuf, member_offsets[0]);
+		    loongarch_xfer_reg (regcache, a0, member_lens[1], readbuf,
+					writebuf, member_offsets[1]);
+		  }
+		else
+		  {
+		    loongarch_xfer_reg (regcache, a0, member_lens[0], readbuf,
+					writebuf, member_offsets[0]);
+		    loongarch_xfer_reg (regcache, f0, member_lens[1], readbuf,
+					writebuf, member_offsets[1]);
+		  }
+	      }
+	  }
+	else if (len > 0 && len <= regsize)
 	  {
 	    /* The structure has only fixed-point members.  */
 	    if (fixed_point_members > 0 && floating_point_members == 0)
@@ -1338,6 +1505,8 @@ loongarch_return_value (struct gdbarch *gdbarch, struct value *function,
 		  }
 	      }
 	  }
+	else if (len > 2 * regsize)
+	  return RETURN_VALUE_STRUCT_CONVENTION;
       }
       break;
     case TYPE_CODE_UNION:
@@ -1352,13 +1521,18 @@ loongarch_return_value (struct gdbarch *gdbarch, struct value *function,
 	  loongarch_xfer_reg (regcache, a0, regsize, readbuf, writebuf, 0);
 	  loongarch_xfer_reg (regcache, a1, len - regsize, readbuf, writebuf, regsize);
 	}
+      else if (len > 2 * regsize)
+	return RETURN_VALUE_STRUCT_CONVENTION;
       break;
     case TYPE_CODE_COMPLEX:
-      {
-	/* The return value is passed in f0 and f1.  */
-	loongarch_xfer_reg (regcache, f0, len / 2, readbuf, writebuf, 0);
-	loongarch_xfer_reg (regcache, f1, len / 2, readbuf, writebuf, len / 2);
-      }
+      if (len > 0 && len <= 2 * regsize)
+	{
+	  /* The return value is passed in f0 and f1.  */
+	  loongarch_xfer_reg (regcache, f0, len / 2, readbuf, writebuf, 0);
+	  loongarch_xfer_reg (regcache, f1, len / 2, readbuf, writebuf, len / 2);
+	}
+      else if (len > 2 * regsize)
+	return RETURN_VALUE_STRUCT_CONVENTION;
       break;
     default:
       break;
@@ -1476,6 +1650,14 @@ loongarch_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   if (group == float_reggroup)
     return 0;
 
+  if (LOONGARCH_FIRST_LSX_REGNUM <= regnum
+     && regnum < LOONGARCH_FIRST_LASX_REGNUM + LOONGARCH_LINUX_NUM_LASXREGSET)
+    return group == vector_reggroup;
+
+  /* Only $vrx / $xrx in vector_reggroup */
+  if (group == vector_reggroup)
+    return 0;
+
   int ret = tdesc_register_in_reggroup_p (gdbarch, regnum, group);
   if (ret != -1)
     return ret;
@@ -1530,6 +1712,52 @@ loongarch_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     valid_p &= tdesc_numbered_register (feature_fpu, tdesc_data.get (), regnum++,
 					loongarch_c_normal_name[i] + 1);
   valid_p &= tdesc_numbered_register (feature_fpu, tdesc_data.get (), regnum++, "fcsr");
+  if (!valid_p)
+    return nullptr;
+
+  const struct tdesc_feature *feature_lsx
+    = tdesc_find_feature (tdesc, "org.gnu.gdb.loongarch.lsx");
+  if (feature_lsx == nullptr)
+    return nullptr;
+
+  /* Validate the description provides the lsx registers and
+     allocate their numbers.  */
+  regnum = LOONGARCH_FIRST_LSX_REGNUM;
+  for (int i = 0; i < LOONGARCH_LINUX_NUM_LSXREGSET; i++)
+    valid_p &= tdesc_numbered_register (feature_lsx, tdesc_data.get (), regnum++,
+					loongarch_v_normal_name[i] + 1);
+  if (!valid_p)
+    return nullptr;
+
+  const struct tdesc_feature *feature_lasx
+    = tdesc_find_feature (tdesc, "org.gnu.gdb.loongarch.lasx");
+  if (feature_lasx == nullptr)
+    return nullptr;
+
+  /* Validate the description provides the lasx registers and
+     allocate their numbers.  */
+  regnum = LOONGARCH_FIRST_LASX_REGNUM;
+  for (int i = 0; i < LOONGARCH_LINUX_NUM_LASXREGSET; i++)
+    valid_p &= tdesc_numbered_register (feature_lasx, tdesc_data.get (), regnum++,
+					loongarch_x_normal_name[i] + 1);
+  if (!valid_p)
+    return nullptr;
+
+  const struct tdesc_feature *feature_lbt
+    = tdesc_find_feature (tdesc, "org.gnu.gdb.loongarch.lbt");
+  if (feature_lbt == nullptr)
+    return nullptr;
+
+  /* Validate the description provides the lbt registers and
+     allocate their numbers.  */
+  regnum = LOONGARCH_FIRST_SCR_REGNUM;
+  for (int i = 0; i < LOONGARCH_LINUX_NUM_SCR; i++)
+    valid_p &= tdesc_numbered_register (feature_lbt, tdesc_data.get (), regnum++,
+					loongarch_cr_normal_name[i] + 1);
+  valid_p &= tdesc_numbered_register (feature_lbt, tdesc_data.get (), regnum++,
+				      "eflags");
+  valid_p &= tdesc_numbered_register (feature_lbt, tdesc_data.get (), regnum++,
+				      "ftop");
   if (!valid_p)
     return nullptr;
 
@@ -1601,15 +1829,15 @@ loongarch_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   info.target_desc = tdesc;
   info.tdesc_data = tdesc_data.get ();
 
-  for (int i = 0; i < ARRAY_SIZE (loongarch_r_lp64_name); ++i)
-    if (loongarch_r_lp64_name[i][0] != '\0')
-      user_reg_add (gdbarch, loongarch_r_lp64_name[i] + 1,
+  for (int i = 0; i < ARRAY_SIZE (loongarch_r_alias); ++i)
+    if (loongarch_r_alias[i][0] != '\0')
+      user_reg_add (gdbarch, loongarch_r_alias[i] + 1,
 	value_of_loongarch_user_reg, (void *) (size_t) i);
 
-  for (int i = 0; i < ARRAY_SIZE (loongarch_f_lp64_name); ++i)
+  for (int i = 0; i < ARRAY_SIZE (loongarch_f_alias); ++i)
     {
-      if (loongarch_f_lp64_name[i][0] != '\0')
-	user_reg_add (gdbarch, loongarch_f_lp64_name[i] + 1,
+      if (loongarch_f_alias[i][0] != '\0')
+	user_reg_add (gdbarch, loongarch_f_alias[i] + 1,
 		      value_of_loongarch_user_reg,
 		      (void *) (size_t) (LOONGARCH_FIRST_FP_REGNUM + i));
     }

@@ -133,7 +133,7 @@
 .\" ========================================================================
 .\"
 .IX Title "AS 1"
-.TH AS 1 "2024-09-04" "binutils-2.42" "GNU Development Tools"
+.TH AS 1 "2024-09-10" "binutils-2.43.1" "GNU Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -176,7 +176,8 @@ as [\fB\-a\fR[\fBcdghilns\fR][=\fIfile\fR]]
  [\fB\-\-size\-check=[error|warning]\fR]
  [\fB\-\-statistics\fR]
  [\fB\-v\fR] [\fB\-version\fR] [\fB\-\-version\fR]
- [\fB\-W\fR] [\fB\-\-warn\fR] [\fB\-\-fatal\-warnings\fR] [\fB\-w\fR] [\fB\-x\fR]
+ [\fB\-W\fR] [\fB\-\-no\-warn\fR] [\fB\-\-warn\fR] [\fB\-\-fatal\-warnings\fR]
+ [\fB\-w\fR] [\fB\-x\fR]
  [\fB\-Z\fR] [\fB@\fR\fI\s-1FILE\s0\fR]
  [\fItarget-options\fR]
  [\fB\-\-\fR|\fIfiles\fR ...]
@@ -415,6 +416,10 @@ as [\fB\-a\fR[\fBcdghilns\fR][=\fIfile\fR]]
    [\fB\-m31\fR|\fB\-m64\fR] [\fB\-mesa\fR|\fB\-mzarch\fR] [\fB\-march\fR=\fI\s-1CPU\s0\fR]
    [\fB\-mregnames\fR|\fB\-mno\-regnames\fR]
    [\fB\-mwarn\-areg\-zero\fR]
+   [\fB\-mwarn\-regtype\-mismatch=strict\fR
+    \fB\-mwarn\-regtype\-mismatch=relaxed\fR
+    \fB\-mwarn\-regtype\-mismatch=no\fR
+    \fB\-mno\-warn\-regtype\-mismatch\fR]
 .PP
 \&\fITarget \s-1SCORE\s0 options:\fR
    [\fB\-EB\fR][\fB\-EL\fR][\fB\-FIXDD\fR][\fB\-NWARN\fR]
@@ -816,7 +821,7 @@ Name the object-file output from \fBas\fR \fIobjfile\fR.
 Fold the data section into the text section.
 .IP "\fB\-\-reduce\-memory\-overheads\fR" 4
 .IX Item "--reduce-memory-overheads"
-Ignored.  Supported for compatibility with tools that apss the same option to
+Ignored.  Supported for compatibility with tools that pass the same option to
 both the assembler and the linker.
 .IP "\fB\-\-scfi=experimental\fR" 4
 .IX Item "--scfi=experimental"
@@ -866,12 +871,12 @@ Print the \fBas\fR version and exit.
 .IX Item "--no-warn"
 .PD
 Suppress warning messages.
-.IP "\fB\-\-fatal\-warnings\fR" 4
-.IX Item "--fatal-warnings"
-Treat warnings as errors.
 .IP "\fB\-\-warn\fR" 4
 .IX Item "--warn"
 Don't suppress warning messages or treat them as errors.
+.IP "\fB\-\-fatal\-warnings\fR" 4
+.IX Item "--fatal-warnings"
+Treat warnings as errors.
 .IP "\fB\-w\fR" 4
 .IX Item "-w"
 Ignored.
@@ -965,7 +970,7 @@ following architecture names are recognized: \f(CW\*(C`armv8\-a\*(C'\fR,
 \&\f(CW\*(C`armv8.1\-a\*(C'\fR, \f(CW\*(C`armv8.2\-a\*(C'\fR, \f(CW\*(C`armv8.3\-a\*(C'\fR, \f(CW\*(C`armv8.4\-a\*(C'\fR
 \&\f(CW\*(C`armv8.5\-a\*(C'\fR, \f(CW\*(C`armv8.6\-a\*(C'\fR, \f(CW\*(C`armv8.7\-a\*(C'\fR, \f(CW\*(C`armv8.8\-a\*(C'\fR,
 \&\f(CW\*(C`armv8.9\-a\*(C'\fR, \f(CW\*(C`armv8\-r\*(C'\fR, \f(CW\*(C`armv9\-a\*(C'\fR, \f(CW\*(C`armv9.1\-a\*(C'\fR,
-\&\f(CW\*(C`armv9.2\-a\*(C'\fR, \f(CW\*(C`armv9.3\-a\*(C'\fR and \f(CW\*(C`armv9.4\-a\*(C'\fR.
+\&\f(CW\*(C`armv9.2\-a\*(C'\fR, \f(CW\*(C`armv9.3\-a\*(C'\fR, \f(CW\*(C`armv9.4\-a\*(C'\fR and \f(CW\*(C`armv9.5\-a\*(C'\fR.
 .Sp
 If both \fB\-mcpu\fR and \fB\-march\fR are specified, the
 assembler will use the setting for \fB\-mcpu\fR.  If neither are
@@ -1616,10 +1621,29 @@ generated.
 .Sp
 Valid \fI\s-1CPU\s0\fR values are identical to the processor list of
 \&\fB\-march=\fR\fI\s-1CPU\s0\fR.
+.IP "\fB\-moperand\-check=\fR\fInone\fR" 4
+.IX Item "-moperand-check=none"
+.PD 0
+.IP "\fB\-moperand\-check=\fR\fIwarning\fR" 4
+.IX Item "-moperand-check=warning"
+.IP "\fB\-moperand\-check=\fR\fIerror\fR" 4
+.IX Item "-moperand-check=error"
+.PD
+These options control if the assembler should check certain instruction
+operands or operand combinations.  An example instructions where operand size
+cannot be inferred from its operands and also hasn't been specified by way of
+an instruction suffix.
+\&\fB\-moperand\-check=\fR\fInone\fR will make the assembler not perform
+these checks.  \fB\-moperand\-check=\fR\fIwarning\fR will make the assembler
+issue a warning when respective checks fail, which is the default.
+\&\fB\-moperand\-check=\fR\fIerror\fR will make the assembler issue an error
+when respective checks fail.
 .IP "\fB\-msse2avx\fR" 4
 .IX Item "-msse2avx"
 This option specifies that the assembler should encode \s-1SSE\s0 instructions
-with \s-1VEX\s0 prefix.
+with \s-1VEX\s0 prefix, requiring \s-1AVX\s0 to be available.  \s-1SSE\s0 instructions using
+extended GPRs will be encoded with \s-1EVEX\s0 prefix, requiring \s-1AVX512\s0 or \s-1AVX10\s0 to
+be available.
 .IP "\fB\-muse\-unaligned\-vector\-move\fR" 4
 .IX Item "-muse-unaligned-vector-move"
 This option specifies that the assembler should encode aligned vector
@@ -2711,6 +2735,9 @@ Generate code for Power9 architecture.
 .IP "\fB\-mpower10, \-mpwr10\fR" 4
 .IX Item "-mpower10, -mpwr10"
 Generate code for Power10 architecture.
+.IP "\fB\-mpower11, \-mpwr11\fR" 4
+.IX Item "-mpower11, -mpwr11"
+Generate code for Power11 architecture.
 .IP "\fB\-mfuture\fR" 4
 .IX Item "-mfuture"
 Generate code for 'future' architecture.
@@ -2866,6 +2893,28 @@ Allow or disallow symbolic names for registers.
 .IX Item "-mwarn-areg-zero"
 Warn whenever the operand for a base or index register has been specified
 but evaluates to zero.
+.IP "\fB\-mwarn\-regtype\-mismatch=strict\fR" 4
+.IX Item "-mwarn-regtype-mismatch=strict"
+.PD 0
+.IP "\fB\-mwarn\-regtype\-mismatch=relaxed\fR" 4
+.IX Item "-mwarn-regtype-mismatch=relaxed"
+.IP "\fB\-mwarn\-regtype\-mismatch=no\fR" 4
+.IX Item "-mwarn-regtype-mismatch=no"
+.IP "\fB\-mno\-warn\-regtype\-mismatch\fR" 4
+.IX Item "-mno-warn-regtype-mismatch"
+.PD
+Controls whether the assembler performs register name type checks and generates
+a warning message in case of a mismatch with the operand register type.
+The default (which can be restored by using the \fBrelaxed\fR argument) is
+to perform relaxed register name type checks, which allow floating point
+register (\s-1FPR\s0) names \f(CW%f0\fR to \f(CW%f15\fR to be specified as argument to vector register
+(\s-1VR\s0) operands and vector register (\s-1VR\s0) names \f(CW%v0\fR to \f(CW%v15\fR to be specified as
+argument to floating point register (\s-1FPR\s0) operands.  This is acceptable as the
+\&\s-1FPR\s0 are embedded into the lower half of the \s-1VR.\s0
+Using the \fBstrict\fR argument strict register name type checks are
+performed.
+The \fBno\fR argument, which is equivalent to
+\&\fB\-mno\-warn\-regtype\-mismatch\fR, disables any register name type checks.
 .PP
 The following options are available when as is configured for a
 \&\s-1TMS320C6000\s0 processor.

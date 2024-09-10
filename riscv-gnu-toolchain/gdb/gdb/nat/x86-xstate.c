@@ -1,6 +1,6 @@
 /* x86 XSAVE extended state functions.
 
-   Copyright (C) 2022-2023 Free Software Foundation, Inc.
+   Copyright (C) 2022-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "gdbsupport/common-defs.h"
 #include "gdbsupport/x86-xstate.h"
 #include "nat/x86-cpuid.h"
 #include "nat/x86-xstate.h"

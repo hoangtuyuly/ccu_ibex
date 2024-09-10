@@ -1,6 +1,6 @@
 /* Definitions for expressions in GDB
 
-   Copyright (C) 2020-2023 Free Software Foundation, Inc.
+   Copyright (C) 2020-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -1513,9 +1513,8 @@ public:
 		   struct expression *exp,
 		   enum noside noside) override
   {
-    if (expect_type != nullptr && expect_type->code () == TYPE_CODE_PTR)
-      expect_type = check_typedef (expect_type)->target_type ();
-    value *val = std::get<0> (m_storage)->evaluate (expect_type, exp, noside);
+    value *val
+      = std::get<0> (m_storage)->evaluate (nullptr, exp, noside);
     return eval_op_ind (expect_type, exp, noside, val);
   }
 

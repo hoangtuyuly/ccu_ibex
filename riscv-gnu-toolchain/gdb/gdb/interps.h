@@ -1,6 +1,6 @@
 /* Manages interpreters for GDB, the GNU debugger.
 
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2024 Free Software Foundation, Inc.
 
    Written by Jim Ingham <jingham@apple.com> of Apple Computer, Inc.
 
@@ -31,7 +31,7 @@ struct ui;
 class completion_tracker;
 struct thread_info;
 struct inferior;
-struct so_list;
+struct solib;
 struct trace_state_variable;
 
 typedef struct interp *(*interp_factory_func) (const char *name);
@@ -84,6 +84,10 @@ public:
   virtual bool supports_command_editing ()
   { return false; }
 
+  /* Returns true if this interpreter supports new UIs.  */
+  virtual bool supports_new_ui () const
+  { return true; }
+
   const char *name () const
   { return m_name; }
 
@@ -123,7 +127,7 @@ public:
 
   /* Notify the interpreter that thread T has exited.  */
   virtual void on_thread_exited (thread_info *,
-				 gdb::optional<ULONGEST> exit_code,
+				 std::optional<ULONGEST> exit_code,
 				 int silent) {}
 
   /* Notify the interpreter that inferior INF was added.  */
@@ -147,10 +151,10 @@ public:
   virtual void on_target_resumed (ptid_t ptid) {}
 
   /* Notify the interpreter that solib SO has been loaded.  */
-  virtual void on_solib_loaded (so_list *so) {}
+  virtual void on_solib_loaded (const solib &so) {}
 
   /* Notify the interpreter that solib SO has been unloaded.  */
-  virtual void on_solib_unloaded (so_list *so) {}
+  virtual void on_solib_unloaded (const solib &so) {}
 
   /* Notify the interpreter that a command it is executing is about to cause
      the inferior to proceed.  */
@@ -201,8 +205,10 @@ extern struct interp *interp_lookup (struct ui *ui, const char *name);
 
 /* Set the current UI's top level interpreter to the interpreter named
    NAME.  Throws an error if NAME is not a known interpreter or the
-   interpreter fails to initialize.  */
-extern void set_top_level_interpreter (const char *name);
+   interpreter fails to initialize.  FOR_NEW_UI is true when called
+   from the 'new-ui' command, and causes an extra check to ensure the
+   interpreter is valid for a new UI.  */
+extern void set_top_level_interpreter (const char *name, bool for_new_ui);
 
 /* Temporarily set the current interpreter, and reset it on
    destruction.  */
@@ -292,7 +298,7 @@ extern void interps_notify_new_thread (thread_info *t);
 
 /* Notify all interpreters that thread T has exited.  */
 extern void interps_notify_thread_exited (thread_info *t,
-					  gdb::optional<ULONGEST> exit_code,
+					  std::optional<ULONGEST> exit_code,
 					  int silent);
 
 /* Notify all interpreters that inferior INF was added.  */
@@ -324,10 +330,10 @@ extern void interps_notify_record_changed (inferior *inf, int started,
 extern void interps_notify_target_resumed (ptid_t ptid);
 
 /* Notify all interpreters that solib SO has been loaded.  */
-extern void interps_notify_solib_loaded (so_list *so);
+extern void interps_notify_solib_loaded (const solib &so);
 
 /* Notify all interpreters that solib SO has been unloaded.  */
-extern void interps_notify_solib_unloaded (so_list *so);
+extern void interps_notify_solib_unloaded (const solib &so);
 
 /* Notify all interpreters that the selected traceframe changed.
 

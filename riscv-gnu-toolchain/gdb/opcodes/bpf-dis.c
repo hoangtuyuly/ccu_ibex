@@ -1,5 +1,5 @@
 /* bpf-dis.c - BPF disassembler.
-   Copyright (C) 2023 Free Software Foundation, Inc.
+   Copyright (C) 2023-2024 Free Software Foundation, Inc.
 
    Contributed by Oracle Inc.
 
@@ -32,7 +32,7 @@
 
 /* This disassembler supports two different syntaxes for BPF assembly.
    One is called "normal" and has the typical form for assembly
-   languages, with mnemonics and the like.  The othe is called
+   languages, with mnemonics and the like.  The other is called
    "pseudoc" and looks like C.  */
 
 enum bpf_dialect

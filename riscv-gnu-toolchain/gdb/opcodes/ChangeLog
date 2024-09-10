@@ -1,3 +1,37 @@
+2024-02-15 Will Hawkins  <hawkinsw@obs.cr>
+
+	* bpf-opc.c: Move callx into the v1 BPF CPU variant.
+
+2024-02-14  Yuriy Kolerov  <ykolerov@synopsys.com>
+
+	* arc-tbl.h (dbnz): Use "DBNZ" class.
+	* arc-dis.c (arc_opcode_to_insn_type): Handle "DBNZ" class.
+
+2024-01-29  Jose E. Marchesi  <jose.marchesi@oracle.com>
+
+	* bpf-opc.c (bpf_opcodes): Remove BPF_INSN_LDINDDW and
+	BPF_INSN_LDABSDW instructions.
+
+2024-01-15  Nick Clifton  <nickc@redhat.com>
+
+	* configure: Regenerate.
+	* po/opcodes.pot: Regenerate.
+
+2024-01-15  Nick Clifton  <nickc@redhat.com>
+
+	* 2.42 branch point.
+
+2023-11-15  Arsen Arsenović  <arsen@aarsen.me>
+
+	* aclocal.m4: Regenerate.
+	* po/Make-in ($(srcdir)/$(PACKAGE).pot): Output to a .pot
+	temporary file to suppress xgettext checking charset names.
+	* configure.ac (SHARED_LIBADD): Use LTLIBINTL rather than
+	LIBINTL.
+	* configure: Regenerate.
+	* po/Make-in ($(srcdir)/$(PACKAGE).pot): Output to a .pot
+	temporary file, to suppress xgettext checking charset names.
+
 2023-10-05  Neal frager  <neal.frager@amd.com>
 
 	* microblaze-opcm.h (struct op_code_struct): Tidy and remove
@@ -1448,7 +1482,7 @@
 
 For older changes see ChangeLog-2020
 
-Copyright (C) 2021-2023 Free Software Foundation, Inc.
+Copyright (C) 2021-2024 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

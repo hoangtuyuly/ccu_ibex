@@ -1,6 +1,6 @@
 /* Python interface to btrace instruction history.
 
-   Copyright 2016-2023 Free Software Foundation, Inc.
+   Copyright 2016-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,9 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "gdbcore.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbthread.h"
 #include "btrace.h"
 #include "py-record.h"
@@ -302,7 +301,7 @@ recpy_bt_insn_decoded (PyObject *self, void *closure)
 
   try
     {
-      gdb_print_insn (target_gdbarch (), insn->pc, &strfile, NULL);
+      gdb_print_insn (current_inferior ()->arch (), insn->pc, &strfile, NULL);
     }
   catch (const gdb_exception &except)
     {

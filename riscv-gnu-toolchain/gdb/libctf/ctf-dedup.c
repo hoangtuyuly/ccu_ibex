@@ -1,5 +1,5 @@
 /* CTF type deduplication.
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2024 Free Software Foundation, Inc.
 
    This file is part of libctf.
 
@@ -1318,8 +1318,7 @@ ctf_dedup_mark_conflicting_hash (ctf_dict_t *fp, const char *hval)
   if (ctf_dynset_cinsert (d->cd_conflicting_types, hval) < 0)
     {
       ctf_dprintf ("Out of memory marking %s as conflicted\n", hval);
-      ctf_set_errno (fp, errno);
-      return -1;
+      return ctf_set_errno (fp, errno);
     }
 
   /* If any types cite this type, mark them conflicted too.  */
@@ -2399,8 +2398,8 @@ ctf_dedup_walk_output_mapping (ctf_dict_t *output, ctf_dict_t **inputs,
     }
   if (err != ECTF_NEXT_END)
     {
-      ctf_err_warn (output, 0, err, _("cannot recurse over output mapping"));
       ctf_set_errno (output, err);
+      ctf_err_warn (output, 0, 0, _("cannot recurse over output mapping"));
       goto err;
     }
   ctf_dynset_destroy (already_visited);
@@ -2451,18 +2450,12 @@ ctf_dedup_maybe_synthesize_forward (ctf_dict_t *output, ctf_dict_t *target,
     {
       if ((emitted_forward = ctf_add_forward (target, CTF_ADD_ROOT, name,
 					      fwdkind)) == CTF_ERR)
-	{
-	  ctf_set_errno (output, ctf_errno (target));
-	  return CTF_ERR;
-	}
+	return ctf_set_typed_errno (output, ctf_errno (target));
 
       if (ctf_dynhash_cinsert (td->cd_output_emission_conflicted_forwards,
 			       decorated, (void *) (uintptr_t)
 			       emitted_forward) < 0)
-	{
-	  ctf_set_errno (output, ENOMEM);
-	  return CTF_ERR;
-	}
+	return ctf_set_typed_errno (output, ENOMEM);
     }
   else
     emitted_forward = (ctf_id_t) (uintptr_t) v;
@@ -2525,7 +2518,7 @@ ctf_dedup_id_to_target (ctf_dict_t *output, ctf_dict_t *target,
   if ((input->ctf_flags & LCTF_CHILD) && (LCTF_TYPE_ISPARENT (input, id)))
     {
       if (!ctf_assert (output, parents[input_num] <= ninputs))
-	return -1;
+	return CTF_ERR;
       input = inputs[parents[input_num]];
       input_num = parents[input_num];
     }
@@ -2534,7 +2527,7 @@ ctf_dedup_id_to_target (ctf_dict_t *output, ctf_dict_t *target,
 			     CTF_DEDUP_GID (output, input_num, id));
 
   if (!ctf_assert (output, hval && td->cd_output_emission_hashes))
-    return -1;
+    return CTF_ERR;
 
   /* If this type is a conflicted tagged structure, union, or forward,
      substitute a synthetic forward instead, emitting it if need be.  Only do
@@ -2553,7 +2546,7 @@ ctf_dedup_id_to_target (ctf_dict_t *output, ctf_dict_t *target,
       ctf_set_errno (err_fp, ctf_errno (output));
       ctf_err_warn (err_fp, 0, 0, _("cannot add synthetic forward for type "
 				    "%i/%lx"), input_num, id);
-      return -1;
+      return CTF_ERR;
     default:
       return emitted_forward;
     }
@@ -2568,7 +2561,7 @@ ctf_dedup_id_to_target (ctf_dict_t *output, ctf_dict_t *target,
       ctf_dprintf ("Checking shared parent for target\n");
       if (!ctf_assert (output, (target != output)
 		       && (target->ctf_flags & LCTF_CHILD)))
-	return -1;
+	return CTF_ERR;
 
       target_id = ctf_dynhash_lookup (od->cd_output_emission_hashes, hval);
 
@@ -2582,13 +2575,13 @@ ctf_dedup_id_to_target (ctf_dict_t *output, ctf_dict_t *target,
 	  ctf_err_warn (err_fp, 0, ctf_errno (output),
 			_("cannot add synthetic forward for type %i/%lx"),
 			input_num, id);
-	  return ctf_set_errno (err_fp, ctf_errno (output));
+	  return ctf_set_typed_errno (err_fp, ctf_errno (output));
 	default:
 	  return emitted_forward;
 	}
     }
   if (!ctf_assert (output, target_id))
-    return -1;
+    return CTF_ERR;
   return (ctf_id_t) (uintptr_t) target_id;
 }
 
@@ -3099,9 +3092,9 @@ ctf_dedup_emit (ctf_dict_t *output, ctf_dict_t **inputs, uint32_t ninputs,
 
   if ((outputs = calloc (num_outputs, sizeof (ctf_dict_t *))) == NULL)
     {
-      ctf_err_warn (output, 0, ENOMEM,
-		    _("out of memory allocating link outputs array"));
       ctf_set_errno (output, ENOMEM);
+      ctf_err_warn (output, 0, 0,
+		    _("out of memory allocating link outputs array"));
       return NULL;
     }
   *noutputs = num_outputs;
@@ -3153,7 +3146,7 @@ ctf_dedup_type_mapping (ctf_dict_t *fp, ctf_dict_t *src_fp, ctf_id_t src_type)
   else
     {
       ctf_set_errno (fp, ECTF_INTERNAL);
-      ctf_err_warn (fp, 0, ECTF_INTERNAL,
+      ctf_err_warn (fp, 0, 0,
 		    _("dict %p passed to ctf_dedup_type_mapping is not a "
 		      "deduplicated output"), (void *) fp);
       return CTF_ERR;

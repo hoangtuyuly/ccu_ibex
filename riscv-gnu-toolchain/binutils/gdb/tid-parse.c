@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "tid-parse.h"
 #include "inferior.h"
 #include "gdbthread.h"
@@ -25,7 +24,7 @@
 
 /* See tid-parse.h.  */
 
-void ATTRIBUTE_NORETURN
+[[noreturn]] void
 invalid_thread_id_error (const char *string)
 {
   error (_("Invalid thread ID: %s"), string);

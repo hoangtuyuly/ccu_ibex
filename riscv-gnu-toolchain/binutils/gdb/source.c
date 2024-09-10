@@ -16,14 +16,13 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "arch-utils.h"
 #include "symtab.h"
 #include "expression.h"
 #include "language.h"
 #include "command.h"
 #include "source.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "frame.h"
 #include "value.h"
 #include "gdbsupport/filestuff.h"
@@ -232,16 +231,15 @@ get_source_location (program_space *pspace)
   return loc;
 }
 
-/* Return the current source file for listing and next line to list.
-   NOTE: The returned sal pc and end fields are not valid.  */
+/* See source.h.  */
    
-struct symtab_and_line
-get_current_source_symtab_and_line (void)
+symtab_and_line
+get_current_source_symtab_and_line (program_space *pspace)
 {
   symtab_and_line cursal;
-  current_source_location *loc = get_source_location (current_program_space);
+  current_source_location *loc = get_source_location (pspace);
 
-  cursal.pspace = current_program_space;
+  cursal.pspace = pspace;
   cursal.symtab = loc->symtab ();
   cursal.line = loc->line ();
   cursal.pc = 0;
@@ -261,8 +259,9 @@ get_current_source_symtab_and_line (void)
 void
 set_default_source_symtab_and_line (void)
 {
-  if (!have_full_symbols () && !have_partial_symbols ())
-    error (_("No symbol table is loaded.  Use the \"file\" command."));
+  if (!have_full_symbols (current_program_space)
+      && !have_partial_symbols (current_program_space))
+    error (_ ("No symbol table is loaded.  Use the \"file\" command."));
 
   /* Pull in a current source symtab if necessary.  */
   current_source_location *loc = get_source_location (current_program_space);
@@ -299,9 +298,9 @@ set_current_source_symtab_and_line (const symtab_and_line &sal)
 /* Reset any information stored about a default file and line to print.  */
 
 void
-clear_current_source_symtab_and_line (void)
+clear_current_source_symtab_and_line (program_space *pspace)
 {
-  current_source_location *loc = get_source_location (current_program_space);
+  current_source_location *loc = get_source_location (pspace);
   loc->set (nullptr, 0);
 }
 
@@ -316,8 +315,9 @@ select_source_symtab ()
 
   /* Make the default place to list be the function `main'
      if one exists.  */
-  block_symbol bsym = lookup_symbol (main_name (), 0, VAR_DOMAIN, 0);
-  if (bsym.symbol != nullptr && bsym.symbol->aclass () == LOC_BLOCK)
+  block_symbol bsym = lookup_symbol (main_name (), nullptr,
+				     SEARCH_FUNCTION_DOMAIN, nullptr);
+  if (bsym.symbol != nullptr)
     {
       symtab_and_line sal = find_function_start_sal (bsym.symbol, true);
       if (sal.symtab == NULL)
@@ -685,8 +685,8 @@ info_source_command (const char *ignore, int from_tty)
   gdb_printf (_("Current source file is %s\n"), s->filename);
   if (s->compunit ()->dirname () != NULL)
     gdb_printf (_("Compilation directory is %s\n"), s->compunit ()->dirname ());
-  if (s->fullname)
-    gdb_printf (_("Located in %s\n"), s->fullname);
+  if (s->fullname () != nullptr)
+    gdb_printf (_("Located in %s\n"), s->fullname ());
   const std::vector<off_t> *offsets;
   if (g_source_cache.get_line_charpos (s, &offsets))
     gdb_printf (_("Contains %d line%s.\n"), (int) offsets->size (),
@@ -1145,8 +1145,7 @@ open_source_file (struct symtab *s)
   if (!s)
     return scoped_fd (-EINVAL);
 
-  gdb::unique_xmalloc_ptr<char> fullname (s->fullname);
-  s->fullname = NULL;
+  gdb::unique_xmalloc_ptr<char> fullname = s->release_fullname ();
   scoped_fd fd = find_and_open_source (s->filename, s->compunit ()->dirname (),
 				       &fullname);
 
@@ -1182,14 +1181,14 @@ open_source_file (struct symtab *s)
 		 It handles the reporting of its own errors.  */
 	      if (query_fd.get () >= 0)
 		{
-		  s->fullname = fullname.release ();
+		  s->set_fullname (std::move (fullname));
 		  return query_fd;
 		}
 	    }
 	}
     }
 
-  s->fullname = fullname.release ();
+  s->set_fullname (std::move (fullname));
   return fd;
 }
 
@@ -1236,7 +1235,7 @@ symtab_to_fullname (struct symtab *s)
   /* Use cached copy if we have it.
      We rely on forget_cached_source_info being called appropriately
      to handle cases like the file being moved.  */
-  if (s->fullname == NULL)
+  if (s->fullname () == nullptr)
     {
       scoped_fd fd = open_source_file (s);
 
@@ -1254,13 +1253,13 @@ symtab_to_fullname (struct symtab *s)
 	    fullname.reset (concat (s->compunit ()->dirname (), SLASH_STRING,
 				    s->filename, (char *) NULL));
 
-	  s->fullname = rewrite_source_path (fullname.get ()).release ();
-	  if (s->fullname == NULL)
-	    s->fullname = fullname.release ();
+	  s->set_fullname (rewrite_source_path (fullname.get ()));
+	  if (s->fullname () == nullptr)
+	    s->set_fullname (std::move (fullname));
 	}
     } 
 
-  return s->fullname;
+  return s->fullname ();
 }
 
 /* See commentary in source.h.  */
@@ -1340,30 +1339,21 @@ print_source_lines_base (struct symtab *s, int line, int stopline,
 		   styled_string (file_name_style.style (), filename),
 		   safe_strerror (errcode));
 	}
-      else
+      else if (uiout->is_mi_like_p () || uiout->test_flags (ui_source_list))
 	{
+	  /* CLI expects only the "file" field.  MI expects both
+	     fields.  ui_source_list is set only for CLI, not for
+	     TUI.  */
+
 	  uiout->field_signed ("line", line);
 	  uiout->text ("\tin ");
 
-	  /* CLI expects only the "file" field.  TUI expects only the
-	     "fullname" field (and TUI does break if "file" is printed).
-	     MI expects both fields.  ui_source_list is set only for CLI,
-	     not for TUI.  */
-	  if (uiout->is_mi_like_p () || uiout->test_flags (ui_source_list))
-	    uiout->field_string ("file", symtab_to_filename_for_display (s),
-				 file_name_style.style ());
-	  if (uiout->is_mi_like_p () || !uiout->test_flags (ui_source_list))
+	  uiout->field_string ("file", symtab_to_filename_for_display (s),
+			       file_name_style.style ());
+	  if (uiout->is_mi_like_p ())
 	    {
 	      const char *s_fullname = symtab_to_fullname (s);
-	      char *local_fullname;
-
-	      /* ui_out_field_string may free S_FULLNAME by calling
-		 open_source_file for it again.  See e.g.,
-		 tui_field_string->tui_show_source.  */
-	      local_fullname = (char *) alloca (strlen (s_fullname) + 1);
-	      strcpy (local_fullname, s_fullname);
-
-	      uiout->field_string ("fullname", local_fullname);
+	      uiout->field_string ("fullname", s_fullname);
 	    }
 
 	  uiout->text ("\n");

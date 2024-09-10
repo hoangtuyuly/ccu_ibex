@@ -1,5 +1,5 @@
 /* MI Command Set - breakpoint and watchpoint commands.
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2024 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "arch-utils.h"
 #include "mi-cmds.h"
 #include "ui-out.h"
@@ -267,15 +266,15 @@ mi_cmd_break_insert_1 (int dprintf, const char *command,
 	  break;
 	case EXPLICIT_SOURCE_OPT:
 	  is_explicit = 1;
-	  explicit_loc->source_filename = xstrdup (oarg);
+	  explicit_loc->source_filename = make_unique_xstrdup (oarg);
 	  break;
 	case EXPLICIT_FUNC_OPT:
 	  is_explicit = 1;
-	  explicit_loc->function_name = xstrdup (oarg);
+	  explicit_loc->function_name = make_unique_xstrdup (oarg);
 	  break;
 	case EXPLICIT_LABEL_OPT:
 	  is_explicit = 1;
-	  explicit_loc->label_name = xstrdup (oarg);
+	  explicit_loc->label_name = make_unique_xstrdup (oarg);
 	  break;
 	case EXPLICIT_LINE_OPT:
 	  is_explicit = 1;

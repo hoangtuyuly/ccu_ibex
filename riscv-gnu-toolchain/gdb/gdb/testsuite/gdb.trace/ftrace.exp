@@ -1,4 +1,4 @@
-# Copyright 2011-2023 Free Software Foundation, Inc.
+# Copyright 2011-2024 Free Software Foundation, Inc.
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -189,7 +189,7 @@ proc test_fast_tracepoints {} {
     # fast tracepoints RSP feature, and confirm fast tracepoints
     # can no longer be downloaded.
     set test "fast tracepoint could not be downloaded with the feature disabled"
-    if [gdb_is_target_remote] {
+    if [gdb_protocol_is_remote] {
         gdb_test "set remote fast-tracepoints-packet off"
 
         gdb_test_multiple "tstart" $test {

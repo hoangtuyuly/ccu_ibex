@@ -894,69 +894,89 @@ private:
 
 enum domain_enum
 {
-  /* UNDEF_DOMAIN is used when a domain has not been discovered or
-     none of the following apply.  This usually indicates an error either
-     in the symbol information or in gdb's handling of symbols.  */
-
-  UNDEF_DOMAIN,
-
-  /* VAR_DOMAIN is the usual domain.  In C, this contains variables,
-     function names, typedef names and enum type values.  */
-
-  VAR_DOMAIN,
-
-  /* STRUCT_DOMAIN is used in C to hold struct, union and enum type names.
-     Thus, if `struct foo' is used in a C program, it produces a symbol named
-     `foo' in the STRUCT_DOMAIN.  */
-
-  STRUCT_DOMAIN,
-
-  /* MODULE_DOMAIN is used in Fortran to hold module type names.  */
-
-  MODULE_DOMAIN,
-
-  /* LABEL_DOMAIN may be used for names of labels (for gotos).  */
-
-  LABEL_DOMAIN,
-
-  /* Fortran common blocks.  Their naming must be separate from VAR_DOMAIN.
-     They also always use LOC_COMMON_BLOCK.  */
-  COMMON_BLOCK_DOMAIN,
-
-  /* This must remain last.  */
-  NR_DOMAINS
+#define SYM_DOMAIN(X) X ## _DOMAIN,
+#include "sym-domains.def"
+#undef SYM_DOMAIN
 };
 
 /* The number of bits in a symbol used to represent the domain.  */
 
 #define SYMBOL_DOMAIN_BITS 3
-static_assert (NR_DOMAINS <= (1 << SYMBOL_DOMAIN_BITS));
 
 extern const char *domain_name (domain_enum);
 
-/* Searching domains, used when searching for symbols.  Element numbers are
-   hardcoded in GDB, check all enum uses before changing it.  */
-
-enum search_domain
+/* Flags used for searching symbol tables.  These can be combined to
+   let the search match multiple kinds of symbol.  */
+enum domain_search_flag
 {
-  /* Everything in VAR_DOMAIN minus FUNCTIONS_DOMAIN and
-     TYPES_DOMAIN.  */
-  VARIABLES_DOMAIN = 0,
-
-  /* All functions -- for some reason not methods, though.  */
-  FUNCTIONS_DOMAIN = 1,
-
-  /* All defined types */
-  TYPES_DOMAIN = 2,
-
-  /* All modules.  */
-  MODULES_DOMAIN = 3,
-
-  /* Any type.  */
-  ALL_DOMAIN = 4
+#define SYM_DOMAIN(X) \
+  SEARCH_ ## X ## _DOMAIN = (1 << X ## _DOMAIN),
+#include "sym-domains.def"
+#undef SYM_DOMAIN
 };
+DEF_ENUM_FLAGS_TYPE (enum domain_search_flag, domain_search_flags);
 
-extern const char *search_domain_name (enum search_domain);
+/* A convenience constant to search for any symbol.  */
+constexpr domain_search_flags SEARCH_ALL_DOMAINS
+    = ((domain_search_flags) 0
+#define SYM_DOMAIN(X) | SEARCH_ ## X ## _DOMAIN
+#include "sym-domains.def"
+#undef SYM_DOMAIN
+       );
+
+/* A convenience define for "C-like" name lookups, matching variables,
+   types, and functions.  */
+#define SEARCH_VFT \
+  (SEARCH_VAR_DOMAIN | SEARCH_FUNCTION_DOMAIN | SEARCH_TYPE_DOMAIN)
+
+/* Return a string representing the given flags.  */
+extern std::string domain_name (domain_search_flags);
+
+/* Convert a symbol domain to search flags.  */
+static inline domain_search_flags 
+to_search_flags (domain_enum domain)
+{
+  return domain_search_flags (domain_search_flag (1 << domain));
+}
+
+/* Return true if the given domain matches the given flags, false
+   otherwise.  */
+static inline bool
+search_flags_matches (domain_search_flags flags, domain_enum domain)
+{
+  return (flags & to_search_flags (domain)) != 0;
+}
+
+/* Some helpers for Python and Guile to account for backward
+   compatibility.  Those exposed the domains for lookup as well as
+   checking attributes of a symbol, so special encoding and decoding
+   is needed to continue to support both uses.  Domain constants must
+   remain unchanged, so that comparing a symbol's domain against a
+   constant yields the correct result, so search symbols are
+   distinguished by adding a flag bit.  This way, either sort of
+   constant can be used for lookup.  */
+
+/* The flag bit.  */
+constexpr int SCRIPTING_SEARCH_FLAG = 0x8000;
+static_assert (SCRIPTING_SEARCH_FLAG > SEARCH_ALL_DOMAINS);
+
+/* Convert a domain constant to a "scripting domain".  */
+static constexpr inline int
+to_scripting_domain (domain_enum val)
+{
+  return val;
+}
+
+/* Convert a search constant to a "scripting domain".  */
+static constexpr inline int
+to_scripting_domain (domain_search_flags val)
+{
+  return SCRIPTING_SEARCH_FLAG | (int) val;
+}
+
+/* Convert from a "scripting domain" constant back to search flags.
+   Throws an exception if VAL is not one of the allowable values.  */
+extern domain_search_flags from_scripting_domain (int val);
 
 /* An address-class says where to find the value of a symbol.  */
 
@@ -1094,13 +1114,13 @@ struct symbol_computed_ops
      FRAME may be zero.  */
 
   struct value *(*read_variable) (struct symbol * symbol,
-				  frame_info_ptr frame);
+				  const frame_info_ptr &frame);
 
   /* Read variable SYMBOL like read_variable at (callee) FRAME's function
      entry.  SYMBOL should be a function parameter, otherwise
      NO_ENTRY_VALUE_ERROR will be thrown.  */
   struct value *(*read_variable_at_entry) (struct symbol *symbol,
-					   frame_info_ptr frame);
+					   const frame_info_ptr &frame);
 
   /* Find the "symbol_needs_kind" value for the given symbol.  This
      value determines whether reading the symbol needs memory (e.g., a
@@ -1172,7 +1192,7 @@ struct symbol_block_ops
      computed with DW_AT_static_link and this method must be used to compute
      the corresponding DW_AT_frame_base attribute.  */
   CORE_ADDR (*get_frame_base) (struct symbol *framefunc,
-			       frame_info_ptr frame);
+			       const frame_info_ptr &frame);
 
   /* Return the block for this function.  So far, this is used to
      implement function aliases.  So, if this is set, then it's not
@@ -1222,13 +1242,9 @@ enum symbol_subclass_kind
 
 extern gdb::array_view<const struct symbol_impl> symbol_impls;
 
-bool symbol_matches_domain (enum language symbol_language,
-			    domain_enum symbol_domain,
-			    domain_enum domain);
-
 /* This structure is space critical.  See space comments at the top.  */
 
-struct symbol : public general_symbol_info, public allocate_on_obstack
+struct symbol : public general_symbol_info, public allocate_on_obstack<symbol>
 {
   symbol ()
     /* Class-initialization of bitfields is only allowed in C++20.  */
@@ -1267,17 +1283,28 @@ struct symbol : public general_symbol_info, public allocate_on_obstack
     return symbol_impls[this->m_aclass_index];
   }
 
+  const symbol_block_ops *block_ops () const
+  {
+    return this->impl ().ops_block;
+  }
+
+  const symbol_computed_ops *computed_ops () const
+  {
+    return this->impl ().ops_computed;
+  }
+
+  const symbol_register_ops *register_ops () const
+  {
+    return this->impl ().ops_register;
+  }
+
   address_class aclass () const
   {
     return this->impl ().aclass;
   }
 
-  /* Call symbol_matches_domain on this symbol, using the symbol's
-     domain.  */
-  bool matches (domain_enum d) const
-  {
-    return symbol_matches_domain (language (), domain (), d);
-  }
+  /* Return true if this symbol's domain matches FLAGS.  */
+  bool matches (domain_search_flags flags) const;
 
   domain_enum domain () const
   {
@@ -1319,7 +1346,11 @@ struct symbol : public general_symbol_info, public allocate_on_obstack
     m_is_inlined = is_inlined;
   }
 
-  bool is_cplus_template_function () const
+  /* Return true if this symbol is a template function.  Template
+     functions actually are of type 'template_symbol' and have extra
+     symbols (the template parameters) attached.  */
+
+  bool is_template_function () const
   {
     return this->subclass == SYMBOL_TEMPLATE;
   }
@@ -1543,17 +1574,15 @@ struct block_symbol
 /* Note: There is no accessor macro for symbol.owner because it is
    "private".  */
 
-#define SYMBOL_COMPUTED_OPS(symbol)	((symbol)->impl ().ops_computed)
-#define SYMBOL_BLOCK_OPS(symbol)	((symbol)->impl ().ops_block)
-#define SYMBOL_REGISTER_OPS(symbol)	((symbol)->impl ().ops_register)
 #define SYMBOL_LOCATION_BATON(symbol)   (symbol)->aux_value
 
 inline const block *
 symbol::value_block () const
 {
-  if (SYMBOL_BLOCK_OPS (this) != nullptr
-      && SYMBOL_BLOCK_OPS (this)->get_block_value != nullptr)
-    return SYMBOL_BLOCK_OPS (this)->get_block_value (this);
+  if (const symbol_block_ops *block_ops = this->block_ops ();
+      block_ops != nullptr && block_ops->get_block_value != nullptr)
+    return block_ops->get_block_value (this);
+
   return m_value.block;
 }
 
@@ -1568,7 +1597,7 @@ extern int register_symbol_register_impl (enum address_class,
 
 /* An instance of this type is used to represent a C++ template
    function.  A symbol is really of this type iff
-   symbol::is_cplus_template_function is true.  */
+   symbol::is_template_function is true.  */
 
 struct template_symbol : public symbol
 {
@@ -1710,19 +1739,31 @@ struct symtab
     m_language = language;
   }
 
+  /* Return the current full name of this symtab.  */
+  const char *fullname () const
+  { return m_fullname; }
+
+  /* Transfer ownership of the current full name to the caller.  The
+     full name is reset to nullptr.  */
+  gdb::unique_xmalloc_ptr<char> release_fullname ()
+  {
+    gdb::unique_xmalloc_ptr<char> result (m_fullname);
+    m_fullname = nullptr;
+    return result;
+  }
+
+  /* Set the current full name to NAME, transferring ownership to this
+     symtab.  */
+  void set_fullname (gdb::unique_xmalloc_ptr<char> name)
+  {
+    gdb_assert (m_fullname == nullptr);
+    m_fullname = name.release ();
+  }
+
   /* Unordered chain of all filetabs in the compunit,  with the exception
      that the "main" source file is the first entry in the list.  */
 
   struct symtab *next;
-
-  /* Backlink to containing compunit symtab.  */
-
-  struct compunit_symtab *m_compunit;
-
-  /* Table mapping core addresses to line numbers for this file.
-     Can be NULL if none.  Never shared between different symtabs.  */
-
-  const struct linetable *m_linetable;
 
   /* Name of this source file, in a form appropriate to print to the user.
 
@@ -1740,6 +1781,17 @@ struct symtab
      This pointer is never nullptr.*/
   const char *filename_for_id;
 
+private:
+
+  /* Backlink to containing compunit symtab.  */
+
+  struct compunit_symtab *m_compunit;
+
+  /* Table mapping core addresses to line numbers for this file.
+     Can be NULL if none.  Never shared between different symtabs.  */
+
+  const struct linetable *m_linetable;
+
   /* Language of this source file.  */
 
   enum language m_language;
@@ -1747,7 +1799,7 @@ struct symtab
   /* Full name of file as found by searching the source path.
      NULL if not yet known.  */
 
-  char *fullname;
+  char *m_fullname;
 };
 
 /* A range adapter to allowing iterating over all the file tables in a list.  */
@@ -1905,13 +1957,22 @@ struct compunit_symtab
   symtab *primary_filetab () const;
 
   /* Set m_call_site_htab.  */
-  void set_call_site_htab (htab_t call_site_htab);
+  void set_call_site_htab (htab_up call_site_htab);
 
   /* Find call_site info for PC.  */
   call_site *find_call_site (CORE_ADDR pc) const;
 
   /* Return the language of this compunit_symtab.  */
   enum language language () const;
+
+  /* Clear any cached source file names.  */
+  void forget_cached_source_info ();
+
+  /* This is called when an objfile is being destroyed and will free
+     any resources used by this compunit_symtab.  Normally a
+     destructor would be used instead, but at the moment
+     compunit_symtab objects are allocated on an obstack.  */
+  void finalize ();
 
   /* Unordered chain of all compunit symtabs of this objfile.  */
   struct compunit_symtab *next;
@@ -2076,7 +2137,7 @@ struct field_of_this_result
 extern struct block_symbol
   lookup_symbol_in_language (const char *,
 			     const struct block *,
-			     const domain_enum,
+			     const domain_search_flags,
 			     enum language,
 			     struct field_of_this_result *);
 
@@ -2084,7 +2145,7 @@ extern struct block_symbol
 
 extern struct block_symbol lookup_symbol (const char *,
 					  const struct block *,
-					  const domain_enum,
+					  const domain_search_flags,
 					  struct field_of_this_result *);
 
 /* Find the definition for a specified symbol search name in domain
@@ -2096,9 +2157,10 @@ extern struct block_symbol lookup_symbol (const char *,
    pointer, or NULL if no symbol is found.  The symbol's section is
    fixed up if necessary.  */
 
-extern struct block_symbol lookup_symbol_search_name (const char *search_name,
-						      const struct block *block,
-						      domain_enum domain);
+extern struct block_symbol lookup_symbol_search_name
+     (const char *search_name,
+      const struct block *block,
+      domain_search_flags domain);
 
 /* Some helper functions for languages that need to write their own
    lookup_symbol_nonlocal functions.  */
@@ -2110,13 +2172,13 @@ extern struct block_symbol lookup_symbol_search_name (const char *search_name,
 extern struct block_symbol
   lookup_symbol_in_static_block (const char *name,
 				 const struct block *block,
-				 const domain_enum domain);
+				 const domain_search_flags domain);
 
 /* Search all static file-level symbols for NAME from DOMAIN.
    Upon success fixes up the symbol's section if necessary.  */
 
-extern struct block_symbol lookup_static_symbol (const char *name,
-						 const domain_enum domain);
+extern struct block_symbol lookup_static_symbol
+     (const char *name, const domain_search_flags domain);
 
 /* Lookup a symbol in all files' global blocks.
 
@@ -2132,7 +2194,7 @@ extern struct block_symbol lookup_static_symbol (const char *name,
 extern struct block_symbol
   lookup_global_symbol (const char *name,
 			const struct block *block,
-			const domain_enum domain);
+			const domain_search_flags domain);
 
 /* Lookup a symbol in block BLOCK.
    Upon success fixes up the symbol's section if necessary.  */
@@ -2141,7 +2203,7 @@ extern struct symbol *
   lookup_symbol_in_block (const char *name,
 			  symbol_name_match_type match_type,
 			  const struct block *block,
-			  const domain_enum domain);
+			  const domain_search_flags domain);
 
 /* Look up the `this' symbol for LANG in BLOCK.  Return the symbol if
    found, or NULL if not found.  */
@@ -2281,9 +2343,11 @@ extern void reread_symbols (int from_tty);
    The type returned must not be opaque -- i.e., must have at least one field
    defined.  */
 
-extern struct type *lookup_transparent_type (const char *);
+extern struct type *lookup_transparent_type
+    (const char *name, domain_search_flags flags = SEARCH_STRUCT_DOMAIN);
 
-extern struct type *basic_lookup_transparent_type (const char *);
+extern struct type *basic_lookup_transparent_type
+     (const char *name, domain_search_flags flags = SEARCH_STRUCT_DOMAIN);
 
 /* Macro for name of symbol to indicate a file compiled with gcc.  */
 #ifndef GCC_COMPILED_FLAG_SYMBOL
@@ -2324,7 +2388,7 @@ struct gnu_ifunc_fns
 
 extern const struct gnu_ifunc_fns *gnu_ifunc_fns_p;
 
-extern CORE_ADDR find_solib_trampoline_target (frame_info_ptr, CORE_ADDR);
+extern CORE_ADDR find_solib_trampoline_target (const frame_info_ptr &, CORE_ADDR);
 
 struct symtab_and_line
 {
@@ -2396,10 +2460,6 @@ extern bool find_line_pc_range (struct symtab_and_line, CORE_ADDR *,
 				CORE_ADDR *);
 
 extern void resolve_sal_pc (struct symtab_and_line *);
-
-/* solib.c */
-
-extern void clear_solib (void);
 
 /* The reason we're calling into a completion match list collector
    function.  */
@@ -2555,13 +2615,11 @@ class global_symbol_searcher
 public:
 
   /* Constructor.  */
-  global_symbol_searcher (enum search_domain kind,
+  global_symbol_searcher (domain_search_flags kind,
 			  const char *symbol_name_regexp)
     : m_kind (kind),
       m_symbol_name_regexp (symbol_name_regexp)
   {
-    /* The symbol searching is designed to only find one kind of thing.  */
-    gdb_assert (m_kind != ALL_DOMAIN);
   }
 
   /* Set the optional regexp that matches against the symbol type.  */
@@ -2590,12 +2648,14 @@ public:
      removed.  */
   std::vector<symbol_search> search () const;
 
-  /* The set of source files to search in for matching symbols.  This is
-     currently public so that it can be populated after this object has
-     been constructed.  */
-  std::vector<const char *> filenames;
+  /* Add a filename to the list of file names to search.  */
+  void add_filename (gdb::unique_xmalloc_ptr<char> filename)
+  { m_filenames.push_back (std::move (filename)); }
 
 private:
+  /* The set of source files to search in for matching symbols.  */
+  std::vector<gdb::unique_xmalloc_ptr<char>> m_filenames;
+
   /* The kind of symbols are we searching for.
      VARIABLES_DOMAIN - Search all symbols, excluding functions, type
 			names, and constants (enums).
@@ -2603,7 +2663,7 @@ private:
      TYPES_DOMAIN     - Search all type names.
      MODULES_DOMAIN   - Search all Fortran modules.
      ALL_DOMAIN       - Not valid for this function.  */
-  enum search_domain m_kind;
+  domain_search_flags m_kind;
 
   /* Regular expression to match against the symbol name.  */
   const char *m_symbol_name_regexp = nullptr;
@@ -2647,7 +2707,7 @@ private:
 			      std::vector<symbol_search> *results) const;
 
   /* Return true if MSYMBOL is of type KIND.  */
-  static bool is_suitable_msymbol (const enum search_domain kind,
+  static bool is_suitable_msymbol (const domain_search_flags kind,
 				   const minimal_symbol *msymbol);
 };
 
@@ -2664,15 +2724,13 @@ typedef std::pair<symbol_search, symbol_search> module_symbol_search;
    within the module.  */
 extern std::vector<module_symbol_search> search_module_symbols
 	(const char *module_regexp, const char *regexp,
-	 const char *type_regexp, search_domain kind);
+	 const char *type_regexp, domain_search_flags kind);
 
 /* Convert a global or static symbol SYM (based on BLOCK, which should be
    either GLOBAL_BLOCK or STATIC_BLOCK) into a string for use in 'info'
-   type commands (e.g. 'info variables', 'info functions', etc).  KIND is
-   the type of symbol that was searched for which gave us SYM.  */
+   type commands (e.g. 'info variables', 'info functions', etc).  */
 
-extern std::string symbol_to_info_string (struct symbol *sym, int block,
-					  enum search_domain kind);
+extern std::string symbol_to_info_string (struct symbol *sym, int block);
 
 extern bool treg_matches_sym_type_name (const compiled_regex &treg,
 					const struct symbol *sym);
@@ -2692,7 +2750,7 @@ extern struct block_symbol
   lookup_global_symbol_from_objfile (struct objfile *main_objfile,
 				     enum block_enum block_index,
 				     const char *name,
-				     const domain_enum domain);
+				     const domain_search_flags domain);
 
 /* Return 1 if the supplied producer string matches the ARM RealView
    compiler (armcc).  */
@@ -2785,7 +2843,7 @@ typedef bool (symbol_found_callback_ftype) (struct block_symbol *bsym);
 
 bool iterate_over_symbols (const struct block *block,
 			   const lookup_name_info &name,
-			   const domain_enum domain,
+			   const domain_search_flags domain,
 			   gdb::function_view<symbol_found_callback_ftype> callback);
 
 /* Like iterate_over_symbols, but if all calls to CALLBACK return
@@ -2795,7 +2853,7 @@ bool iterate_over_symbols (const struct block *block,
 bool iterate_over_symbols_terminated
   (const struct block *block,
    const lookup_name_info &name,
-   const domain_enum domain,
+   const domain_search_flags domain,
    gdb::function_view<symbol_found_callback_ftype> callback);
 
 /* Storage type used by demangle_for_lookup.  demangle_for_lookup
@@ -2868,7 +2926,7 @@ public:
      to search all symtabs and program spaces.  */
   void find_all_symbols (const std::string &name,
 			 const struct language_defn *language,
-			 enum search_domain search_domain,
+			 domain_search_flags domain_search_flags,
 			 std::vector<symtab *> *search_symtabs,
 			 struct program_space *search_pspace);
 
@@ -2953,5 +3011,12 @@ extern void info_sources_worker (struct ui_out *uiout,
    linetable.  */
 
 std::optional<CORE_ADDR> find_epilogue_using_linetable (CORE_ADDR func_addr);
+
+/* Search an array of symbols for one named NAME.  Name comparison is
+   done using strcmp -- i.e., this is only useful for simple names.
+   Returns the symbol, if found, or nullptr if not.  */
+
+extern struct symbol *search_symbol_list (const char *name, int num,
+					  struct symbol **syms);
 
 #endif /* !defined(SYMTAB_H) */

@@ -1,7 +1,7 @@
 /* Common code for targets with the none ABI (bare-metal), but where the
    BFD library is build with ELF support.
 
-   Copyright (C) 2020-2023 Free Software Foundation, Inc.
+   Copyright (C) 2020-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,7 +18,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "elf-none-tdep.h"
 #include "regset.h"
 #include "elf-bfd.h"

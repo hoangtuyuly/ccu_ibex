@@ -1,6 +1,6 @@
 /* TUI windows implemented in Python
 
-   Copyright (C) 2020-2023 Free Software Foundation, Inc.
+   Copyright (C) 2020-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,7 +18,6 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
-#include "defs.h"
 #include "arch-utils.h"
 #include "python-internal.h"
 #include "gdbsupport/intrusive_list.h"
@@ -101,6 +100,8 @@ public:
     else
       tui_win_info::refresh_window ();
   }
+
+  void resize (int height, int width, int origin_x, int origin_y) override;
 
   void click (int mouse_x, int mouse_y, int mouse_button) override;
 
@@ -230,6 +231,14 @@ tui_py_window::do_scroll_vertical (int num_to_scroll)
       if (result == nullptr)
 	gdbpy_print_stack ();
     }
+}
+
+void
+tui_py_window::resize (int height_, int width_, int origin_x_, int origin_y_)
+{
+  m_inner_window.reset (nullptr);
+
+  tui_win_info::resize (height_, width_, origin_x_, origin_y_);
 }
 
 void
@@ -466,13 +475,16 @@ gdbpy_tui_erase (PyObject *self, PyObject *args)
 
 /* Python function that writes some text to a TUI window.  */
 static PyObject *
-gdbpy_tui_write (PyObject *self, PyObject *args)
+gdbpy_tui_write (PyObject *self, PyObject *args, PyObject *kw)
 {
+  static const char *keywords[] = { "string", "full_window", nullptr };
+
   gdbpy_tui_window *win = (gdbpy_tui_window *) self;
   const char *text;
   int full_window = 0;
 
-  if (!PyArg_ParseTuple (args, "s|i", &text, &full_window))
+  if (!gdb_PyArg_ParseTupleAndKeywords (args, kw, "s|i", keywords,
+					&text, &full_window))
     return nullptr;
 
   REQUIRE_WINDOW (win);
@@ -552,7 +564,7 @@ static PyMethodDef tui_object_methods[] =
 Return true if this TUI window is valid, false if not." },
   { "erase", gdbpy_tui_erase, METH_NOARGS,
     "Erase the TUI window." },
-  { "write", (PyCFunction) gdbpy_tui_write, METH_VARARGS,
+  { "write", (PyCFunction) gdbpy_tui_write, METH_VARARGS | METH_KEYWORDS,
     "Append a string to the TUI window." },
   { NULL } /* Sentinel.  */
 };

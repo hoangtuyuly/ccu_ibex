@@ -1,6 +1,6 @@
 /* Renesas M32C target-dependent code for GDB, the GNU debugger.
 
-   Copyright (C) 2004-2023 Free Software Foundation, Inc.
+   Copyright (C) 2004-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "sim/sim-m32c.h"
 #include "gdbtypes.h"
 #include "regcache.h"
@@ -977,7 +977,8 @@ make_regs (struct gdbarch *arch)
   set_gdbarch_register_name (arch, m32c_register_name);
   set_gdbarch_register_type (arch, m32c_register_type);
   set_gdbarch_pseudo_register_read (arch, m32c_pseudo_register_read);
-  set_gdbarch_pseudo_register_write (arch, m32c_pseudo_register_write);
+  set_gdbarch_deprecated_pseudo_register_write (arch,
+						m32c_pseudo_register_write);
   set_gdbarch_register_sim_regno (arch, m32c_register_sim_regno);
   set_gdbarch_stab_reg_to_regnum (arch, m32c_debug_info_reg_to_regnum);
   set_gdbarch_dwarf2_reg_to_regnum (arch, m32c_debug_info_reg_to_regnum);
@@ -1853,7 +1854,7 @@ m32c_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR ip)
 /* Stack unwinding.  */
 
 static struct m32c_prologue *
-m32c_analyze_frame_prologue (frame_info_ptr this_frame,
+m32c_analyze_frame_prologue (const frame_info_ptr &this_frame,
 			     void **this_prologue_cache)
 {
   if (! *this_prologue_cache)
@@ -1877,7 +1878,7 @@ m32c_analyze_frame_prologue (frame_info_ptr this_frame,
 
 
 static CORE_ADDR
-m32c_frame_base (frame_info_ptr this_frame,
+m32c_frame_base (const frame_info_ptr &this_frame,
 		void **this_prologue_cache)
 {
   struct m32c_prologue *p
@@ -1917,7 +1918,7 @@ m32c_frame_base (frame_info_ptr this_frame,
 
 
 static void
-m32c_this_id (frame_info_ptr this_frame,
+m32c_this_id (const frame_info_ptr &this_frame,
 	      void **this_prologue_cache,
 	      struct frame_id *this_id)
 {
@@ -1930,7 +1931,7 @@ m32c_this_id (frame_info_ptr this_frame,
 
 
 static struct value *
-m32c_prev_register (frame_info_ptr this_frame,
+m32c_prev_register (const frame_info_ptr &this_frame,
 		    void **this_prologue_cache, int regnum)
 {
   gdbarch *arch = get_frame_arch (this_frame);
@@ -2308,7 +2309,7 @@ m32c_return_value (struct gdbarch *gdbarch,
    code sequence seems more fragile.  */
 
 static CORE_ADDR
-m32c_skip_trampoline_code (frame_info_ptr frame, CORE_ADDR stop_pc)
+m32c_skip_trampoline_code (const frame_info_ptr &frame, CORE_ADDR stop_pc)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
   m32c_gdbarch_tdep *tdep = gdbarch_tdep<m32c_gdbarch_tdep> (gdbarch);
@@ -2556,7 +2557,7 @@ m32c_virtual_frame_pointer (struct gdbarch *gdbarch, CORE_ADDR pc,
   CORE_ADDR func_addr, func_end;
   struct m32c_prologue p;
 
-  struct regcache *regcache = get_current_regcache ();
+  regcache *regcache = get_thread_regcache (inferior_thread ());
   m32c_gdbarch_tdep *tdep = gdbarch_tdep<m32c_gdbarch_tdep> (gdbarch);
   
   if (!find_pc_partial_function (pc, &name, &func_addr, &func_end))

@@ -1,5 +1,31 @@
 -*- text -*-
 
+* Readelf now displays RELR relocations in full detail.
+
+* Readelf now has a -j/--display-section option which takes the name or index
+  of a section and displays its contents according to its type.  The option can
+  be used multiple times on the command line to display multiple sections.
+
+* Base register 0 is now printed as "0" instead of "%r0" in s390 disassembly.
+
+* When objdump or readelf are used to display the contents of a .eh_frame
+  section they will now also display the contents of the .eh_frame_hdr section,
+  if present.
+
+* Support for the Maverick co-processor (via -mfpu=maverick) on Arm has been
+  removed.  The CPU name ep9312 is still recognized, but treated as an alias
+  for arm920t.
+
+Changes in 2.42:
+
+* The objdump program has a new command line option -Z/--decompress which
+  changes the behaviour of the -s/--full-contents option, forcing it to
+  decompress the contents of any compressed section before they are displayed.
+
+  In addition when objdump is displaying sections headers (via the -h/--headers
+  command line option) it will now display "COMPRESSED" in the Flags field of
+  any compressed section.
+
 * The readelf program has a new command line option --extra-sym-info which
   extends the information displayed by the --symbols option.  When enabled
   the display will include the name of the section referenced by a symbol's
@@ -8,6 +34,13 @@
 
 * objcopy --set-section-flags now supports "large" to set SHF_X86_64_LARGE
   for ELF x86-64 objects.
+
+* objdump --visualize-jumps is now supported on s390 architecture.
+
+* The s390 disassembly now optionally includes the instruction description as
+  comment with the s390-specific disassembler option "insndesc":
+  - For objdump it can be enabled with "objdump -M insndesc ...".
+  - In gdb it can be enabled with "set disassembler-options insndesc".
 
 Changes in 2.41:
 
@@ -930,7 +963,7 @@ Changes in binutils 2.1:
   and/or local symbols only.  They now also support long options.
 
 
-Copyright (C) 2012-2023 Free Software Foundation, Inc.
+Copyright (C) 2012-2024 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

@@ -374,6 +374,11 @@ module ibex_core import ibex_pkg::*; #(
   logic        perf_load;
   logic        perf_store;
 
+  // ccu
+  logic        ccu_en;
+  logic [9:0]  ccu_cmd_payload_function_id;
+  logic [31:0] ccu_cmd_payload_inputs_0;
+  logic [31:0] ccu_cmd_payload_inputs_1;
   // for RVFI
   logic        illegal_insn_id, unused_illegal_insn_id; // ID stage sees an illegal instruction
 
@@ -697,7 +702,12 @@ module ibex_core import ibex_pkg::*; #(
     .perf_dside_wait_o(perf_dside_wait),
     .perf_mul_wait_o  (perf_mul_wait),
     .perf_div_wait_o  (perf_div_wait),
-    .instr_id_done_o  (instr_id_done)
+    .instr_id_done_o  (instr_id_done),
+
+    .ccu_en_o (ccu_en),
+    .ccu_cmd_payload_function_id_o (ccu_cmd_payload_function_id),
+    .ccu_cmd_payload_inputs_0_o (ccu_cmd_payload_inputs_0),
+    .ccu_cmd_payload_inputs_1_o (ccu_cmd_payload_inputs_1)
   );
 
   // for RVFI only
@@ -745,7 +755,13 @@ module ibex_core import ibex_pkg::*; #(
     .branch_target_o  (branch_target_ex),  // to IF
     .branch_decision_o(branch_decision),  // to ID
 
-    .ex_valid_o(ex_valid)
+    .ex_valid_o(ex_valid),
+
+    // ccu
+    .ccu_en_i (ccu_en),
+    .ccu_cmd_payload_function_id_i (ccu_cmd_payload_function_id),
+    .ccu_cmd_payload_inputs_0_i (ccu_cmd_payload_inputs_0),
+    .ccu_cmd_payload_inputs_1_i (ccu_cmd_payload_inputs_1)
   );
 
   /////////////////////

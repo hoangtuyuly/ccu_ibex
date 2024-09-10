@@ -53,7 +53,7 @@ if [ x$1 != x ] ; then
   prefix=$1
   shift
 else
-  prefix=/Users/tuhoang/CFU_IBEX/riscv32_custom
+  prefix=/Users/tuhoang/CFU_IBEX/cfu_ibex/riscv32_custom
 fi
 
 # Allow for alternate isysroot in which to find headers

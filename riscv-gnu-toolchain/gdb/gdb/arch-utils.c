@@ -1,6 +1,6 @@
 /* Dynamic architecture support for GDB, the GNU debugger.
 
-   Copyright (C) 1998-2023 Free Software Foundation, Inc.
+   Copyright (C) 1998-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,10 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 
 #include "arch-utils.h"
-#include "gdbcmd.h"
+#include "extract-store-integer.h"
+#include "cli/cli-cmds.h"
 #include "inferior.h"
 #include "infrun.h"
 #include "regcache.h"
@@ -103,7 +103,7 @@ default_memtag_to_string (struct gdbarch *gdbarch, struct value *tag)
 /* See arch-utils.h */
 
 bool
-default_tagged_address_p (struct gdbarch *gdbarch, struct value *address)
+default_tagged_address_p (struct gdbarch *gdbarch, CORE_ADDR address)
 {
   /* By default, assume the address is untagged.  */
   return false;
@@ -140,7 +140,7 @@ default_get_memtag (struct gdbarch *gdbarch, struct value *address,
 }
 
 CORE_ADDR
-generic_skip_trampoline_code (frame_info_ptr frame, CORE_ADDR pc)
+generic_skip_trampoline_code (const frame_info_ptr &frame, CORE_ADDR pc)
 {
   return 0;
 }
@@ -166,23 +166,23 @@ generic_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 
 int
 default_code_of_frame_writable (struct gdbarch *gdbarch,
-				frame_info_ptr frame)
+				const frame_info_ptr &frame)
 {
   return 1;
 }
 
 /* Helper functions for gdbarch_inner_than */
 
-int
+bool
 core_addr_lessthan (CORE_ADDR lhs, CORE_ADDR rhs)
 {
-  return (lhs < rhs);
+  return lhs < rhs;
 }
 
-int
+bool
 core_addr_greaterthan (CORE_ADDR lhs, CORE_ADDR rhs)
 {
-  return (lhs > rhs);
+  return lhs > rhs;
 }
 
 /* Misc helper functions for targets.  */
@@ -590,7 +590,7 @@ gdbarch_update_p (struct gdbarch_info info)
   if (info.abfd == NULL)
     info.abfd = current_program_space->exec_bfd ();
   if (info.abfd == NULL)
-    info.abfd = core_bfd;
+    info.abfd = current_program_space->core_bfd ();
 
   /* Check for the current target description.  */
   if (info.target_desc == NULL)
@@ -609,7 +609,7 @@ gdbarch_update_p (struct gdbarch_info info)
 
   /* If it is the same old architecture, accept the request (but don't
      swap anything).  */
-  if (new_gdbarch == target_gdbarch ())
+  if (new_gdbarch == current_inferior ()->arch ())
     {
       if (gdbarch_debug)
 	gdb_printf (gdb_stdlog, "gdbarch_update_p: "
@@ -625,7 +625,8 @@ gdbarch_update_p (struct gdbarch_info info)
 		"New architecture %s (%s) selected\n",
 		host_address_to_string (new_gdbarch),
 		gdbarch_bfd_arch_info (new_gdbarch)->printable_name);
-  set_target_gdbarch (new_gdbarch);
+
+  current_inferior ()->set_arch (new_gdbarch);
 
   return 1;
 }
@@ -657,7 +658,8 @@ set_gdbarch_from_file (bfd *abfd)
 
   if (gdbarch == NULL)
     error (_("Architecture of file not recognized."));
-  set_target_gdbarch (gdbarch);
+
+  current_inferior ()->set_arch (gdbarch);
 }
 
 /* Initialize the current architecture.  Update the ``set
@@ -848,7 +850,7 @@ get_current_arch (void)
   if (has_stack_frames ())
     return get_frame_arch (get_selected_frame (NULL));
   else
-    return target_gdbarch ();
+    return current_inferior ()->arch ();
 }
 
 int
@@ -1077,7 +1079,7 @@ default_type_align (struct gdbarch *gdbarch, struct type *type)
 /* See arch-utils.h.  */
 
 std::string
-default_get_pc_address_flags (frame_info_ptr frame, CORE_ADDR pc)
+default_get_pc_address_flags (const frame_info_ptr &frame, CORE_ADDR pc)
 {
   return "";
 }
@@ -1103,7 +1105,8 @@ default_use_target_description_from_corefile_notes (struct gdbarch *gdbarch,
 }
 
 CORE_ADDR
-default_get_return_buf_addr (struct type *val_type, frame_info_ptr cur_frame)
+default_get_return_buf_addr (struct type *val_type,
+			     const frame_info_ptr &cur_frame)
 {
   return 0;
 }
@@ -1153,11 +1156,11 @@ pstring (const char *string)
 }
 
 static const char *
-pstring_ptr (char **string)
+pstring_ptr (std::string *string)
 {
-  if (string == NULL || *string == NULL)
+  if (string == nullptr)
     return "(null)";
-  return *string;
+  return string->c_str ();
 }
 
 /* Helper function to print a list of strings, represented as "const
@@ -1221,7 +1224,6 @@ gdbarch_obstack_strdup (struct gdbarch *arch, const char *string)
 {
   return obstack_strdup (&arch->obstack, string);
 }
-
 
 /* Free a gdbarch struct.  This should never happen in normal
    operation --- once you've created a gdbarch, you keep it around.
@@ -1478,27 +1480,17 @@ gdbarch_find_by_info (struct gdbarch_info info)
   if (gdbarch_debug)
     gdbarch_dump (new_gdbarch, gdb_stdlog);
 
+  gdb::observers::new_architecture.notify (new_gdbarch);
+
   return new_gdbarch;
 }
 
-/* Make the specified architecture current.  */
+/* See gdbarch.h.  */
 
-void
-set_target_gdbarch (struct gdbarch *new_gdbarch)
+bool
+gdbarch_initialized_p (gdbarch *arch)
 {
-  gdb_assert (new_gdbarch != NULL);
-  gdb_assert (new_gdbarch->initialized_p);
-  current_inferior ()->gdbarch = new_gdbarch;
-  gdb::observers::architecture_changed.notify (new_gdbarch);
-  registers_changed ();
-}
-
-/* Return the current inferior's arch.  */
-
-struct gdbarch *
-target_gdbarch (void)
-{
-  return current_inferior ()->gdbarch;
+  return arch->initialized_p;
 }
 
 void _initialize_gdbarch_utils ();

@@ -1,6 +1,6 @@
 /* Solaris threads debugging interface.
 
-   Copyright (C) 1996-2023 Free Software Foundation, Inc.
+   Copyright (C) 1996-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -48,7 +48,6 @@
    symbols, etc...  The ps_* routines actually do most of their work
    by calling functions in procfs.c.  */
 
-#include "defs.h"
 #include <thread.h>
 #include <proc_service.h>
 #include <thread_db.h>
@@ -58,7 +57,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <dlfcn.h>
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbcore.h"
 #include "regcache.h"
 #include "solib.h"
@@ -606,7 +605,7 @@ check_for_thread_db (void)
   ptid_t ptid;
 
   /* Don't attempt to use thread_db for remote targets.  */
-  if (!(target_can_run () || core_bfd))
+  if (!(target_can_run () || current_program_space->core_bfd () != nullptr))
     return;
 
   /* Do nothing if we couldn't load libthread_db.so.1.  */
@@ -845,9 +844,8 @@ ps_err_e
 ps_lgetregs (struct ps_prochandle *ph, lwpid_t lwpid, prgregset_t gregset)
 {
   ptid_t ptid = ptid_t (current_inferior ()->pid, lwpid, 0);
-  struct regcache *regcache
-    = get_thread_arch_regcache (current_inferior ()->process_target (),
-				ptid, target_gdbarch ());
+  regcache *regcache = get_thread_arch_regcache (current_inferior (), ptid,
+						 current_inferior ()->arch ());
 
   target_fetch_registers (regcache, -1);
   fill_gregset (regcache, (gdb_gregset_t *) gregset, -1);
@@ -862,9 +860,8 @@ ps_lsetregs (struct ps_prochandle *ph, lwpid_t lwpid,
 	     const prgregset_t gregset)
 {
   ptid_t ptid = ptid_t (current_inferior ()->pid, lwpid, 0);
-  struct regcache *regcache
-    = get_thread_arch_regcache (current_inferior ()->process_target (),
-				ptid, target_gdbarch ());
+  regcache *regcache = get_thread_arch_regcache (current_inferior (), ptid,
+						 current_inferior ()->arch ());
 
   supply_gregset (regcache, (const gdb_gregset_t *) gregset);
   target_store_registers (regcache, -1);
@@ -915,9 +912,8 @@ ps_lgetfpregs (struct ps_prochandle *ph, lwpid_t lwpid,
 	       prfpregset_t *fpregset)
 {
   ptid_t ptid = ptid_t (current_inferior ()->pid, lwpid, 0);
-  struct regcache *regcache
-    = get_thread_arch_regcache (current_inferior ()->process_target (),
-				ptid, target_gdbarch ());
+  regcache *regcache = get_thread_arch_regcache (current_inferior (), ptid,
+						 current_inferior ()->arch ());
 
   target_fetch_registers (regcache, -1);
   fill_fpregset (regcache, (gdb_fpregset_t *) fpregset, -1);
@@ -932,9 +928,8 @@ ps_lsetfpregs (struct ps_prochandle *ph, lwpid_t lwpid,
 	       const prfpregset_t * fpregset)
 {
   ptid_t ptid = ptid_t (current_inferior ()->pid, lwpid, 0);
-  struct regcache *regcache
-    = get_thread_arch_regcache (current_inferior ()->process_target (),
-				ptid, target_gdbarch ());
+  regcache *regcache = get_thread_arch_regcache (current_inferior (), ptid,
+						 current_inferior ()->arch ());
 
   supply_fpregset (regcache, (const gdb_fpregset_t *) fpregset);
   target_store_registers (regcache, -1);
@@ -1079,7 +1074,8 @@ info_cb (const td_thrhandle_t *th, void *s)
 	  gdb_printf ("   startfunc=%s",
 		      msym.minsym
 		      ? msym.minsym->print_name ()
-		      : paddress (target_gdbarch (), ti.ti_startfunc));
+		      : paddress (current_inferior ()->arch (),
+				  ti.ti_startfunc));
 	}
 
       /* If thread is asleep, print function that went to sleep.  */
@@ -1091,7 +1087,7 @@ info_cb (const td_thrhandle_t *th, void *s)
 	  gdb_printf ("   sleepfunc=%s",
 		      msym.minsym
 		      ? msym.minsym->print_name ()
-		      : paddress (target_gdbarch (), ti.ti_pc));
+		      : paddress (current_inferior ()->arch (), ti.ti_pc));
 	}
 
       gdb_printf ("\n");

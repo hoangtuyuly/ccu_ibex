@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "gdbsupport/common-defs.h"
 #include "gdbsupport/byte-vector.h"
 
 #include "linux-ptrace.h"
@@ -32,7 +31,7 @@
 /* Helper function to display various possible errors when reading
    MTE tags.  */
 
-static void ATTRIBUTE_NORETURN
+[[noreturn]] static void
 aarch64_mte_linux_peek_error (int error)
 {
   switch (error)
@@ -54,7 +53,7 @@ aarch64_mte_linux_peek_error (int error)
 /* Helper function to display various possible errors when writing
    MTE tags.  */
 
-static void ATTRIBUTE_NORETURN
+[[noreturn]] static void
 aarch64_mte_linux_poke_error (int error)
 {
   switch (error)

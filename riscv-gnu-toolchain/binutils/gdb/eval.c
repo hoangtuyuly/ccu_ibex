@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "value.h"
@@ -589,13 +588,37 @@ evaluate_subexp_do_call (expression *exp, enum noside noside,
 {
   if (callee == NULL)
     error (_("Cannot evaluate function -- may be inlined"));
+
+  type *ftype = callee->type ();
+
+  /* If the callee is a struct, there might be a user-defined function call
+     operator that should be used instead.  */
+  std::vector<value *> vals;
+  if (overload_resolution
+      && exp->language_defn->la_language == language_cplus
+      && check_typedef (ftype)->code () == TYPE_CODE_STRUCT)
+    {
+      /* Include space for the `this' pointer at the start.  */
+      vals.resize (argvec.size () + 1);
+
+      vals[0] = value_addr (callee);
+      for (int i = 0; i < argvec.size (); ++i)
+	vals[i + 1] = argvec[i];
+
+      int static_memfuncp;
+      find_overload_match (vals, "operator()", METHOD, &vals[0], nullptr,
+			   &callee, nullptr, &static_memfuncp, 0, noside);
+      if (!static_memfuncp)
+	argvec = vals;
+
+      ftype = callee->type ();
+    }
+
   if (noside == EVAL_AVOID_SIDE_EFFECTS)
     {
       /* If the return type doesn't look like a function type,
 	 call an error.  This can happen if somebody tries to turn
 	 a variable into a function call.  */
-
-      type *ftype = callee->type ();
 
       if (ftype->code () == TYPE_CODE_INTERNAL_FUNCTION)
 	{
@@ -667,9 +690,13 @@ operation::evaluate_funcall (struct type *expect_type,
   struct type *type = callee->type ();
   if (type->code () == TYPE_CODE_PTR)
     type = type->target_type ();
+  /* If type is a struct, num_fields would refer to the number of
+     members in the type, not the number of arguments.  */
+  bool type_has_arguments
+    = type->code () == TYPE_CODE_FUNC || type->code () == TYPE_CODE_METHOD;
   for (int i = 0; i < args.size (); ++i)
     {
-      if (i < type->num_fields ())
+      if (type_has_arguments && i < type->num_fields ())
 	vals[i] = args[i]->evaluate (type->field (i).type (), exp, noside);
       else
 	vals[i] = args[i]->evaluate_with_coercion (exp, noside);
@@ -730,7 +757,7 @@ scope_operation::evaluate_funcall (struct type *expect_type,
       function = cp_lookup_symbol_namespace (type->name (),
 					     name.c_str (),
 					     get_selected_block (0),
-					     VAR_DOMAIN).symbol;
+					     SEARCH_FUNCTION_DOMAIN).symbol;
       if (function == NULL)
 	error (_("No symbol \"%s\" in namespace \"%s\"."),
 	       name.c_str (), type->name ());
@@ -1070,13 +1097,14 @@ eval_op_var_entry_value (struct type *expect_type, struct expression *exp,
   if (noside == EVAL_AVOID_SIDE_EFFECTS)
     return value::zero (sym->type (), not_lval);
 
-  if (SYMBOL_COMPUTED_OPS (sym) == NULL
-      || SYMBOL_COMPUTED_OPS (sym)->read_variable_at_entry == NULL)
+  const symbol_computed_ops *computed_ops = sym->computed_ops ();
+  if (computed_ops == nullptr
+      || computed_ops->read_variable_at_entry == nullptr)
     error (_("Symbol \"%s\" does not have any specific entry value"),
 	   sym->print_name ());
 
   frame_info_ptr frame = get_selected_frame (NULL);
-  return SYMBOL_COMPUTED_OPS (sym)->read_variable_at_entry (sym, frame);
+  return computed_ops->read_variable_at_entry (sym, frame);
 }
 
 /* Helper function that implements the body of OP_VAR_MSYM_VALUE.  */
@@ -1105,7 +1133,8 @@ eval_op_func_static_var (struct type *expect_type, struct expression *exp,
 {
   CORE_ADDR addr = func->address ();
   const block *blk = block_for_pc (addr);
-  struct block_symbol sym = lookup_symbol (var, blk, VAR_DOMAIN, NULL);
+  struct block_symbol sym = lookup_symbol (var, blk, SEARCH_VAR_DOMAIN,
+					   nullptr);
   if (sym.symbol == NULL)
     error (_("No symbol \"%s\" in specified context."), var);
   return evaluate_var_value (noside, sym.block, sym.symbol);
@@ -1683,7 +1712,7 @@ eval_op_ind (struct type *expect_type, struct expression *exp,
      BUILTIN_TYPE_LONGEST would seem to be a mistake.  */
   if (type->code () == TYPE_CODE_INT)
     return value_at_lazy (builtin_type (exp->gdbarch)->builtin_int,
-			  (CORE_ADDR) value_as_address (arg1));
+			  value_as_address (arg1));
   return value_ind (arg1);
 }
 
@@ -2706,6 +2735,13 @@ evaluate_subexp_for_sizeof_base (struct expression *exp, struct type *type)
   if (exp->language_defn->la_language == language_cplus
       && (TYPE_IS_REFERENCE (type)))
     type = check_typedef (type->target_type ());
+  else if (exp->language_defn->la_language == language_fortran
+	   && type->code () == TYPE_CODE_PTR)
+    {
+      /* Dereference Fortran pointer types to allow them for the Fortran
+	 sizeof intrinsic.  */
+      type = check_typedef (type->target_type ());
+    }
   return value_from_longest (size_type, (LONGEST) type->length ());
 }
 
@@ -2819,7 +2855,7 @@ var_value_operation::evaluate_for_sizeof (struct expression *exp,
 	  if (type_not_allocated (type) || type_not_associated (type))
 	    return value::zero (size_type, not_lval);
 	  else if (is_dynamic_type (type->index_type ())
-		   && type->bounds ()->high.kind () == PROP_UNDEFINED)
+		   && !type->bounds ()->high.is_available ())
 	    return value::allocate_optimized_out (size_type);
 	}
     }

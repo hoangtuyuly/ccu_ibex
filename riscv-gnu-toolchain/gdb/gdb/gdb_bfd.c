@@ -1,6 +1,6 @@
 /* Definitions for BFD wrappers used by GDB.
 
-   Copyright (C) 2011-2023 Free Software Foundation, Inc.
+   Copyright (C) 2011-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,10 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "gdb_bfd.h"
+#include "event-top.h"
 #include "ui-out.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "hashtab.h"
 #include "gdbsupport/filestuff.h"
 #ifdef HAVE_MMAP
@@ -35,15 +35,45 @@
 #include "cli/cli-style.h"
 #include <unordered_map>
 
+#if CXX_STD_THREAD
+
+#include <mutex>
+
+/* Lock held when doing BFD operations.  A recursive mutex is used
+   because we use this mutex internally and also for BFD, just to make
+   life a bit simpler, and we may sometimes hold it while calling into
+   BFD.  */
+static std::recursive_mutex gdb_bfd_mutex;
+
+/* BFD locking function.  */
+
+static bool
+gdb_bfd_lock (void *ignore)
+{
+  gdb_bfd_mutex.lock ();
+  return true;
+}
+
+/* BFD unlocking function.  */
+
+static bool
+gdb_bfd_unlock (void *ignore)
+{
+  gdb_bfd_mutex.unlock ();
+  return true;
+}
+
+#endif /* CXX_STD_THREAD */
+
 /* An object of this type is stored in the section's user data when
    mapping a section.  */
 
 struct gdb_bfd_section_data
 {
   /* Size of the data.  */
-  bfd_size_type size;
+  size_t size;
   /* If the data was mmapped, this is the length of the map.  */
-  bfd_size_type map_len;
+  size_t map_len;
   /* The data.  If NULL, the section data has not been read.  */
   void *data;
   /* If the data was mmapped, this is the map address.  */
@@ -227,8 +257,9 @@ struct target_buffer : public gdb_bfd_iovec_base
   target_buffer (CORE_ADDR base, ULONGEST size)
     : m_base (base),
       m_size (size),
-      m_filename (xstrprintf ("<in-memory@%s>",
-			      core_addr_to_string_nz (m_base)))
+      m_filename (xstrprintf ("<in-memory@%s-%s>",
+			      core_addr_to_string_nz (m_base),
+			      core_addr_to_string_nz (m_base + m_size)))
   {
   }
 
@@ -241,7 +272,7 @@ struct target_buffer : public gdb_bfd_iovec_base
   { return m_base; }
 
   /* Return a generated filename for the in-memory BFD file.  The generated
-     name will include the M_BASE value.  */
+     name will include the begin and end address of the in-memory file.  */
   const char *filename () const
   { return m_filename.get (); }
 
@@ -302,7 +333,7 @@ gdb_bfd_open_from_target_memory (CORE_ADDR addr, ULONGEST size,
 				 const char *target)
 {
   std::unique_ptr<target_buffer> buffer
-    = gdb::make_unique<target_buffer> (addr, size);
+    = std::make_unique<target_buffer> (addr, size);
 
   return gdb_bfd_openr_iovec (buffer->filename (), target,
 			      [&] (bfd *nbfd)
@@ -497,6 +528,10 @@ gdb_bfd_open (const char *name, const char *target, int fd,
       name += strlen (TARGET_SYSROOT_PREFIX);
     }
 
+#if CXX_STD_THREAD
+  std::lock_guard<std::recursive_mutex> guard (gdb_bfd_mutex);
+#endif
+
   if (gdb_bfd_cache == NULL)
     gdb_bfd_cache = htab_create_alloc (1, hash_bfd, eq_bfd, NULL,
 				       xcalloc, xfree);
@@ -624,6 +659,10 @@ gdb_bfd_ref (struct bfd *abfd)
   if (abfd == NULL)
     return;
 
+#if CXX_STD_THREAD
+  std::lock_guard<std::recursive_mutex> guard (gdb_bfd_mutex);
+#endif
+
   gdata = (struct gdb_bfd_data *) bfd_usrdata (abfd);
 
   bfd_cache_debug_printf ("Increase reference count on bfd %s (%s)",
@@ -652,6 +691,10 @@ gdb_bfd_unref (struct bfd *abfd)
 
   if (abfd == NULL)
     return;
+
+#if CXX_STD_THREAD
+  std::lock_guard<std::recursive_mutex> guard (gdb_bfd_mutex);
+#endif
 
   gdata = (struct gdb_bfd_data *) bfd_usrdata (abfd);
   gdb_assert (gdata->refc >= 1);
@@ -887,6 +930,29 @@ gdb_bfd_openw (const char *filename, const char *target)
   return gdb_bfd_ref_ptr::new_reference (result);
 }
 
+/* Wrap f (args) and handle exceptions by:
+   - returning val, and
+   - calling set_quit_flag or set_force_quit_flag, if needed.  */
+
+template <typename R, R val, typename F, typename... Args>
+static R
+catch_exceptions (F &&f, Args&&... args)
+{
+   try
+     {
+       return f (std::forward<Args> (args)...);
+     }
+   catch (const gdb_exception &ex)
+     {
+       if (ex.reason == RETURN_QUIT)
+	 set_quit_flag ();
+       else if (ex.reason == RETURN_FORCED_QUIT)
+	 set_force_quit_flag ();
+     }
+
+   return val;
+}
+
 /* See gdb_bfd.h.  */
 
 gdb_bfd_ref_ptr
@@ -896,21 +962,51 @@ gdb_bfd_openr_iovec (const char *filename, const char *target,
   auto do_open = [] (bfd *nbfd, void *closure) -> void *
   {
     auto real_opener = static_cast<gdb_iovec_opener_ftype *> (closure);
-    return (*real_opener) (nbfd);
+    /* Prevent exceptions from escaping to C code and triggering an abort.  */
+    auto res = catch_exceptions<gdb_bfd_iovec_base *, nullptr> ([&]
+      {
+	return (*real_opener) (nbfd);
+      });
+    if (res == nullptr)
+      {
+	errno = EIO;
+	bfd_set_error (bfd_error_system_call);
+      }
+      return res;
   };
 
   auto read_trampoline = [] (bfd *nbfd, void *stream, void *buf,
 			     file_ptr nbytes, file_ptr offset) -> file_ptr
   {
     gdb_bfd_iovec_base *obj = static_cast<gdb_bfd_iovec_base *> (stream);
-    return obj->read (nbfd, buf, nbytes, offset);
+    /* Prevent exceptions from escaping to C code and triggering an abort.  */
+    auto res = catch_exceptions<long int, -1> ([&]
+      {
+	return obj->read (nbfd, buf, nbytes, offset);
+      });
+    if (res == -1)
+      {
+	errno = EIO;
+	bfd_set_error (bfd_error_system_call);
+      }
+    return res;
   };
 
   auto stat_trampoline = [] (struct bfd *abfd, void *stream,
 			     struct stat *sb) -> int
   {
     gdb_bfd_iovec_base *obj = static_cast<gdb_bfd_iovec_base *> (stream);
-    return obj->stat (abfd, sb);
+    /* Prevent exceptions from escaping to C code and triggering an abort.  */
+    auto res = catch_exceptions<int, -1> ([&]
+      {
+	return obj->stat (abfd, sb);
+      });
+    if (res == -1)
+      {
+	errno = EIO;
+	bfd_set_error (bfd_error_system_call);
+      }
+    return res;
   };
 
   auto close_trampoline = [] (struct bfd *nbfd, void *stream) -> int
@@ -976,7 +1072,7 @@ gdb_bfd_record_inclusion (bfd *includer, bfd *includee)
 
 
 
-gdb_static_assert (ARRAY_SIZE (_bfd_std_section) == 4);
+static_assert (ARRAY_SIZE (_bfd_std_section) == 4);
 
 /* See gdb_bfd.h.  */
 
@@ -1137,37 +1233,62 @@ get_bfd_inferior_data (struct inferior *inf)
    count.  */
 
 static unsigned long
-increment_bfd_error_count (std::string str)
+increment_bfd_error_count (const std::string &str)
 {
+#if CXX_STD_THREAD
+  std::lock_guard<std::recursive_mutex> guard (gdb_bfd_mutex);
+#endif
   struct bfd_inferior_data *bid = get_bfd_inferior_data (current_inferior ());
 
   auto &map = bid->bfd_error_string_counts;
-  return ++map[std::move (str)];
+  return ++map[str];
 }
 
-static bfd_error_handler_type default_bfd_error_handler;
+/* A print callback for bfd_print_error.  */
+
+static int ATTRIBUTE_PRINTF (2, 0)
+print_error_callback (void *stream, const char *fmt, ...)
+{
+  string_file *file = (string_file *) stream;
+  size_t in_size = file->size ();
+  va_list ap;
+  va_start (ap, fmt);
+  file->vprintf (fmt, ap);
+  va_end (ap);
+  return file->size () - in_size;
+}
 
 /* Define a BFD error handler which will suppress the printing of
    messages which have been printed once already.  This is done on a
    per-inferior basis.  */
 
-static void ATTRIBUTE_PRINTF (1, 0)
+static void
 gdb_bfd_error_handler (const char *fmt, va_list ap)
 {
-  va_list ap_copy;
+  string_file output;
+  bfd_print_error (print_error_callback, &output, fmt, ap);
+  std::string str = output.release ();
 
-  va_copy(ap_copy, ap);
-  const std::string str = string_vprintf (fmt, ap_copy);
-  va_end (ap_copy);
-
-  if (increment_bfd_error_count (std::move (str)) > 1)
+  if (increment_bfd_error_count (str) > 1)
     return;
 
-  /* We must call the BFD mechanism for printing format strings since
-     it supports additional format specifiers that GDB's vwarning() doesn't
-     recognize.  It also outputs additional text, i.e. "BFD: ", which
-     makes it clear that it's a BFD warning/error.  */
-  (*default_bfd_error_handler) (fmt, ap);
+  warning ("%s", str.c_str ());
+}
+
+/* See gdb_bfd.h.  */
+
+void
+gdb_bfd_init ()
+{
+  if (bfd_init () == BFD_INIT_MAGIC)
+    {
+#if CXX_STD_THREAD
+      if (bfd_thread_init (gdb_bfd_lock, gdb_bfd_unlock, nullptr))
+#endif
+	return;
+    }
+
+  error (_("fatal error: libbfd ABI mismatch"));
 }
 
 void _initialize_gdb_bfd ();
@@ -1204,5 +1325,5 @@ When non-zero, bfd cache specific debugging is enabled."),
 			   &setdebuglist, &showdebuglist);
 
   /* Hook the BFD error/warning handler to limit amount of output.  */
-  default_bfd_error_handler = bfd_set_error_handler (gdb_bfd_error_handler);
+  bfd_set_error_handler (gdb_bfd_error_handler);
 }

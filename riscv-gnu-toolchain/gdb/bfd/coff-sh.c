@@ -1,5 +1,5 @@
 /* BFD back-end for Renesas Super-H COFF binaries.
-   Copyright (C) 1993-2023 Free Software Foundation, Inc.
+   Copyright (C) 1993-2024 Free Software Foundation, Inc.
    Contributed by Cygnus Support.
    Written by Steve Chamberlain, <sac@cygnus.com>.
    Relaxing code written by Ian Lance Taylor, <ian@cygnus.com>.
@@ -3119,8 +3119,6 @@ static const bfd_coff_backend_data bfd_coff_small_swap_table =
   coff_bfd_free_cached_info
 #define coff_small_get_section_contents \
   coff_get_section_contents
-#define coff_small_get_section_contents_in_window \
-  coff_get_section_contents_in_window
 
 extern const bfd_target sh_coff_small_le_vec;
 

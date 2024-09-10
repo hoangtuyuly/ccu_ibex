@@ -1,6 +1,6 @@
 /* TUI display source window.
 
-   Copyright (C) 1998-2023 Free Software Foundation, Inc.
+   Copyright (C) 1998-2024 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -19,7 +19,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include <math.h>
 #include <ctype.h>
 #include "symtab.h"
@@ -33,7 +32,7 @@
 #include "tui/tui.h"
 #include "tui/tui-data.h"
 #include "tui/tui-io.h"
-#include "tui/tui-stack.h"
+#include "tui/tui-status.h"
 #include "tui/tui-win.h"
 #include "tui/tui-winsource.h"
 #include "tui/tui-source.h"
@@ -53,7 +52,7 @@ tui_source_window::set_contents (struct gdbarch *arch,
 
   /* Take hilite (window border) into account, when
      calculating the number of lines.  */
-  int nlines = height - 2;
+  int nlines = height - box_size ();
 
   std::string srclines;
   const std::vector<off_t> *offsets;
@@ -199,9 +198,9 @@ tui_source_window::line_is_displayed (int line) const
 }
 
 void
-tui_source_window::maybe_update (frame_info_ptr fi, symtab_and_line sal)
+tui_source_window::maybe_update (const frame_info_ptr &fi, symtab_and_line sal)
 {
-  int start_line = (sal.line - ((height - 2) / 2)) + 1;
+  int start_line = (sal.line - ((height - box_size ()) / 2)) + 1;
   if (start_line <= 0)
     start_line = 1;
 
@@ -253,5 +252,5 @@ tui_source_window::show_line_number (int offset) const
 		 tui_left_margin_verbose ? "%0*d%c" : "%*d%c", m_digits - 1,
 		 lineno, space);
     }
-  waddstr (handle.get (), text);
+  display_string (text);
 }

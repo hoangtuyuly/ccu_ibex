@@ -1,6 +1,6 @@
 /* TUI window generic functions.
 
-   Copyright (C) 1998-2023 Free Software Foundation, Inc.
+   Copyright (C) 1998-2024 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -24,7 +24,6 @@
 
    Author: Susan B. Macchia  */
 
-#include "defs.h"
 #include "command.h"
 #include "symtab.h"
 #include "breakpoint.h"
@@ -34,7 +33,6 @@
 #include "top.h"
 #include "source.h"
 #include "gdbsupport/event-loop.h"
-#include "gdbcmd.h"
 #include "async-event.h"
 #include "utils.h"
 
@@ -44,7 +42,7 @@
 #include "tui/tui-data.h"
 #include "tui/tui-layout.h"
 #include "tui/tui-wingeneral.h"
-#include "tui/tui-stack.h"
+#include "tui/tui-status.h"
 #include "tui/tui-regs.h"
 #include "tui/tui-disasm.h"
 #include "tui/tui-source.h"
@@ -54,7 +52,7 @@
 #include "gdb_curses.h"
 #include <ctype.h>
 #include "readline/readline.h"
-#include "gdbsupport/gdb_string_view.h"
+#include <string_view>
 
 #include <signal.h>
 
@@ -481,7 +479,11 @@ void
 tui_refresh_all_win (void)
 {
   clearok (curscr, TRUE);
-  tui_refresh_all ();
+  for (tui_win_info *win_info : all_tui_windows ())
+    {
+      if (win_info->is_visible ())
+	win_info->refresh_window ();
+    }
 }
 
 void
@@ -663,7 +665,7 @@ tui_scroll_right_command (const char *arg, int from_tty)
 
 /* Answer the window represented by name.  */
 static struct tui_win_info *
-tui_partial_win_by_name (gdb::string_view name)
+tui_partial_win_by_name (std::string_view name)
 {
   struct tui_win_info *best = nullptr;
 
@@ -935,7 +937,7 @@ tui_set_win_size (const char *arg, bool set_width_p)
   buf_ptr = skip_to_space (buf_ptr);
 
   /* Validate the window name.  */
-  gdb::string_view wname (buf, buf_ptr - buf);
+  std::string_view wname (buf, buf_ptr - buf);
   win_info = tui_partial_win_by_name (wname);
 
   if (win_info == NULL)

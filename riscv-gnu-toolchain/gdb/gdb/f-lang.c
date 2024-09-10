@@ -1,6 +1,6 @@
 /* Fortran language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 1993-2023 Free Software Foundation, Inc.
+   Copyright (C) 1993-2024 Free Software Foundation, Inc.
 
    Contributed by Motorola.  Adapted from the C parser by Farooq Butt
    (fmbutt@engage.sps.mot.com).
@@ -20,7 +20,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "expression.h"
@@ -36,7 +35,7 @@
 #include "c-lang.h"
 #include "target-float.h"
 #include "gdbarch.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "f-array-walker.h"
 #include "f-exp.h"
 
@@ -306,7 +305,7 @@ protected:
 
   /* Set and reset to handle removing intermediate values from the
      value chain.  */
-  gdb::optional<scoped_value_mark> m_mark;
+  std::optional<scoped_value_mark> m_mark;
 };
 
 /* A class used by FORTRAN_VALUE_SUBARRAY when repacking Fortran array
@@ -1372,7 +1371,7 @@ fortran_undetermined::value_subarray (value *array,
 	     have a known upper bound, so don't error check in that
 	     situation.  */
 	  if (index < lb
-	      || (dim_type->index_type ()->bounds ()->high.kind () != PROP_UNDEFINED
+	      || (dim_type->index_type ()->bounds ()->high.is_available ()
 		  && index > ub)
 	      || (array->lval () != lval_memory
 		  && dim_type->index_type ()->bounds ()->high.kind () == PROP_UNDEFINED))
@@ -1715,7 +1714,7 @@ f_language::search_name_hash (const char *name) const
 struct block_symbol
 f_language::lookup_symbol_nonlocal (const char *name,
 				    const struct block *block,
-				    const domain_enum domain) const
+				    const domain_search_flags domain) const
 {
   return cp_lookup_symbol_nonlocal (this, name, block, domain);
 }

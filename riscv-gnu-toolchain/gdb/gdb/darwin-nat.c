@@ -1,5 +1,5 @@
 /* Darwin support for GDB, the GNU debugger.
-   Copyright (C) 2008-2023 Free Software Foundation, Inc.
+   Copyright (C) 2008-2024 Free Software Foundation, Inc.
 
    Contributed by AdaCore.
 
@@ -18,14 +18,14 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "top.h"
 #include "inferior.h"
 #include "target.h"
 #include "symfile.h"
 #include "symtab.h"
 #include "objfiles.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbcore.h"
 #include "gdbthread.h"
 #include "regcache.h"
@@ -1151,7 +1151,7 @@ darwin_nat_target::decode_message (mach_msg_header_t *hdr,
 }
 
 int
-darwin_nat_target::cancel_breakpoint (ptid_t ptid)
+darwin_nat_target::cancel_breakpoint (inferior *inf, ptid_t ptid)
 {
   /* Arrange for a breakpoint to be hit again later.  We will handle
      the current event, eventually we will resume this thread, and this
@@ -1166,7 +1166,7 @@ darwin_nat_target::cancel_breakpoint (ptid_t ptid)
   CORE_ADDR pc;
 
   pc = regcache_read_pc (regcache) - gdbarch_decr_pc_after_break (gdbarch);
-  if (breakpoint_inserted_here_p (regcache->aspace (), pc))
+  if (breakpoint_inserted_here_p (inf->aspace.get (), pc))
     {
       inferior_debug (4, "cancel_breakpoint for thread 0x%lx\n",
 		      (unsigned long) ptid.tid ());
@@ -1286,7 +1286,8 @@ darwin_nat_target::wait_1 (ptid_t ptid, struct target_waitstatus *status)
 	  && thread->event.ex_type == EXC_BREAKPOINT)
 	{
 	  if (thread->single_step
-	      || cancel_breakpoint (ptid_t (inf->pid, 0, thread->gdb_port)))
+	      || cancel_breakpoint (inf,
+				    ptid_t (inf->pid, 0, thread->gdb_port)))
 	    {
 	      gdb_assert (thread->msg_state == DARWIN_MESSAGE);
 	      darwin_send_reply (inf, thread);
@@ -1967,7 +1968,7 @@ darwin_nat_target::create_inferior (const char *exec_file,
 				    const std::string &allargs,
 				    char **env, int from_tty)
 {
-  gdb::optional<scoped_restore_tmpl<bool>> restore_startup_with_shell;
+  std::optional<scoped_restore_tmpl<bool>> restore_startup_with_shell;
   darwin_nat_target *the_target = this;
 
   if (startup_with_shell && may_have_sip ())

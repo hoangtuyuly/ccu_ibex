@@ -1,6 +1,6 @@
 /* Target-dependent code for s390.
 
-   Copyright (C) 2003-2023 Free Software Foundation, Inc.
+   Copyright (C) 2003-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -316,7 +316,7 @@ enum
 /* Frame unwinding.  */
 
 extern struct value *s390_trad_frame_prev_register
-    (frame_info_ptr this_frame, struct trad_frame_saved_reg saved_regs[],
+    (const frame_info_ptr &this_frame, struct trad_frame_saved_reg saved_regs[],
      int regnum);
 
 extern const struct target_desc *tdesc_s390_linux32;

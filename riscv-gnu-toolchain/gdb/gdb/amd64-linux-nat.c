@@ -1,6 +1,6 @@
 /* Native-dependent code for GNU/Linux x86-64.
 
-   Copyright (C) 2001-2023 Free Software Foundation, Inc.
+   Copyright (C) 2001-2024 Free Software Foundation, Inc.
    Contributed by Jiri Smid, SuSE Labs.
 
    This file is part of GDB.
@@ -18,7 +18,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "inferior.h"
 #include "regcache.h"
 #include "elf/common.h"
@@ -337,7 +336,7 @@ ps_err_e
 ps_get_thread_area (struct ps_prochandle *ph,
 		    lwpid_t lwpid, int idx, void **base)
 {
-  if (gdbarch_bfd_arch_info (ph->thread->inf->gdbarch)->bits_per_word == 32)
+  if (gdbarch_bfd_arch_info (ph->thread->inf->arch ())->bits_per_word == 32)
     {
       unsigned int base_addr;
       ps_err_e result;

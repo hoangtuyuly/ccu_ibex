@@ -1,5 +1,5 @@
 /* AArch64-specific support for NN-bit ELF.
-   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+   Copyright (C) 2009-2024 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -112,7 +112,7 @@
   allocate space for one relocation on the slot. Record the GOT offset
   for this symbol.
 
-  elfNN_aarch64_size_dynamic_sections ()
+  elfNN_aarch64_late_size_sections ()
 
   Iterate all input BFDS, look for in the local symbol data structure
   constructed earlier for local TLS symbols and allocate them double
@@ -3675,7 +3675,7 @@ group_sections (struct elf_aarch64_link_hash_table *htab,
 /* True if the inserted stub does not break BTI compatibility.  */
 
 static bool
-aarch64_bti_stub_p (bfd *input_bfd,
+aarch64_bti_stub_p (struct bfd_link_info *info,
 		    struct elf_aarch64_stub_hash_entry *stub_entry)
 {
   /* Stubs without indirect branch are BTI compatible.  */
@@ -3685,12 +3685,22 @@ aarch64_bti_stub_p (bfd *input_bfd,
 
   /* Return true if the target instruction is compatible with BR x16.  */
 
+  struct elf_aarch64_link_hash_table *globals = elf_aarch64_hash_table (info);
   asection *section = stub_entry->target_section;
   bfd_byte loc[4];
   file_ptr off = stub_entry->target_value;
   bfd_size_type count = sizeof (loc);
 
-  if (!bfd_get_section_contents (input_bfd, section, loc, off, count))
+  /* PLT code is not generated yet, so treat it specially.
+     Note: Checking elf_aarch64_obj_tdata.plt_type & PLT_BTI is not
+     enough because it only implies BTI in the PLT0 and tlsdesc PLT
+     entries. Normal PLT entries don't have BTI in a shared library
+     (because such PLT is normally not called indirectly and adding
+     the BTI when a stub targets a PLT would change the PLT layout
+     and it's too late for that here).  */
+  if (section == globals->root.splt)
+    memcpy (loc, globals->plt_entry, count);
+  else if (!bfd_get_section_contents (section->owner, section, loc, off, count))
     return false;
 
   uint32_t insn = bfd_getl32 (loc);
@@ -4637,11 +4647,24 @@ _bfd_aarch64_add_call_stub_entries (bool *stub_changed, bfd *output_bfd,
 
 	      /* A stub with indirect jump may break BTI compatibility, so
 		 insert another stub with direct jump near the target then.  */
-	      if (need_bti && !aarch64_bti_stub_p (input_bfd, stub_entry))
+	      if (need_bti && !aarch64_bti_stub_p (info, stub_entry))
 		{
+		  id_sec_bti = htab->stub_group[sym_sec->id].link_sec;
+
+		  /* If the stub with indirect jump and the BTI stub are in
+		     the same stub group: change the indirect jump stub into
+		     a BTI stub since a direct branch can reach the target.
+		     The BTI landing pad is still needed in case another
+		     stub indirectly jumps to it.  */
+		  if (id_sec_bti == id_sec)
+		    {
+		      stub_entry->stub_type = aarch64_stub_bti_direct_branch;
+		      goto skip_double_stub;
+		    }
+
 		  stub_entry->double_stub = true;
 		  htab->has_double_stub = true;
-		  id_sec_bti = htab->stub_group[sym_sec->id].link_sec;
+
 		  stub_name_bti =
 		    elfNN_aarch64_stub_name (id_sec_bti, sym_sec, hash, irela);
 		  if (!stub_name_bti)
@@ -4653,33 +4676,41 @@ _bfd_aarch64_add_call_stub_entries (bool *stub_changed, bfd *output_bfd,
 		  stub_entry_bti =
 		    aarch64_stub_hash_lookup (&htab->stub_hash_table,
 					      stub_name_bti, false, false);
-		  if (stub_entry_bti == NULL)
-		    stub_entry_bti =
-		      _bfd_aarch64_add_stub_entry_in_group (stub_name_bti,
-							    sym_sec, htab);
-		  if (stub_entry_bti == NULL)
+		  if (stub_entry_bti != NULL)
+		    BFD_ASSERT (stub_entry_bti->stub_type
+				== aarch64_stub_bti_direct_branch);
+		  else
 		    {
-		      free (stub_name);
-		      free (stub_name_bti);
-		      goto error_ret_free_internal;
-		    }
+		      stub_entry_bti =
+			_bfd_aarch64_add_stub_entry_in_group (stub_name_bti,
+							      sym_sec, htab);
+		      if (stub_entry_bti == NULL)
+			{
+			  free (stub_name);
+			  free (stub_name_bti);
+			  goto error_ret_free_internal;
+			}
 
-		  stub_entry_bti->target_value = sym_value + irela->r_addend;
-		  stub_entry_bti->target_section = sym_sec;
-		  stub_entry_bti->stub_type = aarch64_stub_bti_direct_branch;
-		  stub_entry_bti->h = hash;
-		  stub_entry_bti->st_type = st_type;
+		      stub_entry_bti->target_value =
+			sym_value + irela->r_addend;
+		      stub_entry_bti->target_section = sym_sec;
+		      stub_entry_bti->stub_type =
+			aarch64_stub_bti_direct_branch;
+		      stub_entry_bti->h = hash;
+		      stub_entry_bti->st_type = st_type;
 
-		  len = sizeof (BTI_STUB_ENTRY_NAME) + strlen (sym_name);
-		  stub_entry_bti->output_name = bfd_alloc (htab->stub_bfd, len);
-		  if (stub_entry_bti->output_name == NULL)
-		    {
-		      free (stub_name);
-		      free (stub_name_bti);
-		      goto error_ret_free_internal;
+		      len = sizeof (BTI_STUB_ENTRY_NAME) + strlen (sym_name);
+		      stub_entry_bti->output_name = bfd_alloc (htab->stub_bfd,
+							       len);
+		      if (stub_entry_bti->output_name == NULL)
+			{
+			  free (stub_name);
+			  free (stub_name_bti);
+			  goto error_ret_free_internal;
+			}
+		      snprintf (stub_entry_bti->output_name, len,
+				BTI_STUB_ENTRY_NAME, sym_name);
 		    }
-		  snprintf (stub_entry_bti->output_name, len,
-			    BTI_STUB_ENTRY_NAME, sym_name);
 
 		  /* Update the indirect call stub to target the BTI stub.  */
 		  stub_entry->target_value = 0;
@@ -4688,7 +4719,7 @@ _bfd_aarch64_add_call_stub_entries (bool *stub_changed, bfd *output_bfd,
 		  stub_entry->h = NULL;
 		  stub_entry->st_type = STT_FUNC;
 		}
-
+skip_double_stub:
 	      *stub_changed = true;
 	    }
 
@@ -5879,11 +5910,9 @@ elfNN_aarch64_final_link_relocate (reloc_howto_type *howto,
 
     case BFD_RELOC_AARCH64_NN:
 
-      /* When generating a shared object or relocatable executable, these
-	 relocations are copied into the output file to be resolved at
-	 run time.  */
-      if (((bfd_link_pic (info)
-	    || globals->root.is_relocatable_executable)
+      /* When generating a shared library or PIE, these relocations
+	 are copied into the output file to be resolved at run time.  */
+      if ((bfd_link_pic (info)
 	   && (input_section->flags & SEC_ALLOC)
 	   && (h == NULL
 	       || (ELF_ST_VISIBILITY (h->other) == STV_DEFAULT
@@ -9144,8 +9173,8 @@ elfNN_aarch64_allocate_local_ifunc_dynrelocs (void **slot, void *inf)
    though !  */
 
 static bool
-elfNN_aarch64_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
-				     struct bfd_link_info *info)
+elfNN_aarch64_late_size_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
+				  struct bfd_link_info *info)
 {
   struct elf_aarch64_link_hash_table *htab;
   bfd *dynobj;
@@ -9156,7 +9185,8 @@ elfNN_aarch64_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
   htab = elf_aarch64_hash_table ((info));
   dynobj = htab->root.dynobj;
 
-  BFD_ASSERT (dynobj != NULL);
+  if (dynobj == NULL)
+    return true;
 
   if (htab->root.dynamic_sections_created)
     {
@@ -9558,8 +9588,8 @@ elfNN_aarch64_create_small_pltn_entry (struct elf_link_hash_entry *h,
    _TLS_MODULE_BASE_, if needed.  */
 
 static bool
-elfNN_aarch64_always_size_sections (bfd *output_bfd,
-				    struct bfd_link_info *info)
+elfNN_aarch64_early_size_sections (bfd *output_bfd,
+				   struct bfd_link_info *info)
 {
   asection *tls_sec;
 
@@ -9640,7 +9670,7 @@ elfNN_aarch64_finish_dynamic_symbol (bfd *output_bfd,
 	  || plt == NULL
 	  || gotplt == NULL
 	  || relplt == NULL)
-	return false;
+	abort ();
 
       elfNN_aarch64_create_small_pltn_entry (h, htab, output_bfd, info);
       if (!h->def_regular)
@@ -9710,7 +9740,6 @@ elfNN_aarch64_finish_dynamic_symbol (bfd *output_bfd,
 	{
 	  if (!(h->def_regular || ELF_COMMON_DEF_P (h)))
 	    return false;
-
 	  BFD_ASSERT ((h->got.offset & 1) != 0);
 	  rela.r_info = ELFNN_R_INFO (0, AARCH64_R (RELATIVE));
 	  rela.r_addend = (h->root.u.def.value
@@ -10292,8 +10321,8 @@ const struct elf_size_info elfNN_aarch64_size_info =
 #define elf_backend_adjust_dynamic_symbol	\
   elfNN_aarch64_adjust_dynamic_symbol
 
-#define elf_backend_always_size_sections	\
-  elfNN_aarch64_always_size_sections
+#define elf_backend_early_size_sections		\
+  elfNN_aarch64_early_size_sections
 
 #define elf_backend_check_relocs		\
   elfNN_aarch64_check_relocs
@@ -10348,8 +10377,8 @@ const struct elf_size_info elfNN_aarch64_size_info =
 #define elf_backend_modify_headers		\
   elfNN_aarch64_modify_headers
 
-#define elf_backend_size_dynamic_sections	\
-  elfNN_aarch64_size_dynamic_sections
+#define elf_backend_late_size_sections		\
+  elfNN_aarch64_late_size_sections
 
 #define elf_backend_size_info			\
   elfNN_aarch64_size_info

@@ -18,15 +18,15 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
-#include "defs.h"
 #include "macrotab.h"
 #include "macroexp.h"
 #include "macroscope.h"
 #include "cli/cli-style.h"
 #include "cli/cli-utils.h"
 #include "command.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "linespec.h"
+#include "ui-out.h"
 
 
 /* The `macro' prefix command.  */
@@ -481,7 +481,7 @@ expression work together to yield a pre-processed expression."),
   add_info ("macro", info_macro_command,
 	    _("Show the definition of MACRO, and it's source location.\n\
 Usage: info macro [-a|-all] [--] MACRO\n\
-Options: \n\
+Options:\n\
   -a, --all    Output all definitions of MACRO in the current compilation\
  unit.\n\
   --           Specify the end of arguments and the beginning of the MACRO."));

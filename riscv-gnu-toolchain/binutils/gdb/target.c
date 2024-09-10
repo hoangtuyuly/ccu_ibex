@@ -19,10 +19,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "target.h"
+#include "extract-store-integer.h"
 #include "target-dcache.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "symtab.h"
 #include "inferior.h"
 #include "infrun.h"
@@ -54,8 +54,9 @@
 #include "target-connection.h"
 #include "valprint.h"
 #include "cli/cli-decode.h"
+#include "cli/cli-style.h"
 
-static void generic_tls_error (void) ATTRIBUTE_NORETURN;
+[[noreturn]] static void generic_tls_error (void);
 
 static void default_rcmd (struct target_ops *, const char *, struct ui_file *);
 
@@ -63,7 +64,7 @@ static int default_verify_memory (struct target_ops *self,
 				  const gdb_byte *data,
 				  CORE_ADDR memaddr, ULONGEST size);
 
-static void tcomplain (void) ATTRIBUTE_NORETURN;
+[[noreturn]] static void tcomplain (void);
 
 /* Mapping between target_info objects (which have address identity)
    and corresponding open/factory function/callback.  Each add_target
@@ -110,6 +111,16 @@ bool may_stop = true;
 /* Non-zero if we want to see trace of target level stuff.  */
 
 static unsigned int targetdebug = 0;
+
+/* Print a "target" debug statement with the function name prefix.  */
+
+#define target_debug_printf(fmt, ...) \
+  debug_prefixed_printf_cond (targetdebug > 0, "target", fmt, ##__VA_ARGS__)
+
+/* Print a "target" debug statement without the function name prefix.  */
+
+#define target_debug_printf_nofunc(fmt, ...) \
+  debug_prefixed_printf_cond_nofunc (targetdebug > 0, "target", fmt, ##__VA_ARGS__)
 
 static void
 set_targetdebug  (const char *args, int from_tty, struct cmd_list_element *c)
@@ -797,6 +808,12 @@ target_store_memtags (CORE_ADDR address, size_t len,
   return current_inferior ()->top_target ()->store_memtags (address, len, tags, type);
 }
 
+bool
+target_is_address_tagged (gdbarch *gdbarch, CORE_ADDR address)
+{
+  return current_inferior ()->top_target ()->is_address_tagged (gdbarch, address);
+}
+
 x86_xsave_layout
 target_fetch_x86_xsave_layout ()
 {
@@ -817,15 +834,9 @@ open_target (const char *args, int from_tty, struct cmd_list_element *command)
   auto *ti = static_cast<target_info *> (command->context ());
   target_open_ftype *func = target_factories[ti];
 
-  if (targetdebug)
-    gdb_printf (gdb_stdlog, "-> %s->open (...)\n",
-		ti->shortname);
-
+  target_debug_printf_nofunc ("-> %s->open (...)", ti->shortname);
   func (args, from_tty);
-
-  if (targetdebug)
-    gdb_printf (gdb_stdlog, "<- %s->open (%s, %d)\n",
-		ti->shortname, args, from_tty);
+  target_debug_printf_nofunc ("<- %s->open (%s, %d)", ti->shortname, args, from_tty);
 }
 
 /* See target.h.  */
@@ -1152,8 +1163,7 @@ target_ops_ref_policy::decref (target_ops *t)
 
       t->close ();
 
-      if (targetdebug)
-	gdb_printf (gdb_stdlog, "closing target\n");
+      target_debug_printf_nofunc ("closing target");
     }
 }
 
@@ -1688,18 +1698,15 @@ target_xfer_partial (struct target_ops *ops,
   if (targetdebug)
     {
       const unsigned char *myaddr = NULL;
-
-      gdb_printf (gdb_stdlog,
-		  "%s:target_xfer_partial "
-		  "(%d, %s, %s, %s, %s, %s) = %d, %s",
-		  ops->shortname (),
-		  (int) object,
-		  (annex ? annex : "(null)"),
-		  host_address_to_string (readbuf),
-		  host_address_to_string (writebuf),
-		  core_addr_to_string_nz (offset),
-		  pulongest (len), retval,
-		  pulongest (*xfered_len));
+      std::string s
+	= string_printf ("%s:target_xfer_partial "
+			 "(%d, %s, %s, %s, %s, %s) = %d, %s",
+			 ops->shortname (), (int) object,
+			 (annex ? annex : "(null)"),
+			 host_address_to_string (readbuf),
+			 host_address_to_string (writebuf),
+			 core_addr_to_string_nz (offset), pulongest (len),
+			 retval, pulongest (*xfered_len));
 
       if (readbuf)
 	myaddr = readbuf;
@@ -1709,24 +1716,26 @@ target_xfer_partial (struct target_ops *ops,
 	{
 	  int i;
 
-	  gdb_puts (", bytes =", gdb_stdlog);
+	  string_appendf (s, ", bytes =");
 	  for (i = 0; i < *xfered_len; i++)
 	    {
 	      if ((((intptr_t) &(myaddr[i])) & 0xf) == 0)
 		{
 		  if (targetdebug < 2 && i > 0)
 		    {
-		      gdb_printf (gdb_stdlog, " ...");
+		      string_appendf (s, " ...");
 		      break;
 		    }
-		  gdb_printf (gdb_stdlog, "\n");
+
+		  target_debug_printf_nofunc ("%s", s.c_str ());
+		  s.clear();
 		}
 
-	      gdb_printf (gdb_stdlog, " %02x", myaddr[i] & 0xff);
+	      string_appendf (s, " %02x", myaddr[i] & 0xff);
 	    }
 	}
 
-      gdb_putc ('\n', gdb_stdlog);
+      target_debug_printf_nofunc ("%s", s.c_str ());
     }
 
   /* Check implementations of to_xfer_partial update *XFERED_LEN
@@ -2389,8 +2398,9 @@ info_target_command (const char *args, int from_tty)
   if (current_program_space->symfile_object_file != NULL)
     {
       objfile *objf = current_program_space->symfile_object_file;
-      gdb_printf (_("Symbols from \"%s\".\n"),
-		  objfile_name (objf));
+      gdb_printf (_("Symbols from \"%ps\".\n"),
+		  styled_string (file_name_style.style (),
+				 objfile_name (objf)));
     }
 
   for (target_ops *t = current_inferior ()->top_target ();
@@ -2418,7 +2428,7 @@ info_target_command (const char *args, int from_tty)
    resets (things which might change between targets).  */
 
 void
-target_pre_inferior (int from_tty)
+target_pre_inferior ()
 {
   /* Clear out solib state.  Otherwise the solib state of the previous
      inferior might have survived and is entirely wrong for the new
@@ -2442,7 +2452,7 @@ target_pre_inferior (int from_tty)
      memory regions and features.  */
   if (!gdbarch_has_global_solist (current_inferior ()->arch ()))
     {
-      no_shared_libraries (NULL, from_tty);
+      no_shared_libraries (current_program_space);
 
       invalidate_target_mem_regions ();
 
@@ -2494,7 +2504,7 @@ target_preopen (int from_tty)
      live process to a core of the same program.  */
   current_inferior ()->pop_all_targets_above (file_stratum);
 
-  target_pre_inferior (from_tty);
+  target_pre_inferior ();
 }
 
 /* See target.h.  */
@@ -2939,10 +2949,7 @@ target_info_proc (const char *args, enum info_proc_what what)
     {
       if (t->info_proc (args, what))
 	{
-	  if (targetdebug)
-	    gdb_printf (gdb_stdlog,
-			"target_info_proc (\"%s\", %d)\n", args, what);
-
+	  target_debug_printf_nofunc ("target_info_proc (\"%s\", %d)", args, what);
 	  return 1;
 	}
     }
@@ -3192,6 +3199,14 @@ target_ops::fileio_fstat (int fd, struct stat *sb, fileio_error *target_errno)
 }
 
 int
+target_ops::fileio_stat (struct inferior *inf, const char *filename,
+			 struct stat *sb, fileio_error *target_errno)
+{
+  *target_errno = FILEIO_ENOSYS;
+  return -1;
+}
+
+int
 target_ops::fileio_close (int fd, fileio_error *target_errno)
 {
   *target_errno = FILEIO_ENOSYS;
@@ -3233,14 +3248,9 @@ target_fileio_open (struct inferior *inf, const char *filename,
       else
 	fd = acquire_fileio_fd (t, fd);
 
-      if (targetdebug)
-	gdb_printf (gdb_stdlog,
-		    "target_fileio_open (%d,%s,0x%x,0%o,%d)"
-		    " = %d (%d)\n",
-		    inf == NULL ? 0 : inf->num,
-		    filename, flags, mode,
-		    warn_if_slow, fd,
-		    fd != -1 ? 0 : *target_errno);
+      target_debug_printf_nofunc ("target_fileio_open (%d,%s,0x%x,0%o,%d) = %d (%d)",
+			   inf == NULL ? 0 : inf->num, filename, flags, mode,
+			   warn_if_slow, fd, fd != -1 ? 0 : *target_errno);
       return fd;
     }
 
@@ -3265,12 +3275,9 @@ target_fileio_pwrite (int fd, const gdb_byte *write_buf, int len,
     ret = fh->target->fileio_pwrite (fh->target_fd, write_buf,
 				     len, offset, target_errno);
 
-  if (targetdebug)
-    gdb_printf (gdb_stdlog,
-		"target_fileio_pwrite (%d,...,%d,%s) "
-		"= %d (%d)\n",
-		fd, len, pulongest (offset),
-		ret, ret != -1 ? 0 : *target_errno);
+  target_debug_printf_nofunc ("target_fileio_pwrite (%d,...,%d,%s) = %d (%d)", fd,
+		       len, pulongest (offset), ret,
+		       ret != -1 ? 0 : *target_errno);
   return ret;
 }
 
@@ -3291,12 +3298,8 @@ target_fileio_pread (int fd, gdb_byte *read_buf, int len,
     ret = fh->target->fileio_pread (fh->target_fd, read_buf,
 				    len, offset, target_errno);
 
-  if (targetdebug)
-    gdb_printf (gdb_stdlog,
-		"target_fileio_pread (%d,...,%d,%s) "
-		"= %d (%d)\n",
-		fd, len, pulongest (offset),
-		ret, ret != -1 ? 0 : *target_errno);
+  target_debug_printf_nofunc ("target_fileio_pread (%d,...,%d,%s) = %d (%d)", fd, len,
+		       pulongest (offset), ret, ret != -1 ? 0 : *target_errno);
   return ret;
 }
 
@@ -3315,11 +3318,32 @@ target_fileio_fstat (int fd, struct stat *sb, fileio_error *target_errno)
   else
     ret = fh->target->fileio_fstat (fh->target_fd, sb, target_errno);
 
-  if (targetdebug)
-    gdb_printf (gdb_stdlog,
-		"target_fileio_fstat (%d) = %d (%d)\n",
-		fd, ret, ret != -1 ? 0 : *target_errno);
+  target_debug_printf_nofunc ("target_fileio_fstat (%d) = %d (%d)", fd, ret,
+		       ret != -1 ? 0 : *target_errno);
   return ret;
+}
+
+/* See target.h.  */
+
+int
+target_fileio_stat (struct inferior *inf, const char *filename,
+		    struct stat *sb, fileio_error *target_errno)
+{
+  for (target_ops *t = default_fileio_target (); t != NULL; t = t->beneath ())
+    {
+      int ret = t->fileio_stat (inf, filename, sb, target_errno);
+
+      if (ret == -1 && *target_errno == FILEIO_ENOSYS)
+	continue;
+
+      target_debug_printf_nofunc ("target_fileio_stat (%s) = %d (%d)",
+				  filename, ret,
+				  ret != -1 ? 0 : *target_errno);
+      return ret;
+    }
+
+  *target_errno = FILEIO_ENOSYS;
+  return -1;
 }
 
 /* See target.h.  */
@@ -3342,10 +3366,8 @@ target_fileio_close (int fd, fileio_error *target_errno)
       release_fileio_fd (fd, fh);
     }
 
-  if (targetdebug)
-    gdb_printf (gdb_stdlog,
-		"target_fileio_close (%d) = %d (%d)\n",
-		fd, ret, ret != -1 ? 0 : *target_errno);
+  target_debug_printf_nofunc ("target_fileio_close (%d) = %d (%d)", fd, ret,
+		       ret != -1 ? 0 : *target_errno);
   return ret;
 }
 
@@ -3362,12 +3384,9 @@ target_fileio_unlink (struct inferior *inf, const char *filename,
       if (ret == -1 && *target_errno == FILEIO_ENOSYS)
 	continue;
 
-      if (targetdebug)
-	gdb_printf (gdb_stdlog,
-		    "target_fileio_unlink (%d,%s)"
-		    " = %d (%d)\n",
-		    inf == NULL ? 0 : inf->num, filename,
-		    ret, ret != -1 ? 0 : *target_errno);
+      target_debug_printf_nofunc ("target_fileio_unlink (%d,%s) = %d (%d)",
+			   inf == NULL ? 0 : inf->num, filename, ret,
+			   ret != -1 ? 0 : *target_errno);
       return ret;
     }
 
@@ -3389,13 +3408,10 @@ target_fileio_readlink (struct inferior *inf, const char *filename,
       if (!ret.has_value () && *target_errno == FILEIO_ENOSYS)
 	continue;
 
-      if (targetdebug)
-	gdb_printf (gdb_stdlog,
-		    "target_fileio_readlink (%d,%s)"
-		    " = %s (%d)\n",
-		    inf == NULL ? 0 : inf->num,
-		    filename, ret ? ret->c_str () : "(nil)",
-		    ret ? 0 : *target_errno);
+      target_debug_printf_nofunc ("target_fileio_readlink (%d,%s) = %s (%d)",
+			   inf == NULL ? 0 : inf->num, filename,
+			   ret ? ret->c_str () : "(nil)",
+			   ret ? 0 : *target_errno);
       return ret;
     }
 
@@ -3589,12 +3605,13 @@ target_announce_detach (int from_tty)
     return;
 
   pid = inferior_ptid.pid ();
-  exec_file = get_exec_file (0);
+  exec_file = current_program_space->exec_filename ();
   if (exec_file == nullptr)
     gdb_printf ("Detaching from pid %s\n",
 		target_pid_to_str (ptid_t (pid)).c_str ());
   else
-    gdb_printf (_("Detaching from program: %s, %s\n"), exec_file,
+    gdb_printf (_("Detaching from program: %ps, %s\n"),
+		styled_string (file_name_style.style (), exec_file),
 		target_pid_to_str (ptid_t (pid)).c_str ());
 }
 
@@ -3606,10 +3623,11 @@ target_announce_attach (int from_tty, int pid)
   if (!from_tty)
     return;
 
-  const char *exec_file = get_exec_file (0);
+  const char *exec_file = current_program_space->exec_filename ();
 
   if (exec_file != nullptr)
-    gdb_printf ("Attaching to program: %s, %s\n", exec_file,
+    gdb_printf ("Attaching to program: %ps, %s\n",
+		styled_string (file_name_style.style (), exec_file),
 		target_pid_to_str (ptid_t (pid)).c_str ());
   else
     gdb_printf ("Attaching to %s\n",
@@ -3628,7 +3646,7 @@ generic_mourn_inferior (void)
   /* Mark breakpoints uninserted in case something tries to delete a
      breakpoint while we delete the inferior's threads (which would
      fail, since the inferior is long gone).  */
-  mark_breakpoints_out ();
+  mark_breakpoints_out (inf->pspace);
 
   if (inf->pid != 0)
     exit_inferior (inf);
@@ -3636,7 +3654,7 @@ generic_mourn_inferior (void)
   /* Note this wipes step-resume breakpoints, so needs to be done
      after exit_inferior, which ends up referencing the step-resume
      breakpoints through clear_thread_inferior_resources.  */
-  breakpoint_init_inferior (inf_exited);
+  breakpoint_init_inferior (inf, inf_exited);
 
   registers_changed ();
 
@@ -3889,8 +3907,7 @@ void
 target_fetch_registers (struct regcache *regcache, int regno)
 {
   current_inferior ()->top_target ()->fetch_registers (regcache, regno);
-  if (targetdebug)
-    regcache->debug_print_register ("target_fetch_registers", regno);
+  target_debug_printf ("%s", regcache->register_debug_string (regno).c_str ());
 }
 
 void
@@ -3900,10 +3917,7 @@ target_store_registers (struct regcache *regcache, int regno)
     error (_("Writing to registers is not allowed (regno %d)"), regno);
 
   current_inferior ()->top_target ()->store_registers (regcache, regno);
-  if (targetdebug)
-    {
-      regcache->debug_print_register ("target_store_registers", regno);
-    }
+  target_debug_printf ("%s", regcache->register_debug_string (regno).c_str ());
 }
 
 int
@@ -4307,7 +4321,7 @@ target_async (bool enable)
 /* See target.h.  */
 
 void
-target_thread_events (int enable)
+target_thread_events (bool enable)
 {
   current_inferior ()->top_target ()->thread_events (enable);
 }

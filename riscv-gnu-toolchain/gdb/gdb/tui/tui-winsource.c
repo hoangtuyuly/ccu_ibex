@@ -1,6 +1,6 @@
 /* TUI display source/assembly window.
 
-   Copyright (C) 1998-2023 Free Software Foundation, Inc.
+   Copyright (C) 1998-2024 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -19,7 +19,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include <ctype.h>
 #include "symtab.h"
 #include "frame.h"
@@ -33,7 +32,7 @@
 #include "tui/tui.h"
 #include "tui/tui-data.h"
 #include "tui/tui-io.h"
-#include "tui/tui-stack.h"
+#include "tui/tui-status.h"
 #include "tui/tui-win.h"
 #include "tui/tui-wingeneral.h"
 #include "tui/tui-winsource.h"
@@ -178,6 +177,18 @@ tui_source_window_base::update_source_window_as_is
 }
 
 
+/* See tui-winsource.h.  */
+void
+tui_source_window_base::update_source_window_with_addr (struct gdbarch *gdbarch,
+							CORE_ADDR addr)
+{
+  struct symtab_and_line sal {};
+  if (addr != 0)
+    sal = find_pc_line (addr, 0);
+
+  update_source_window (gdbarch, sal);
+}
+
 /* Function to ensure that the source and/or disassembly windows
    reflect the input address.  */
 void
@@ -210,26 +221,9 @@ tui_update_source_windows_with_line (struct symtab_and_line sal)
 void
 tui_source_window_base::do_erase_source_content (const char *str)
 {
-  int x_pos;
-  int half_width = (width - 2) / 2;
-
   m_content.clear ();
-  if (handle != NULL)
-    {
-      werase (handle.get ());
-      check_and_display_highlight_if_needed ();
-
-      if (strlen (str) >= half_width)
-	x_pos = 1;
-      else
-	x_pos = half_width - strlen (str);
-      mvwaddstr (handle.get (),
-		 (height / 2),
-		 x_pos,
-		 (char *) str);
-
-      refresh_window ();
-    }
+  if (handle != nullptr)
+    center_string (str);
 }
 
 /* See tui-winsource.h.  */
@@ -347,8 +341,11 @@ tui_source_window_base::refresh_window ()
   gdb_assert (pad_width > 0 || m_pad.get () == nullptr);
   gdb_assert (pad_x + view_width <= pad_width || m_pad.get () == nullptr);
 
-  prefresh (m_pad.get (), 0, pad_x, y + 1, x + left_margin,
-	    y + m_content.size (), x + left_margin + view_width - 1);
+  int sminrow = y + box_width ();
+  int smincol = x + box_width () + left_margin;
+  int smaxrow = sminrow + m_content.size () - 1;
+  int smaxcol = smincol + view_width - 1;
+  prefresh (m_pad.get (), 0, pad_x, sminrow, smincol, smaxrow, smaxcol);
 }
 
 void
@@ -409,11 +406,15 @@ tui_source_window_base::show_source_content ()
   for (int lineno = 0; lineno < m_content.size (); lineno++)
     show_source_line (lineno);
 
-  /* Calling check_and_display_highlight_if_needed will call refresh_window
-     (so long as the current window can be boxed), which will ensure that
-     the newly loaded window content is copied to the screen.  */
-  gdb_assert (can_box ());
-  check_and_display_highlight_if_needed ();
+  if (can_box ())
+    {
+      /* Calling check_and_display_highlight_if_needed will call refresh_window
+	 (so long as the current window can be boxed), which will ensure that
+	 the newly loaded window content is copied to the screen.  */
+      check_and_display_highlight_if_needed ();
+    }
+  else
+    refresh_window ();
 }
 
 tui_source_window_base::tui_source_window_base ()
@@ -466,10 +467,28 @@ tui_source_window_base::rerender ()
       struct symtab *s = find_pc_line_symtab (get_frame_pc (frame));
       if (this != TUI_SRC_WIN)
 	find_line_pc (s, cursal.line, &cursal.pc);
+
+      /* This centering code is copied from tui_source_window::maybe_update.
+	 It would be nice to do centering more often, and do it in just one
+	 location.  But since this is a regression fix, handle this
+	 conservatively for now.  */
+      int start_line = (cursal.line - ((height - box_size ()) / 2)) + 1;
+      if (start_line <= 0)
+	start_line = 1;
+      cursal.line = start_line;
+
       update_source_window (gdbarch, cursal);
     }
   else
-    erase_source_content ();
+    {
+      CORE_ADDR addr;
+      struct gdbarch *gdbarch;
+      tui_get_begin_asm_address (&gdbarch, &addr);
+      if (addr == 0)
+	erase_source_content ();
+      else
+	update_source_window_with_addr (gdbarch, addr);
+    }
 }
 
 /* See tui-data.h.  */
@@ -690,7 +709,7 @@ tui_source_window_base::update_exec_info (bool refresh_p)
       if (src_element->is_exec_point)
 	element[TUI_EXEC_POS] = '>';
 
-      mvwaddstr (handle.get (), i + 1, 1, element);
+      mvwaddstr (handle.get (), i + box_width (), box_width (), element);
 
       show_line_number (i);
     }

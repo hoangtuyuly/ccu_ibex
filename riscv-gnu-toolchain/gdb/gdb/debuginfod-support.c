@@ -1,5 +1,5 @@
 /* debuginfod utilities for GDB.
-   Copyright (C) 2020-2023 Free Software Foundation, Inc.
+   Copyright (C) 2020-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,12 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "diagnostics.h"
 #include <errno.h>
 #include "gdbsupport/scoped_fd.h"
 #include "debuginfod-support.h"
-#include "gdbsupport/gdb_optional.h"
+#include <optional>
 #include "cli/cli-cmds.h"
 #include "cli/cli-style.h"
 #include "cli-out.h"
@@ -155,7 +154,8 @@ progressfn (debuginfod_client *c, long cur, long total)
 
   if (check_quit_flag ())
     {
-      gdb_printf ("Cancelling download of %s %s...\n",
+      ui_file *outstream = get_unbuffered (gdb_stdout);
+      gdb_printf (outstream, _("Cancelling download of %s %s...\n"),
 		  data->desc, styled_fname.c_str ());
       return 1;
     }
@@ -187,15 +187,6 @@ progressfn (debuginfod_client *c, long cur, long total)
   return 0;
 }
 
-/* Cleanup ARG, which is a debuginfod_client pointer.  */
-
-static void
-cleanup_debuginfod_client (void *arg)
-{
-  debuginfod_client *client = static_cast<debuginfod_client *> (arg);
-  debuginfod_end (client);
-}
-
 /* Return a pointer to the single global debuginfod_client, initialising it
    first if needed.  */
 
@@ -220,7 +211,10 @@ get_debuginfod_client ()
 	     handlers, which is too late.
 
 	     So instead, we make use of GDB's final cleanup mechanism.  */
-	  make_final_cleanup (cleanup_debuginfod_client, global_client);
+	  add_final_cleanup ([] ()
+	    {
+	      debuginfod_end (global_client);
+	    });
 	  debuginfod_set_progressfn (global_client, progressfn);
 	}
     }
@@ -246,11 +240,11 @@ debuginfod_is_enabled ()
       gdb_printf (_("\nThis GDB supports auto-downloading debuginfo " \
 		    "from the following URLs:\n"));
 
-      gdb::string_view url_view (urls);
+      std::string_view url_view (urls);
       while (true)
 	{
 	  size_t off = url_view.find_first_not_of (' ');
-	  if (off == gdb::string_view::npos)
+	  if (off == std::string_view::npos)
 	    break;
 	  url_view = url_view.substr (off);
 	  /* g++ 11.2.1 on s390x, g++ 11.3.1 on ppc64le and g++ 11 on
@@ -264,9 +258,8 @@ debuginfod_is_enabled ()
 	  gdb_printf
 	    (_("  <%ps>\n"),
 	     styled_string (file_name_style.style (),
-			    gdb::to_string (url_view.substr (0,
-							     off)).c_str ()));
-	  if (off == gdb::string_view::npos)
+			    std::string (url_view.substr (0, off)).c_str ()));
+	  if (off == std::string_view::npos)
 	    break;
 	  url_view = url_view.substr (off);
 	}
@@ -296,10 +289,14 @@ static void
 print_outcome (int fd, const char *desc, const char *fname)
 {
   if (fd < 0 && fd != -ENOENT)
-    gdb_printf (_("Download failed: %s.  Continuing without %s %ps.\n"),
-		safe_strerror (-fd),
-		desc,
-		styled_string (file_name_style.style (), fname));
+    {
+      ui_file *outstream = get_unbuffered (gdb_stdout);
+      gdb_printf (outstream,
+		  _("Download failed: %s.  Continuing without %s %ps.\n"),
+		  safe_strerror (-fd),
+		  desc,
+		  styled_string (file_name_style.style (), fname));
+    }
 }
 
 /* See debuginfod-support.h  */
@@ -320,7 +317,7 @@ debuginfod_source_query (const unsigned char *build_id,
 
   char *dname = nullptr;
   scoped_fd fd;
-  gdb::optional<target_terminal::scoped_restore_terminal_state> term_state;
+  std::optional<target_terminal::scoped_restore_terminal_state> term_state;
 
   {
     user_data data ("source file", srcpath);
@@ -366,7 +363,7 @@ debuginfod_debuginfo_query (const unsigned char *build_id,
 
   char *dname = nullptr;
   scoped_fd fd;
-  gdb::optional<target_terminal::scoped_restore_terminal_state> term_state;
+  std::optional<target_terminal::scoped_restore_terminal_state> term_state;
 
   {
     user_data data ("separate debug info for", filename);
@@ -409,7 +406,7 @@ debuginfod_exec_query (const unsigned char *build_id,
 
   char *dname = nullptr;
   scoped_fd fd;
-  gdb::optional<target_terminal::scoped_restore_terminal_state> term_state;
+  std::optional<target_terminal::scoped_restore_terminal_state> term_state;
 
   {
     user_data data ("executable for", filename);
@@ -458,7 +455,7 @@ debuginfod_section_query (const unsigned char *build_id,
   char *dname = nullptr;
   std::string desc = std::string ("section ") + section_name + " for";
   scoped_fd fd;
-  gdb::optional<target_terminal::scoped_restore_terminal_state> term_state;
+  std::optional<target_terminal::scoped_restore_terminal_state> term_state;
 
   {
     user_data data (desc.c_str (), filename);

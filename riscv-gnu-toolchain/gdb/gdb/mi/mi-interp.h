@@ -1,6 +1,6 @@
 /* MI Interpreter Definitions and Commands for GDB, the GNU debugger.
 
-   Copyright (C) 2017-2023 Free Software Foundation, Inc.
+   Copyright (C) 2017-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -51,7 +51,7 @@ public:
   void on_command_error () override;
   void on_user_selected_context_changed (user_selected_what selection) override;
   void on_new_thread (thread_info *t) override;
-  void on_thread_exited (thread_info *t, gdb::optional<ULONGEST> exit_code,
+  void on_thread_exited (thread_info *t, std::optional<ULONGEST> exit_code,
 			 int silent) override;
   void on_inferior_added (inferior *inf) override;
   void on_inferior_appeared (inferior *inf) override;
@@ -60,8 +60,8 @@ public:
   void on_record_changed (inferior *inf, int started, const char *method,
 			  const char *format) override;
   void on_target_resumed (ptid_t ptid) override;
-  void on_solib_loaded (so_list *so) override;
-  void on_solib_unloaded (so_list *so) override;
+  void on_solib_loaded (const solib &so) override;
+  void on_solib_unloaded (const solib &so) override;
   void on_about_to_proceed () override;
   void on_traceframe_changed (int tfnum, int tpnum) override;
   void on_tsv_created (const trace_state_variable *tsv) override;
@@ -108,7 +108,7 @@ public:
 
 /* Output the shared object attributes to UIOUT.  */
 
-void mi_output_solib_attribs (ui_out *uiout, struct so_list *solib);
+void mi_output_solib_attribs (ui_out *uiout, const solib &solib);
 
 /* Returns the INTERP's data cast as mi_interp if INTERP is an MI, and
    returns NULL otherwise.  */

@@ -1,6 +1,6 @@
 # Dynamic architecture support for GDB, the GNU debugger.
 
-# Copyright (C) 1998-2023 Free Software Foundation, Inc.
+# Copyright (C) 1998-2024 Free Software Foundation, Inc.
 
 # This file is part of GDB.
 
@@ -414,13 +414,40 @@ never be called.
 """,
     type="struct value *",
     name="pseudo_register_read_value",
-    params=[("readable_regcache *", "regcache"), ("int", "cookednum")],
+    params=[("const frame_info_ptr &", "next_frame"), ("int", "cookednum")],
     predicate=True,
 )
 
 Method(
+    comment="""
+Write bytes in BUF to pseudo register with number PSEUDO_REG_NUM.
+
+Raw registers backing the pseudo register should be written to using
+NEXT_FRAME.
+""",
     type="void",
     name="pseudo_register_write",
+    params=[
+        ("const frame_info_ptr &", "next_frame"),
+        ("int", "pseudo_reg_num"),
+        ("gdb::array_view<const gdb_byte>", "buf"),
+    ],
+    predicate=True,
+)
+
+Method(
+    comment="""
+Write bytes to a pseudo register.
+
+This is marked as deprecated because it gets passed a regcache for
+implementations to write raw registers in.  This doesn't work for unwound
+frames, where the raw registers backing the pseudo registers may have been
+saved elsewhere.
+
+Implementations should be migrated to implement pseudo_register_write instead.
+""",
+    type="void",
+    name="deprecated_pseudo_register_write",
     params=[
         ("struct regcache *", "regcache"),
         ("int", "cookednum"),
@@ -601,7 +628,7 @@ frame.
 """,
     type="struct frame_id",
     name="dummy_id",
-    params=[("frame_info_ptr", "this_frame")],
+    params=[("const frame_info_ptr &", "this_frame")],
     predefault="default_dummy_id",
     invalid=False,
 )
@@ -662,7 +689,7 @@ Return true if the code of FRAME is writable.
 """,
     type="int",
     name="code_of_frame_writable",
-    params=[("frame_info_ptr", "frame")],
+    params=[("const frame_info_ptr &", "frame")],
     predefault="default_code_of_frame_writable",
     invalid=False,
 )
@@ -672,7 +699,7 @@ Method(
     name="print_registers_info",
     params=[
         ("struct ui_file *", "file"),
-        ("frame_info_ptr", "frame"),
+        ("const frame_info_ptr &", "frame"),
         ("int", "regnum"),
         ("int", "all"),
     ],
@@ -685,7 +712,7 @@ Method(
     name="print_float_info",
     params=[
         ("struct ui_file *", "file"),
-        ("frame_info_ptr", "frame"),
+        ("const frame_info_ptr &", "frame"),
         ("const char *", "args"),
     ],
     predefault="default_print_float_info",
@@ -697,7 +724,7 @@ Method(
     name="print_vector_info",
     params=[
         ("struct ui_file *", "file"),
-        ("frame_info_ptr", "frame"),
+        ("const frame_info_ptr &", "frame"),
         ("const char *", "args"),
     ],
     predicate=True,
@@ -740,7 +767,7 @@ FRAME corresponds to the longjmp frame.
 """,
     type="int",
     name="get_longjmp_target",
-    params=[("frame_info_ptr", "frame"), ("CORE_ADDR *", "pc")],
+    params=[("const frame_info_ptr &", "frame"), ("CORE_ADDR *", "pc")],
     predicate=True,
 )
 
@@ -762,7 +789,7 @@ Function(
     type="int",
     name="register_to_value",
     params=[
-        ("frame_info_ptr", "frame"),
+        ("const frame_info_ptr &", "frame"),
         ("int", "regnum"),
         ("struct type *", "type"),
         ("gdb_byte *", "buf"),
@@ -776,7 +803,7 @@ Function(
     type="void",
     name="value_to_register",
     params=[
-        ("frame_info_ptr", "frame"),
+        ("const frame_info_ptr &", "frame"),
         ("int", "regnum"),
         ("struct type *", "type"),
         ("const gdb_byte *", "buf"),
@@ -787,7 +814,7 @@ Function(
 Method(
     comment="""
 Construct a value representing the contents of register REGNUM in
-frame FRAME_ID, interpreted as type TYPE.  The routine needs to
+frame THIS_FRAME, interpreted as type TYPE.  The routine needs to
 allocate and return a struct value with all value attributes
 (but not the value contents) filled in.
 """,
@@ -796,7 +823,7 @@ allocate and return a struct value with all value attributes
     params=[
         ("struct type *", "type"),
         ("int", "regnum"),
-        ("struct frame_id", "frame_id"),
+        ("const frame_info_ptr &", "this_frame"),
     ],
     predefault="default_value_from_register",
     invalid=False,
@@ -896,7 +923,7 @@ convention".
 May return 0 when unable to determine that address.""",
     type="CORE_ADDR",
     name="get_return_buf_addr",
-    params=[("struct type *", "val_type"), ("frame_info_ptr", "cur_frame")],
+    params=[("struct type *", "val_type"), ("const frame_info_ptr &", "cur_frame")],
     predefault="default_get_return_buf_addr",
     invalid=False,
 )
@@ -993,7 +1020,7 @@ is not used.
 )
 
 Function(
-    type="int",
+    type="bool",
     name="inner_than",
     params=[("CORE_ADDR", "lhs"), ("CORE_ADDR", "rhs")],
 )
@@ -1130,7 +1157,7 @@ Value(
 Method(
     type="CORE_ADDR",
     name="unwind_pc",
-    params=[("frame_info_ptr", "next_frame")],
+    params=[("const frame_info_ptr &", "next_frame")],
     predefault="default_unwind_pc",
     invalid=False,
 )
@@ -1138,7 +1165,7 @@ Method(
 Method(
     type="CORE_ADDR",
     name="unwind_sp",
-    params=[("frame_info_ptr", "next_frame")],
+    params=[("const frame_info_ptr &", "next_frame")],
     predefault="default_unwind_sp",
     invalid=False,
 )
@@ -1150,7 +1177,7 @@ frame-base.  Enable frame-base before frame-unwind.
 """,
     type="int",
     name="frame_num_args",
-    params=[("frame_info_ptr", "frame")],
+    params=[("const frame_info_ptr &", "frame")],
     predicate=True,
 )
 
@@ -1240,7 +1267,7 @@ must be either a pointer or a reference type.
 """,
     type="bool",
     name="tagged_address_p",
-    params=[("struct value *", "address")],
+    params=[("CORE_ADDR", "address")],
     predefault="default_tagged_address_p",
     invalid=False,
 )
@@ -1330,7 +1357,7 @@ further single-step is needed before the instruction finishes.
 """,
     type="int",
     name="single_step_through_delay",
-    params=[("frame_info_ptr", "frame")],
+    params=[("const frame_info_ptr &", "frame")],
     predicate=True,
 )
 
@@ -1349,14 +1376,14 @@ disassembler.  Perhaps objdump can handle it?
 Function(
     type="CORE_ADDR",
     name="skip_trampoline_code",
-    params=[("frame_info_ptr", "frame"), ("CORE_ADDR", "pc")],
+    params=[("const frame_info_ptr &", "frame"), ("CORE_ADDR", "pc")],
     predefault="generic_skip_trampoline_code",
     invalid=False,
 )
 
 Value(
     comment="Vtable of solib operations functions.",
-    type="const struct target_so_ops *",
+    type="const solib_ops *",
     name="so_ops",
     predefault="&solib_target_so_ops",
     printer="host_address_to_string (gdbarch->so_ops)",
@@ -1569,7 +1596,7 @@ Fetch the pointer to the ith function argument.
     type="CORE_ADDR",
     name="fetch_pointer_argument",
     params=[
-        ("frame_info_ptr", "frame"),
+        ("const frame_info_ptr &", "frame"),
         ("int", "argi"),
         ("struct type *", "type"),
     ],
@@ -1880,6 +1907,10 @@ Throw an exception if any unexpected error happens.
 Method(
     comment="""
 Clean up after a displaced step of THREAD.
+
+It is possible for the displaced-stepped instruction to have caused
+the thread to exit.  The implementation can detect this case by
+checking if WS.kind is TARGET_WAITKIND_THREAD_EXITED.
 """,
     type="displaced_step_finish_status",
     name="displaced_step_finish",
@@ -2680,7 +2711,7 @@ Functions for allowing a target to modify its disassembler options.
 )
 
 Value(
-    type="char **",
+    type="std::string *",
     name="disassembler_options",
     invalid=False,
     printer="pstring_ptr (gdbarch->disassembler_options)",
@@ -2713,7 +2744,7 @@ Return a string containing any flags for the given PC in the given FRAME.
 """,
     type="std::string",
     name="get_pc_address_flags",
-    params=[("frame_info_ptr", "frame"), ("CORE_ADDR", "pc")],
+    params=[("const frame_info_ptr &", "frame"), ("CORE_ADDR", "pc")],
     predefault="default_get_pc_address_flags",
     invalid=False,
 )

@@ -1,6 +1,6 @@
 /* Common definitions.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -187,17 +187,8 @@
 #undef ATTRIBUTE_NONNULL
 #define ATTRIBUTE_NONNULL(m)
 
-#if GCC_VERSION >= 3004
 #define ATTRIBUTE_UNUSED_RESULT __attribute__ ((__warn_unused_result__))
-#else
-#define ATTRIBUTE_UNUSED_RESULT
-#endif
-
-#if (GCC_VERSION > 4000)
 #define ATTRIBUTE_USED __attribute__ ((__used__))
-#else
-#define ATTRIBUTE_USED
-#endif
 
 #include "libiberty.h"
 #include "pathmax.h"
@@ -213,10 +204,6 @@
 #include "cleanups.h"
 #include "common-exceptions.h"
 #include "gdbsupport/poison.h"
-
-#define EXTERN_C extern "C"
-#define EXTERN_C_PUSH extern "C" {
-#define EXTERN_C_POP }
 
 /* Pull in gdb::unique_xmalloc_ptr.  */
 #include "gdbsupport/gdb_unique_ptr.h"

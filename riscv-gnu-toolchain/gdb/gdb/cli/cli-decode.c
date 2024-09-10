@@ -1,6 +1,6 @@
 /* Handle lists of commands, their decoding and documentation, for GDB.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,7 +15,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "symtab.h"
 #include <ctype.h>
 #include "gdbsupport/gdb_regex.h"
@@ -24,7 +23,7 @@
 #include "cli/cli-cmds.h"
 #include "cli/cli-decode.h"
 #include "cli/cli-style.h"
-#include "gdbsupport/gdb_optional.h"
+#include <optional>
 
 /* Prototypes for local functions.  */
 
@@ -2549,7 +2548,8 @@ deprecated_cmd_warning (const char *text, struct cmd_list_element *list)
    If TEXT is a subcommand (i.e. one that is preceded by a prefix
    command) set *PREFIX_CMD.
 
-   Set *CMD to point to the command TEXT indicates.
+   Set *CMD to point to the command TEXT indicates, or to
+   CMD_LIST_AMBIGUOUS if there are multiple possible matches.
 
    If any of *ALIAS, *PREFIX_CMD, or *CMD cannot be determined or do not
    exist, they are NULL when we return.
@@ -2589,7 +2589,12 @@ lookup_cmd_composition_1 (const char *text,
       *cmd = find_cmd (command.c_str (), len, cur_list, 1, &nfound);
 
       /* We only handle the case where a single command was found.  */
-      if (*cmd == CMD_LIST_AMBIGUOUS || *cmd == nullptr)
+      if (nfound > 1)
+	{
+	  *cmd = CMD_LIST_AMBIGUOUS;
+	  return 0;
+	}
+      else if (*cmd == nullptr)
 	return 0;
       else
 	{
@@ -2623,7 +2628,8 @@ lookup_cmd_composition_1 (const char *text,
    If TEXT is a subcommand (i.e. one that is preceded by a prefix
    command) set *PREFIX_CMD.
 
-   Set *CMD to point to the command TEXT indicates.
+   Set *CMD to point to the command TEXT indicates, or to
+   CMD_LIST_AMBIGUOUS if there are multiple possible matches.
 
    If any of *ALIAS, *PREFIX_CMD, or *CMD cannot be determined or do not
    exist, they are NULL when we return.
@@ -2727,7 +2733,7 @@ cmd_func (struct cmd_list_element *cmd, const char *args, int from_tty)
 {
   if (!cmd->is_command_class_help ())
     {
-      gdb::optional<scoped_restore_tmpl<bool>> restore_suppress;
+      std::optional<scoped_restore_tmpl<bool>> restore_suppress;
 
       if (cmd->suppress_notification != NULL)
 	restore_suppress.emplace (cmd->suppress_notification, true);

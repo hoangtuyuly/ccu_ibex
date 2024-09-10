@@ -1,6 +1,6 @@
 /* Target-dependent code for FreeBSD/amd64.
 
-   Copyright (C) 2003-2023 Free Software Foundation, Inc.
+   Copyright (C) 2003-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "osabi.h"
 #include "regset.h"
 #include "target.h"
@@ -169,7 +168,7 @@ const struct regset amd64_fbsd_segbases_regset =
 
 static void
 amd64_fbsd_sigframe_init (const struct tramp_frame *self,
-			  frame_info_ptr this_frame,
+			  const frame_info_ptr &this_frame,
 			  struct trad_frame_cache *this_cache,
 			  CORE_ADDR func)
 {
@@ -288,10 +287,8 @@ static CORE_ADDR
 amd64fbsd_get_thread_local_address (struct gdbarch *gdbarch, ptid_t ptid,
 				    CORE_ADDR lm_addr, CORE_ADDR offset)
 {
-  struct regcache *regcache;
-
-  regcache = get_thread_arch_regcache (current_inferior ()->process_target (),
-				       ptid, gdbarch);
+  regcache *regcache
+    = get_thread_arch_regcache (current_inferior (), ptid, gdbarch);
 
   target_fetch_registers (regcache, AMD64_FSBASE_REGNUM);
 

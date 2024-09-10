@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2023 Free Software Foundation, Inc.
+# Copyright (C) 2012-2024 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -162,6 +162,11 @@ proc mips_arch_create {arch gprsize extends props as_flags objdump_flags
 	    set archdata(displayname) "default = $arch"
     	    set archdata(as_flags) ""
 	    set archdata(objdump_flags) ""
+
+	    if { [string compare $arch mips32r6] == 0
+		 ||  [string compare $arch mips64r6] == 0} {
+		set archdata(as_flags) "--defsym r6="
+	    }
 
 	    set mips_arches(default) [array get archdata]
 	    break
@@ -468,7 +473,7 @@ mips_arch_create mips32r5 32	mips32r3 { fpisa3 fpisa4 fpisa5 ror } \
 mips_arch_create mips32r6 32	mips32r5 { fpisa3 fpisa4 fpisa5 ror } \
 			{ -march=mips32r6 -mtune=mips32r6 --defsym r6=} \
 			{ -mmips:isa32r6 } \
-			{ mipsisa32r6-*-* mipsisa32r6el-*-* }
+			{ mipsisa32r6-*-* mipsisa32r6el-*-* mips*-img-* }
 mips_arch_create mips64	64	mips5	{ mips32 } \
 			{ -march=mips64 -mtune=mips64 } { -mmips:isa64 } \
 			{ mipsisa64-*-* mipsisa64el-*-* }
@@ -559,7 +564,7 @@ if { [istarget mips*-*-vxworks*] } {
 	"MIPS invalid switch to SVR4 PIC from VxWorks PIC"
 } elseif { [istarget mips*-*-*] } {
     set addr32 [expr [istarget mipstx39*-*-*] || [istarget mips-*-linux*] || [istarget mipsel-*-linux*] \
-		     || [istarget mipsisa32-*-linux*] || [istarget mipsisa32el-*-linux*]]
+		     || [istarget mipsisa32*-*-linux*]]
     set has_newabi [expr [istarget *-*-irix6*] || [istarget mips*-*-linux*] \
                          || [istarget mips*-sde-elf*] || [istarget mips*-mti-elf*] \
                          || [istarget mips*-img-elf*]]
@@ -1242,7 +1247,7 @@ if { [istarget mips*-*-vxworks*] } {
 
     run_dump_test "comdat-reloc"
 
-    run_dump_test "${tmips}mips${el}16-e"
+    run_dump_test "${tmips}mips${el}16-e${imips}"
     run_dump_test "${tmips}mips${el}16-f"
 
     run_dump_test "elf-consthilo"
@@ -2059,7 +2064,8 @@ if { [istarget mips*-*-vxworks*] } {
 
     run_dump_test "module-override"
     run_dump_test "module-defer-warn1"
-    run_list_test "module-defer-warn2" "-32"
+    run_dump_test "module-defer-warn2"
+    run_dump_test "module-defer-warn2-r2"
 
     foreach testopt [list -mfp32 -mfpxx -mfp64 "-mfp64-noodd" \
 			  -msingle-float -msoft-float] {
@@ -2166,5 +2172,11 @@ if { [istarget mips*-*-vxworks*] } {
 	run_dump_test "global-local-symtab-n64"
 	run_dump_test "global-local-symtab-sort-n32${tmips}"
 	run_dump_test "global-local-symtab-sort-n64${tmips}"
+    }
+
+    # Gas doesn't generate .pdr section for Irix objects by default.
+    # See `int mips_flag_pdr` in tc-mips.c.
+    if [istarget *-*-irix*] {
+      run_dump_test "irix-no-pdr"
     }
 }

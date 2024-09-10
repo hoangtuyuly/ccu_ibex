@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2023 Free Software Foundation, Inc.
+# Copyright (C) 2012-2024 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -66,6 +66,7 @@ if [gas_32_check] then {
     run_dump_test "intel16"
     run_list_test "intelbad" ""
     run_dump_test "intelok"
+    run_dump_test "intelok2"
     run_dump_test "prefix"
     run_list_test "prefix32" "-al"
     run_dump_test "insn-32"
@@ -148,6 +149,7 @@ if [gas_32_check] then {
     run_dump_test "nops-7"
     run_dump_test "nops-8"
     run_dump_test "nops-9"
+    run_dump_test "nops-10"
     run_dump_test "noreg16"
     run_list_test "noreg16"
     run_dump_test "noreg16-data32"
@@ -203,6 +205,7 @@ if [gas_32_check] then {
     run_dump_test "arch-13-znver2"
     run_dump_test "arch-14-znver3"
     run_dump_test "arch-14-znver4"
+    run_dump_test "arch-15-znver5"
     run_dump_test "arch-10-btver1"
     run_dump_test "arch-10-btver2"
     run_list_test "arch-10-1" "-march=generic32 -I${srcdir}/$subdir -al"
@@ -216,6 +219,7 @@ if [gas_32_check] then {
     run_dump_test "arch-13"
     run_dump_test "arch-14"
     run_dump_test "arch-14-1"
+    run_dump_test "arch-15"
     run_list_test "arch-dflt" "-march=generic32 -al"
     run_list_test "arch-stk" "-march=generic32 -al"
     run_dump_test "8087"
@@ -509,6 +513,8 @@ if [gas_32_check] then {
     run_dump_test "sm4"
     run_dump_test "sm4-intel"
     run_list_test "pbndkb-inval"
+    run_list_test "user_msr-inval"
+    run_list_test "apx-push2pop2-inval"
     run_list_test "sg"
     run_dump_test "clzero"
     run_dump_test "invlpgb"
@@ -597,6 +603,7 @@ if [gas_32_check] then {
     run_list_test "inval-pseudo" "-al"
     run_dump_test "nop-1"
     run_dump_test "nop-1-suffix"
+    run_list_test "nop-1" "-aln"
     run_dump_test "nop-2"
     run_dump_test "optimize-1"
     run_dump_test "optimize-1a"
@@ -608,6 +615,7 @@ if [gas_32_check] then {
     run_list_test "optimize-6a" "-I${srcdir}/$subdir -march=+noavx -al"
     run_dump_test "optimize-6b"
     run_list_test "optimize-7" "-I${srcdir}/$subdir -march=+noavx2 -al"
+    run_dump_test "noopt"
     run_dump_test "lea-optimize"
     run_dump_test "lea16-optimize"
     run_dump_test "lea16-optimize2"
@@ -639,6 +647,17 @@ if [gas_32_check] then {
     run_dump_test "lfence-ret-c"
     run_dump_test "lfence-ret-d"
     run_dump_test "lfence-byte"
+    # This test uses the .section directive, which only ELF and COFF/PE support.
+    if {[is_elf_format]
+	|| [istarget "*-*-vxworks*"]
+	|| [istarget "*-*-coff*"]
+	|| [istarget "*-*-pe*"]
+	|| [istarget "*-*-cygwin*"]
+	|| [istarget "*-*-mingw*"]
+    } then {
+	run_dump_test "lfence-section"
+    }
+
     run_dump_test "branch"
 
     # These tests require support for 8 and 16 bit relocs,
@@ -730,6 +749,8 @@ if [gas_32_check] then {
 	run_dump_test "nop-5"
 	run_dump_test "nop-6"
 	run_dump_test "unique"
+
+	run_dump_test "lfence-subsect"
 
 	run_dump_test "property-1"
 

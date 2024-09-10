@@ -1,5 +1,5 @@
 /* CTF linking.
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2024 Free Software Foundation, Inc.
 
    This file is part of libctf.
 
@@ -243,8 +243,7 @@ ctf_link_lazy_open (ctf_dict_t *fp, ctf_link_input_t *input)
 #else
   ctf_err_warn (fp, 0, ECTF_NEEDSBFD, _("cannot open %s lazily"),
 		input->clin_filename);
-  ctf_set_errno (fp, ECTF_NEEDSBFD);
-  return -1;
+  return ctf_set_errno (fp, ECTF_NEEDSBFD);
 #endif
 
   /* Having no CTF sections is not an error.  We just don't need to do
@@ -257,8 +256,7 @@ ctf_link_lazy_open (ctf_dict_t *fp, ctf_link_input_t *input)
 
       ctf_err_warn (fp, 0, err, _("opening CTF %s failed"),
 		    input->clin_filename);
-      ctf_set_errno (fp, err);
-      return -1;
+      return ctf_set_errno (fp, err);
     }
 
   if ((count = ctf_archive_count (input->clin_arc)) == 0)
@@ -332,9 +330,9 @@ ctf_create_per_cu (ctf_dict_t *fp, ctf_dict_t *input, const char *cu_name)
 
       if ((cu_fp = ctf_create (&err)) == NULL)
 	{
-	  ctf_err_warn (fp, 0, err, _("cannot create per-CU CTF archive for "
-				      "input CU %s"), cu_name);
 	  ctf_set_errno (fp, err);
+	  ctf_err_warn (fp, 0, 0, _("cannot create per-CU CTF archive for "
+				    "input CU %s"), cu_name);
 	  return NULL;
 	}
 
@@ -363,7 +361,8 @@ ctf_create_per_cu (ctf_dict_t *fp, ctf_dict_t *input, const char *cu_name)
 
 /* Add a mapping directing that the CU named FROM should have its
    conflicting/non-duplicate types (depending on link mode) go into a dict
-   named TO.  Many FROMs can share a TO.
+   named TO.  Many FROMs can share a TO, but adding the same FROM with
+   a different TO will replace the old mapping.
 
    We forcibly add a dict named TO in every case, even though it may well
    wind up empty, because clients that use this facility usually expect to find
@@ -373,7 +372,7 @@ int
 ctf_link_add_cu_mapping (ctf_dict_t *fp, const char *from, const char *to)
 {
   int err;
-  char *f = NULL, *t = NULL;
+  char *f = NULL, *t = NULL, *existing;
   ctf_dynhash_t *one_out;
 
   /* Mappings cannot be set up if per-CU output dicts already exist.  */
@@ -394,6 +393,19 @@ ctf_link_add_cu_mapping (ctf_dict_t *fp, const char *from, const char *to)
 						      ctf_dynhash_destroy);
   if (fp->ctf_link_out_cu_mapping == NULL)
     goto oom;
+
+  /* If this FROM already exists, remove the mapping from both the FROM->TO
+     and the TO->FROM lists: the user wants to change it.  */
+
+  if ((existing = ctf_dynhash_lookup (fp->ctf_link_in_cu_mapping, from)) != NULL)
+    {
+      one_out = ctf_dynhash_lookup (fp->ctf_link_out_cu_mapping, existing);
+      if (!ctf_assert (fp, one_out))
+	return -1;				/* errno is set for us.  */
+
+      ctf_dynhash_remove (one_out, from);
+      ctf_dynhash_remove (fp->ctf_link_in_cu_mapping, from);
+    }
 
   f = strdup (from);
   t = strdup (to);
@@ -680,8 +692,7 @@ ctf_link_deduplicating_count_inputs (ctf_dict_t *fp, ctf_dynhash_t *cu_names,
     {
       ctf_err_warn (fp, 0, err, _("iteration error counting deduplicating "
 				  "CTF link inputs"));
-      ctf_set_errno (fp, err);
-      return -1;
+      return ctf_set_errno (fp, err);
     }
 
   if (!count)
@@ -751,7 +762,7 @@ ctf_link_deduplicating_open_inputs (ctf_dict_t *fp, ctf_dynhash_t *cu_names,
       ctf_link_input_t *one_input;
       ctf_dict_t *one_fp;
       ctf_dict_t *parent_fp = NULL;
-      uint32_t parent_i;
+      uint32_t parent_i = 0;
       ctf_next_t *j = NULL;
 
       /* If we are processing CU names, get the real input.  All the inputs
@@ -875,9 +886,9 @@ ctf_link_deduplicating_close_inputs (ctf_dict_t *fp, ctf_dynhash_t *cu_names,
 	}
       if (err != ECTF_NEXT_END)
 	{
-	  ctf_err_warn (fp, 0, err, _("iteration error in deduplicating link "
-				      "input freeing"));
 	  ctf_set_errno (fp, err);
+	  ctf_err_warn (fp, 0, 0, _("iteration error in deduplicating link "
+				    "input freeing"));
 	}
     }
   else
@@ -1076,8 +1087,8 @@ ctf_link_deduplicating_one_symtypetab (ctf_dict_t *fp, ctf_dict_t *input,
   if (ctf_errno (input) != ECTF_NEXT_END)
     {
       ctf_set_errno (fp, ctf_errno (input));
-      ctf_err_warn (fp, 0, ctf_errno (input),
-		    functions ? _("iterating over function symbols") :
+      ctf_err_warn (fp, 0, 0, functions ?
+		    _("iterating over function symbols") :
 		    _("iterating over data symbols"));
       return -1;
     }
@@ -1145,9 +1156,9 @@ ctf_link_deduplicating_per_cu (ctf_dict_t *fp)
 
       if (labs ((long int) ninputs) > 0xfffffffe)
 	{
-	  ctf_err_warn (fp, 0, EFBIG, _("too many inputs in deduplicating "
-					"link: %li"), (long int) ninputs);
 	  ctf_set_errno (fp, EFBIG);
+	  ctf_err_warn (fp, 0, 0, _("too many inputs in deduplicating "
+				    "link: %li"), (long int) ninputs);
 	  goto err_open_inputs;
 	}
 
@@ -1169,10 +1180,10 @@ ctf_link_deduplicating_per_cu (ctf_dict_t *fp)
 						  &ai, NULL, 0, &err);
 	  if (!only_input->clin_fp)
 	    {
-	      ctf_err_warn (fp, 0, err, _("cannot open archive %s in "
-					  "CU-mapped CTF link"),
-			    only_input->clin_filename);
 	      ctf_set_errno (fp, err);
+	      ctf_err_warn (fp, 0, 0, _("cannot open archive %s in "
+					"CU-mapped CTF link"),
+			    only_input->clin_filename);
 	      goto err_open_inputs;
 	    }
 	  ctf_next_destroy (ai);
@@ -1355,8 +1366,7 @@ ctf_link_empty_outputs (ctf_dict_t *fp)
     {
       fp->ctf_flags &= ~LCTF_LINKING;
       ctf_err_warn (fp, 1, err, _("iteration error removing old outputs"));
-      ctf_set_errno (fp, err);
-      return -1;
+      return ctf_set_errno (fp, err);
     }
   return 0;
 }
@@ -1536,8 +1546,7 @@ ctf_link (ctf_dict_t *fp, int flags)
 	{
 	  fp->ctf_flags &= ~LCTF_LINKING;
 	  ctf_err_warn (fp, 1, err, _("iteration error creating empty CUs"));
-	  ctf_set_errno (fp, err);
-	  return -1;
+	  return ctf_set_errno (fp, err);
 	}
     }
 
@@ -1559,13 +1568,14 @@ ctf_link_intern_extern_string (void *key _libctf_unused_, void *value,
   ctf_dict_t *fp = (ctf_dict_t *) value;
   ctf_link_out_string_cb_arg_t *arg = (ctf_link_out_string_cb_arg_t *) arg_;
 
-  fp->ctf_flags |= LCTF_DIRTY;
   if (!ctf_str_add_external (fp, arg->str, arg->offset))
     arg->err = ENOMEM;
 }
 
 /* Repeatedly call ADD_STRING to acquire strings from the external string table,
    adding them to the atoms table for this CU and all subsidiary CUs.
+
+   Must be called on a dict that has not yet been serialized.
 
    If ctf_link is also called, it must be called first if you want the new CTF
    files ctf_link can create to get their strings dedupped against the ELF
@@ -1578,11 +1588,13 @@ ctf_link_add_strtab (ctf_dict_t *fp, ctf_link_strtab_string_f *add_string,
   uint32_t offset;
   int err = 0;
 
+  if (fp->ctf_stypes > 0)
+    return ctf_set_errno (fp, ECTF_RDONLY);
+
   while ((str = add_string (&offset, arg)) != NULL)
     {
       ctf_link_out_string_cb_arg_t iter_arg = { str, offset, 0 };
 
-      fp->ctf_flags |= LCTF_DIRTY;
       if (!ctf_str_add_external (fp, str, offset))
 	err = ENOMEM;
 
@@ -1601,7 +1613,8 @@ ctf_link_add_strtab (ctf_dict_t *fp, ctf_link_strtab_string_f *add_string,
 /* Inform the ctf-link machinery of a new symbol in the target symbol table
    (which must be some symtab that is not usually stripped, and which
    is in agreement with ctf_bfdopen_ctfsect).  May be called either before or
-   after ctf_link_add_strtab.  */
+   after ctf_link_add_strtab.  As with that function, must be called on a dict which
+   has not yet been serialized.  */
 int
 ctf_link_add_linker_symbol (ctf_dict_t *fp, ctf_link_sym_t *sym)
 {
@@ -1615,6 +1628,9 @@ ctf_link_add_linker_symbol (ctf_dict_t *fp, ctf_link_sym_t *sym)
 
   if (ctf_errno (fp) == ENOMEM)
     return -ENOMEM;				/* errno is set for us.  */
+
+  if (fp->ctf_stypes > 0)
+    return ctf_set_errno (fp, ECTF_RDONLY);
 
   if (ctf_symtab_skippable (sym))
     return 0;
@@ -1650,6 +1666,9 @@ ctf_link_shuffle_syms (ctf_dict_t *fp)
   ctf_next_t *i = NULL;
   int err = ENOMEM;
   void *name_, *sym_;
+
+  if (fp->ctf_stypes > 0)
+    return ctf_set_errno (fp, ECTF_RDONLY);
 
   if (!fp->ctf_dynsyms)
     {

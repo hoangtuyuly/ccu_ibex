@@ -1,6 +1,6 @@
 /* Observers
 
-   Copyright (C) 2016-2023 Free Software Foundation, Inc.
+   Copyright (C) 2016-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,7 +24,7 @@
 #include "target/waitstatus.h"
 
 struct bpstat;
-struct so_list;
+struct solib;
 struct objfile;
 struct thread_info;
 struct inferior;
@@ -99,13 +99,12 @@ extern observable<inferior */* parent_inf */, inferior */* child_inf */,
 /* The shared library specified by SOLIB has been loaded.  Note that
    when gdb calls this observer, the library's symbols probably
    haven't been loaded yet.  */
-extern observable<struct so_list */* solib */> solib_loaded;
+extern observable<solib &/* solib */> solib_loaded;
 
 /* The shared library SOLIB has been unloaded from program space PSPACE.
    Note  when gdb calls this observer, the library's symbols have not
    been unloaded yet, and thus are still available.  */
-extern observable<struct program_space */* pspace */, struct so_list */* solib */>
-  solib_unloaded;
+extern observable<program_space *, const solib &/* solib */> solib_unloaded;
 
 /* The symbol file specified by OBJFILE has been loaded.  */
 extern observable<struct objfile */* objfile */> new_objfile;
@@ -124,8 +123,13 @@ extern observable<struct thread_info */* t */> new_thread;
    removing the thread from its tables without wanting to notify the
    CLI about it.  */
 extern observable<thread_info */* t */,
-		  gdb::optional<ULONGEST> /* exit_code */,
+		  std::optional<ULONGEST> /* exit_code */,
 		  bool /* silent */> thread_exit;
+
+/* The thread specified by T has been deleted, with delete_thread.
+   This is called just before the thread_info object is destroyed with
+   operator delete.  */
+extern observable<thread_info */* t */> thread_deleted;
 
 /* An explicit stop request was issued to PTID.  If PTID equals
    minus_one_ptid, the request applied to all threads.  If
@@ -153,9 +157,9 @@ extern observable<struct breakpoint */* b */> breakpoint_deleted;
    is the modified breakpoint.  */
 extern observable<struct breakpoint */* b */> breakpoint_modified;
 
-/* The current architecture has changed.  The argument NEWARCH is a
-   pointer to the new architecture.  */
-extern observable<struct gdbarch */* newarch */> architecture_changed;
+/* GDB has instantiated a new architecture, NEWARCH is a pointer to the new
+   architecture.  */
+extern observable<struct gdbarch */* newarch */> new_architecture;
 
 /* The thread's ptid has changed.  The OLD_PTID parameter specifies
    the old value, and NEW_PTID specifies the new value.  */
@@ -213,7 +217,7 @@ extern observable<ptid_t /* thread */, CORE_ADDR /* address */>
     inferior_call_post;
 
 /* A register in the inferior has been modified by the gdb user.  */
-extern observable<frame_info_ptr /* frame */, int /* regnum */>
+extern observable<const frame_info_ptr &/* frame */, int /* regnum */>
     register_changed;
 
 /* The user-selected inferior, thread and/or frame has changed.  The

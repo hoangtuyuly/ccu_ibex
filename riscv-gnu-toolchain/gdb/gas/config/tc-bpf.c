@@ -1,5 +1,5 @@
 /* tc-bpf.c -- Assembler for the Linux eBPF.
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2024 Free Software Foundation, Inc.
    Contributed by Oracle, Inc.
 
    This file is part of GAS, the GNU Assembler.
@@ -56,9 +56,9 @@ struct bpf_insn
   expressionS *relaxed_exp;
 };
 
-const char comment_chars[]        = ";#";
+const char comment_chars[]        = "#";
 const char line_comment_chars[]   = "#";
-const char line_separator_chars[] = "`";
+const char line_separator_chars[] = ";`";
 const char EXP_CHARS[]            = "eE";
 const char FLT_CHARS[]            = "fFdD";
 
@@ -434,6 +434,7 @@ relaxed_branch_length (fragS *fragp, asection *sec, int update)
           && sec == S_GET_SEGMENT (fragp->fr_symbol))
         {
           offsetT val = S_GET_VALUE (fragp->fr_symbol) + fragp->fr_offset;
+          val -= fragp->fr_address + fragp->fr_fix;
 
           /* Convert to 64-bit words, minus one.  */
           val = (val - 8) / 8;
@@ -578,6 +579,7 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED,
            && sec == S_GET_SEGMENT (fragp->fr_symbol))
     {
       offsetT val = S_GET_VALUE (fragp->fr_symbol) + fragp->fr_offset;
+      val -= fragp->fr_address + fragp->fr_fix;
       /* Convert to 64-bit blocks minus one.  */
       disp_to_target = (val - 8) / 8;
       disp_is_known = 1;
@@ -626,15 +628,27 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED,
             {
               /* 16-bit disp is known and not in range.  Turn the JA
                  into a JAL with a 32-bit displacement.  */
-              char bytes[8];
+              char bytes[8] = {0};
 
               bytes[0] = ((BPF_CLASS_JMP32|BPF_CODE_JA|BPF_SRC_K) >> 56) & 0xff;
               bytes[1] = (word >> 48) & 0xff;
               bytes[2] = 0; /* disp16 high */
               bytes[3] = 0; /* disp16 lo */
-              encode_int32 ((int32_t) disp_to_target, bytes + 4);
-
               write_insn_bytes (buf, bytes);
+
+              /* Install fixup for the JAL.  */
+              reloc_howto_type *reloc_howto
+                = bfd_reloc_type_lookup (stdoutput, BFD_RELOC_BPF_DISP32);
+              if (!reloc_howto)
+                abort();
+
+              fixp = fix_new_exp (fragp, buf - (bfd_byte *) fragp->fr_literal,
+                                  bfd_get_reloc_size (reloc_howto),
+                                  &exp,
+                                  reloc_howto->pc_relative,
+                                  BFD_RELOC_BPF_DISP32);
+              fixp->fx_file = fragp->fr_file;
+              fixp->fx_line = fragp->fr_line;
             }
         }
       else
@@ -731,8 +745,23 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED,
               bytes[1] = 0;
               bytes[2] = 0;
               bytes[3] = 0;
-              encode_int32 ((int32_t) disp_to_target, bytes + 4);
+              encode_int32 ((int32_t) 0, bytes + 4);
               write_insn_bytes (buf, bytes);
+
+              /* Install fixup for the JAL.  */
+              reloc_howto_type *reloc_howto
+                = bfd_reloc_type_lookup (stdoutput, BFD_RELOC_BPF_DISP32);
+              if (!reloc_howto)
+                abort();
+
+              fixp = fix_new_exp (fragp, buf - (bfd_byte *) fragp->fr_literal,
+                                  bfd_get_reloc_size (reloc_howto),
+                                  &exp,
+                                  reloc_howto->pc_relative,
+                                  BFD_RELOC_BPF_DISP32);
+              fixp->fx_file = fragp->fr_file;
+              fixp->fx_line = fragp->fr_line;
+
               buf += 8;
             }
         }
@@ -935,7 +964,7 @@ encode_insn (struct bpf_insn *insn, char *bytes,
       if (immediate_overflow (imm, 32))
         as_bad (_("immediate out of range, shall fit in 32 bits"));
       else
-        encode_int32 (insn->imm32.X_add_number, bytes + 4);        
+        encode_int32 (insn->imm32.X_add_number, bytes + 4);
     }
 
   if (insn->has_disp32 && insn->disp32.X_op == O_constant)
@@ -1223,6 +1252,7 @@ add_relaxed_insn (struct bpf_insn *insn, expressionS *exp)
    See md_operand below to see how exp_parse_failed is used.  */
 
 static int exp_parse_failed = 0;
+static bool parsing_insn_operands = false;
 
 static char *
 parse_expression (char *s, expressionS *exp)
@@ -1230,13 +1260,16 @@ parse_expression (char *s, expressionS *exp)
   char *saved_input_line_pointer = input_line_pointer;
   char *saved_s = s;
 
+  /* Wake up bpf_parse_name before the call to expression ().  */
+  parsing_insn_operands = true;
+
   exp_parse_failed = 0;
   input_line_pointer = s;
   expression (exp);
   s = input_line_pointer;
   input_line_pointer = saved_input_line_pointer;
 
-  switch (exp->X_op == O_absent || exp_parse_failed)
+  if (exp->X_op == O_absent || exp_parse_failed)
     return NULL;
 
   /* The expression parser may consume trailing whitespaces.  We have
@@ -1296,7 +1329,93 @@ parse_bpf_register (char *s, char rw, uint8_t *regno)
       s += 1;
     }
 
+  /* If we are still parsing a name, it is not a register.  */
+  if (is_part_of_name (*s))
+    return NULL;
+
   return s;
+}
+
+/* Symbols created by this parse, but not yet committed to the real
+   symbol table.  */
+static symbolS *deferred_sym_rootP;
+static symbolS *deferred_sym_lastP;
+
+/* Symbols discarded by a previous parse.  Symbols cannot easily be freed
+   after creation, so try to recycle.  */
+static symbolS *orphan_sym_rootP;
+static symbolS *orphan_sym_lastP;
+
+/* Implement md_parse_name hook.  Handles any symbol found in an expression.
+   This allows us to tentatively create symbols, before we know for sure
+   whether the parser is using the correct template for an instruction.
+   If we end up keeping the instruction, the deferred symbols are committed
+   to the real symbol table. This approach is modeled after the riscv port.  */
+
+bool
+bpf_parse_name (const char *name, expressionS *exp, enum expr_mode mode)
+{
+  symbolS *sym;
+
+  /* If we aren't currently parsing an instruction, don't do anything.
+     This prevents tampering with operands to directives.  */
+  if (!parsing_insn_operands)
+    return false;
+
+  gas_assert (mode == expr_normal);
+
+  /* Pseudo-C syntax uses unprefixed register names like r2 or w3.
+     Since many instructions take either a register or an
+     immediate/expression, we should not allow references to symbols
+     with these names in operands.  */
+  if (asm_dialect == DIALECT_PSEUDOC)
+    {
+      uint8_t regno;
+
+      if (parse_bpf_register ((char *) name, 'r', &regno)
+          || parse_bpf_register ((char *) name, 'w', &regno))
+        {
+          as_bad (_("unexpected register name `%s' in expression"),
+                  name);
+          return false;
+        }
+    }
+
+  if (symbol_find (name) != NULL)
+    return false;
+
+  for (sym = deferred_sym_rootP; sym; sym = symbol_next (sym))
+    if (strcmp (name, S_GET_NAME (sym)) == 0)
+      break;
+
+  /* Tentatively create a symbol.  */
+  if (!sym)
+    {
+      /* See if we can reuse a symbol discarded by a previous parse.
+	 This may be quite common, for example when trying multiple templates
+	 for an instruction with the first reference to a valid symbol.  */
+      for (sym = orphan_sym_rootP; sym; sym = symbol_next (sym))
+	if (strcmp (name, S_GET_NAME (sym)) == 0)
+	  {
+	    symbol_remove (sym, &orphan_sym_rootP, &orphan_sym_lastP);
+	    break;
+	  }
+
+      if (!sym)
+	  sym = symbol_create (name, undefined_section, &zero_address_frag, 0);
+
+      /* Add symbol to the deferred list.  If we commit to the isntruction,
+	 then the symbol will be inserted into to the real symbol table at
+	 that point (in md_assemble).  */
+      symbol_append (sym, deferred_sym_lastP, &deferred_sym_rootP,
+		     &deferred_sym_lastP);
+    }
+
+  exp->X_op = O_symbol;
+  exp->X_add_symbol = sym;
+  exp->X_add_number = 0;
+
+  return true;
 }
 
 /* Collect a parse error message.  */
@@ -1316,6 +1435,16 @@ parse_error (int length, const char *fmt, ...)
       errmsg = xvasprintf (fmt, args);
       va_end (args);
       partial_match_length = length;
+    }
+
+  /* Discard deferred symbols from the failed parse.  They may potentially
+     be reused in the future from the orphan list.  */
+  while (deferred_sym_rootP)
+    {
+      symbolS *sym = deferred_sym_rootP;
+      symbol_remove (sym, &deferred_sym_rootP, &deferred_sym_lastP);
+      symbol_append (sym, orphan_sym_lastP, &orphan_sym_rootP,
+		     &orphan_sym_lastP);
     }
 }
 
@@ -1354,7 +1483,7 @@ md_assemble (char *str ATTRIBUTE_UNUSED)
   partial_match_length = 0;
   errmsg = NULL;
 
-#define PARSE_ERROR(...) parse_error (s - str, __VA_ARGS__)
+#define PARSE_ERROR(...) parse_error (s > str ? s - str : 0, __VA_ARGS__)
 
   while ((opcode = bpf_get_opcode (idx++)) != NULL)
     {
@@ -1490,6 +1619,8 @@ md_assemble (char *str ATTRIBUTE_UNUSED)
               else if (strncmp (p, "%i32", 4) == 0
                        || strncmp (p, "%I32", 4) == 0)
                 {
+                  char *exp = NULL;
+
                   if (p[1] == 'I')
                     {
                       while (*s == ' ' || *s == '\t')
@@ -1501,17 +1632,20 @@ md_assemble (char *str ATTRIBUTE_UNUSED)
                         }
                     }
 
-                  s = parse_expression (s, &insn.imm32);
-                  if (s == NULL)
+                  exp = parse_expression (s, &insn.imm32);
+                  if (exp == NULL)
                     {
                       PARSE_ERROR ("expected signed 32-bit immediate");
                       break;
                     }
+                  s = exp;
                   insn.has_imm32 = 1;
                   p += 4;
                 }
               else if (strncmp (p, "%o16", 4) == 0)
                 {
+                  char *exp = NULL;
+
                   while (*s == ' ' || *s == '\t')
                     s += 1;
                   if (*s != '+' && *s != '-')
@@ -1520,46 +1654,53 @@ md_assemble (char *str ATTRIBUTE_UNUSED)
                       break;
                     }
 
-                  s = parse_expression (s, &insn.offset16);
-                  if (s == NULL)
+                  exp = parse_expression (s, &insn.offset16);
+                  if (exp == NULL)
                     {
                       PARSE_ERROR ("expected signed 16-bit offset");
                       break;
                     }
+                  s = exp;
                   insn.has_offset16 = 1;
                   p += 4;
                 }
               else if (strncmp (p, "%d16", 4) == 0)
                 {
-                  s = parse_expression (s, &insn.disp16);
-                  if (s == NULL)
+                  char *exp = parse_expression (s, &insn.disp16);
+
+                  if (exp == NULL)
                     {
                       PARSE_ERROR ("expected signed 16-bit displacement");
                       break;
                     }
+                  s = exp;
                   insn.has_disp16 = 1;
                   insn.is_relaxable = (insn.disp16.X_op != O_constant);
                   p += 4;
                 }
               else if (strncmp (p, "%d32", 4) == 0)
                 {
-                  s = parse_expression (s, &insn.disp32);
-                  if (s == NULL)
+                  char *exp = parse_expression (s, &insn.disp32);
+
+                  if (exp == NULL)
                     {
                       PARSE_ERROR ("expected signed 32-bit displacement");
                       break;
                     }
+                  s = exp;
                   insn.has_disp32 = 1;
                   p += 4;
                 }
               else if (strncmp (p, "%i64", 4) == 0)
                 {
-                  s = parse_expression (s, &insn.imm64);
-                  if (s == NULL)
+                  char *exp = parse_expression (s, &insn.imm64);
+
+                  if (exp == NULL)
                     {
                       PARSE_ERROR ("expected signed 64-bit immediate");
                       break;
                     }
+                  s = exp;
                   insn.has_imm64 = 1;
                   insn.size = 16;
                   p += 4;
@@ -1606,6 +1747,10 @@ md_assemble (char *str ATTRIBUTE_UNUSED)
         }
     }
 
+  /* Mark that we are no longer parsing an instruction, bpf_parse_name does
+     not interfere with symbols in e.g. assembler directives.  */
+  parsing_insn_operands = false;
+
   if (opcode == NULL)
     {
       as_bad (_("unrecognized instruction `%s'"), str);
@@ -1613,6 +1758,7 @@ md_assemble (char *str ATTRIBUTE_UNUSED)
         {
           as_bad ("%s", errmsg);
           free (errmsg);
+          errmsg = NULL;
         }
 
       return;
@@ -1621,6 +1767,15 @@ md_assemble (char *str ATTRIBUTE_UNUSED)
   insn.opcode = opcode->opcode;
 
 #undef PARSE_ERROR
+
+  /* Commit any symbols created while parsing the instruction.  */
+  while (deferred_sym_rootP)
+    {
+      symbolS *sym = deferred_sym_rootP;
+      symbol_remove (sym, &deferred_sym_rootP, &deferred_sym_lastP);
+      symbol_append (sym, symbol_lastP, &symbol_rootP, &symbol_lastP);
+      symbol_table_insert (sym);
+    }
 
   /* Generate the frags and fixups for the parsed instruction.  */
   if (do_relax && isa_spec >= BPF_V4 && insn.is_relaxable)
@@ -1647,10 +1802,11 @@ void
 md_operand (expressionS *expressionP)
 {
   /* If this hook is invoked it means GAS failed to parse a generic
-  expression.  We should inhibit the as_bad in expr.c, so we can fail
-  while parsing instruction alternatives.  To do that, we change the
-  expression to not have an O_absent.  But then we also need to set
-  exp_parse_failed to parse_expression above does the right thing.  */
+     expression.  We should inhibit the as_bad in expr.c, so we can
+     fail while parsing instruction alternatives.  To do that, we
+     change the expression to not have an O_absent.  But then we also
+     need to set exp_parse_failed to parse_expression above does the
+     right thing.  */
   ++input_line_pointer;
   expressionP->X_op = O_constant;
   expressionP->X_add_number = 0;

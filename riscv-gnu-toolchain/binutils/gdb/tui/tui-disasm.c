@@ -19,7 +19,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "arch-utils.h"
 #include "symtab.h"
 #include "breakpoint.h"
@@ -30,21 +29,15 @@
 #include "tui/tui.h"
 #include "tui/tui-command.h"
 #include "tui/tui-data.h"
-#include "tui/tui-win.h"
-#include "tui/tui-layout.h"
 #include "tui/tui-winsource.h"
 #include "tui/tui-status.h"
-#include "tui/tui-file.h"
 #include "tui/tui-disasm.h"
-#include "tui/tui-source.h"
 #include "progspace.h"
 #include "objfiles.h"
 #include "cli/cli-style.h"
 #include "tui/tui-location.h"
 #include "gdbsupport/selftest.h"
 #include "inferior.h"
-
-#include "gdb_curses.h"
 
 struct tui_asm_line
 {
@@ -396,10 +389,12 @@ tui_get_begin_asm_address (struct gdbarch **gdbarch_p, CORE_ADDR *addr_p)
 
   if (tui_location.addr () == 0)
     {
-      if (have_full_symbols () || have_partial_symbols ())
+      if (have_full_symbols (current_program_space)
+	  || have_partial_symbols (current_program_space))
 	{
 	  set_default_source_symtab_and_line ();
-	  struct symtab_and_line sal = get_current_source_symtab_and_line ();
+	  symtab_and_line sal
+	    = get_current_source_symtab_and_line (current_program_space);
 
 	  if (sal.symtab != nullptr)
 	    find_line_pc (sal.symtab, sal.line, &addr);
@@ -434,12 +429,12 @@ tui_get_low_disassembly_address (struct gdbarch *gdbarch,
 
   /* Determine where to start the disassembly so that the pc is about
      in the middle of the viewport.  */
-  if (TUI_DISASM_WIN != NULL)
-    pos = TUI_DISASM_WIN->height;
-  else if (TUI_CMD_WIN == NULL)
+  if (tui_disasm_win () != nullptr)
+    pos = tui_disasm_win ()->height;
+  else if (tui_cmd_win () == nullptr)
     pos = tui_term_height () / 2 - 2;
   else
-    pos = tui_term_height () - TUI_CMD_WIN->height - 2;
+    pos = tui_term_height () - tui_cmd_win ()->height - 2;
   pos = (pos - 2) / 2;
 
   pc = tui_find_disassembly_address (gdbarch, pc, -pos);
@@ -490,7 +485,7 @@ tui_disasm_window::addr_is_displayed (CORE_ADDR addr) const
 }
 
 void
-tui_disasm_window::maybe_update (frame_info_ptr fi, symtab_and_line sal)
+tui_disasm_window::maybe_update (const frame_info_ptr &fi, symtab_and_line sal)
 {
   CORE_ADDR low;
 

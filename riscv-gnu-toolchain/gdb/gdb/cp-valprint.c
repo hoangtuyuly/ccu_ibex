@@ -1,6 +1,6 @@
 /* Support for printing C++ values for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,14 +17,15 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "event-top.h"
+#include "extract-store-integer.h"
 #include "gdbsupport/gdb_obstack.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "expression.h"
 #include "value.h"
 #include "command.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "demangle.h"
 #include "annotate.h"
 #include "c-lang.h"
@@ -265,7 +266,7 @@ cp_print_value_fields (struct value *val, struct ui_file *stream,
 
 	      /* Bitfields require special handling, especially due to
 		 byte order problems.  */
-	      if (TYPE_FIELD_IGNORE (type, i))
+	      if (type->field (i).is_ignored ())
 		{
 		  fputs_styled ("<optimized out or zero length>",
 				metadata_style.style (), stream);
@@ -290,7 +291,7 @@ cp_print_value_fields (struct value *val, struct ui_file *stream,
 	    }
 	  else
 	    {
-	      if (TYPE_FIELD_IGNORE (type, i))
+	      if (type->field (i).is_ignored ())
 		{
 		  fputs_styled ("<optimized out or zero length>",
 				metadata_style.style (), stream);

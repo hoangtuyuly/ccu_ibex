@@ -1,6 +1,6 @@
 /* Partial symbol tables.
 
-   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+   Copyright (C) 2009-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,14 +17,13 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "event-top.h"
 #include "symtab.h"
 #include "objfiles.h"
 #include "psymtab.h"
 #include "block.h"
 #include "filenames.h"
 #include "source.h"
-#include "addrmap.h"
 #include "gdbtypes.h"
 #include "ui-out.h"
 #include "command.h"
@@ -33,7 +32,7 @@
 #include "dictionary.h"
 #include "language.h"
 #include "cp-support.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include <algorithm>
 #include <set>
 #include "gdbsupport/buildargv.h"
@@ -42,7 +41,7 @@ static struct partial_symbol *lookup_partial_symbol (struct objfile *,
 						     struct partial_symtab *,
 						     const lookup_name_info &,
 						     int,
-						     domain_enum);
+						     domain_search_flags);
 
 static const char *psymtab_to_fullname (struct partial_symtab *ps);
 
@@ -81,7 +80,6 @@ psymtab_storage::install_psymtab (partial_symtab *pst)
 psymtab_storage::partial_symtab_range
 psymbol_functions::partial_symbols (struct objfile *objfile)
 {
-  gdb_assert ((objfile->flags & OBJF_PSYMTABS_READ) != 0);
   return m_partial_symtabs->range ();
 }
 
@@ -280,7 +278,7 @@ find_pc_sect_psymbol (struct objfile *objfile,
 enum language
 psymbol_functions::lookup_global_symbol_language (struct objfile *objfile,
 						  const char *name,
-						  domain_enum domain,
+						  domain_search_flags domain,
 						  bool *symbol_found_p)
 {
   *symbol_found_p = false;
@@ -318,90 +316,6 @@ psymbol_name_matches (partial_symbol *psym,
   return name_match (psym->ginfo.search_name (), lookup_name, NULL);
 }
 
-/* Look in PST for a symbol in DOMAIN whose name matches NAME.  Search
-   the global block of PST if GLOBAL, and otherwise the static block.
-   MATCH is the comparison operation that returns true iff MATCH (s,
-   NAME), where s is a SYMBOL_SEARCH_NAME.  If ORDERED_COMPARE is
-   non-null, the symbols in the block are assumed to be ordered
-   according to it (allowing binary search).  It must be compatible
-   with MATCH.  Returns the symbol, if found, and otherwise NULL.  */
-
-static struct partial_symbol *
-match_partial_symbol (struct objfile *objfile,
-		      struct partial_symtab *pst, int global,
-		      const lookup_name_info &name, domain_enum domain,
-		      symbol_compare_ftype *ordered_compare)
-{
-  struct partial_symbol **start, **psym;
-  struct partial_symbol **top, **real_top, **bottom, **center;
-  int length = (global
-		? pst->global_psymbols.size ()
-		: pst->static_psymbols.size ());
-  int do_linear_search = 1;
-
-  if (length == 0)
-    return NULL;
-
-  start = (global ?
-	   &pst->global_psymbols[0] :
-	   &pst->static_psymbols[0]);
-
-  if (global && ordered_compare)  /* Can use a binary search.  */
-    {
-      do_linear_search = 0;
-
-      /* Binary search.  This search is guaranteed to end with center
-	 pointing at the earliest partial symbol whose name might be
-	 correct.  At that point *all* partial symbols with an
-	 appropriate name will be checked against the correct
-	 domain.  */
-
-      bottom = start;
-      top = start + length - 1;
-      real_top = top;
-      while (top > bottom)
-	{
-	  center = bottom + (top - bottom) / 2;
-	  gdb_assert (center < top);
-
-	  enum language lang = (*center)->ginfo.language ();
-	  const char *lang_ln = name.language_lookup_name (lang);
-
-	  if (ordered_compare ((*center)->ginfo.search_name (),
-			       lang_ln) >= 0)
-	    top = center;
-	  else
-	    bottom = center + 1;
-	}
-      gdb_assert (top == bottom);
-
-      while (top <= real_top
-	     && psymbol_name_matches (*top, name))
-	{
-	  if (symbol_matches_domain ((*top)->ginfo.language (),
-				     (*top)->domain, domain))
-	    return *top;
-	  top++;
-	}
-    }
-
-  /* Can't use a binary search or else we found during the binary search that
-     we should also do a linear search.  */
-
-  if (do_linear_search)
-    {
-      for (psym = start; psym < start + length; psym++)
-	{
-	  if (symbol_matches_domain ((*psym)->ginfo.language (),
-				     (*psym)->domain, domain)
-	      && psymbol_name_matches (*psym, name))
-	    return *psym;
-	}
-    }
-
-  return NULL;
-}
-
 /* Look, in partial_symtab PST, for symbol whose natural name is
    LOOKUP_NAME.  Check the global symbols if GLOBAL, the static
    symbols if not.  */
@@ -410,7 +324,7 @@ static struct partial_symbol *
 lookup_partial_symbol (struct objfile *objfile,
 		       struct partial_symtab *pst,
 		       const lookup_name_info &lookup_name,
-		       int global, domain_enum domain)
+		       int global, domain_search_flags domain)
 {
   struct partial_symbol **start, **psym;
   struct partial_symbol **top, **real_top, **bottom, **center;
@@ -470,8 +384,7 @@ lookup_partial_symbol (struct objfile *objfile,
       while (top <= real_top && symbol_matches_search_name (&(*top)->ginfo,
 							    lookup_name))
 	{
-	  if (symbol_matches_domain ((*top)->ginfo.language (),
-				     (*top)->domain, domain))
+	  if (search_flags_matches (domain, (*top)->domain))
 	    return *top;
 	  top++;
 	}
@@ -484,8 +397,7 @@ lookup_partial_symbol (struct objfile *objfile,
     {
       for (psym = start; psym < start + length; psym++)
 	{
-	  if (symbol_matches_domain ((*psym)->ginfo.language (),
-				     (*psym)->domain, domain)
+	  if (search_flags_matches (domain, (*psym)->domain)
 	      && symbol_matches_search_name (&(*psym)->ginfo, lookup_name))
 	    return *psym;
 	}
@@ -877,26 +789,6 @@ psymtab_to_fullname (struct partial_symtab *ps)
   return ps->fullname;
 }
 
-/* Psymtab version of expand_matching_symbols.  See its definition in
-   the definition of quick_symbol_functions in symfile.h.  */
-
-void
-psymbol_functions::expand_matching_symbols
-  (struct objfile *objfile,
-   const lookup_name_info &name, domain_enum domain,
-   int global,
-   symbol_compare_ftype *ordered_compare)
-{
-  for (partial_symtab *ps : partial_symbols (objfile))
-    {
-      QUIT;
-      if (!ps->readin_p (objfile)
-	  && match_partial_symbol (objfile, ps, global, name, domain,
-				   ordered_compare))
-	psymtab_to_symtab (objfile, ps);
-    }
-}
-
 /* A helper for psym_expand_symtabs_matching that handles searching
    included psymtabs.  This returns true if a symbol is found, and
    false otherwise.  It also updates the 'searched_flag' on the
@@ -907,8 +799,7 @@ recursively_search_psymtabs
   (struct partial_symtab *ps,
    struct objfile *objfile,
    block_search_flags search_flags,
-   domain_enum domain,
-   enum search_domain search,
+   domain_search_flags domain,
    const lookup_name_info &lookup_name,
    gdb::function_view<expand_symtabs_symbol_matcher_ftype> sym_matcher)
 {
@@ -930,7 +821,7 @@ recursively_search_psymtabs
 	continue;
 
       r = recursively_search_psymtabs (ps->dependencies[i],
-				       objfile, search_flags, domain, search,
+				       objfile, search_flags, domain,
 				       lookup_name, sym_matcher);
       if (r != 0)
 	{
@@ -978,19 +869,7 @@ recursively_search_psymtabs
 	{
 	  QUIT;
 
-	  if ((domain == UNDEF_DOMAIN
-	       || symbol_matches_domain ((*psym)->ginfo.language (),
-					 (*psym)->domain, domain))
-	      && (search == ALL_DOMAIN
-		  || (search == MODULES_DOMAIN
-		      && (*psym)->domain == MODULE_DOMAIN)
-		  || (search == VARIABLES_DOMAIN
-		      && (*psym)->aclass != LOC_TYPEDEF
-		      && (*psym)->aclass != LOC_BLOCK)
-		  || (search == FUNCTIONS_DOMAIN
-		      && (*psym)->aclass == LOC_BLOCK)
-		  || (search == TYPES_DOMAIN
-		      && (*psym)->aclass == LOC_TYPEDEF))
+	  if (search_flags_matches (domain, (*psym)->domain)
 	      && psymbol_name_matches (*psym, lookup_name)
 	      && (sym_matcher == NULL
 		  || sym_matcher ((*psym)->ginfo.search_name ())))
@@ -1018,14 +897,13 @@ psymbol_functions::expand_symtabs_matching
    gdb::function_view<expand_symtabs_symbol_matcher_ftype> symbol_matcher,
    gdb::function_view<expand_symtabs_exp_notify_ftype> expansion_notify,
    block_search_flags search_flags,
-   domain_enum domain,
-   enum search_domain search)
+   domain_search_flags domain)
 {
   /* Clear the search flags.  */
   for (partial_symtab *ps : partial_symbols (objfile))
     ps->searched_flag = PST_NOT_SEARCHED;
 
-  gdb::optional<lookup_name_info> psym_lookup_name;
+  std::optional<lookup_name_info> psym_lookup_name;
   if (lookup_name != nullptr)
     psym_lookup_name = lookup_name->make_ignore_params ();
 
@@ -1061,8 +939,7 @@ psymbol_functions::expand_symtabs_matching
 
       if (lookup_name == nullptr
 	  || recursively_search_psymtabs (ps, objfile, search_flags,
-					  domain, search,
-					  *psym_lookup_name,
+					  domain, *psym_lookup_name,
 					  symbol_matcher))
 	{
 	  compunit_symtab *cust = psymtab_to_symtab (objfile, ps);
@@ -1208,7 +1085,7 @@ partial_symtab::add_psymbol (const partial_symbol &psymbol,
 /* See psymtab.h.  */
 
 void
-partial_symtab::add_psymbol (gdb::string_view name, bool copy_name,
+partial_symtab::add_psymbol (std::string_view name, bool copy_name,
 			     domain_enum domain,
 			     enum address_class theclass,
 			     short section,
@@ -1627,9 +1504,10 @@ maintenance_check_psymtabs (const char *ignore, int from_tty)
 		      && psym->ginfo.value_address () == 0)
 		    continue;
 
-		  sym = block_lookup_symbol (b, psym->ginfo.search_name (),
-					     symbol_name_match_type::SEARCH_NAME,
-					     psym->domain);
+		  lookup_name_info lookup_name
+		    (psym->ginfo.search_name (), symbol_name_match_type::SEARCH_NAME);
+		  sym = block_lookup_symbol (b, lookup_name,
+					     to_search_flags (psym->domain));
 		  if (!sym)
 		    {
 		      gdb_printf ("Static symbol `");
@@ -1642,9 +1520,10 @@ maintenance_check_psymtabs (const char *ignore, int from_tty)
 	      b = bv->global_block ();
 	      for (partial_symbol *psym : ps->global_psymbols)
 		{
-		  sym = block_lookup_symbol (b, psym->ginfo.search_name (),
-					     symbol_name_match_type::SEARCH_NAME,
-					     psym->domain);
+		  lookup_name_info lookup_name
+		    (psym->ginfo.search_name (), symbol_name_match_type::SEARCH_NAME);
+		  sym = block_lookup_symbol (b, lookup_name,
+					     to_search_flags (psym->domain));
 		  if (!sym)
 		    {
 		      gdb_printf ("Global symbol `");

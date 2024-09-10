@@ -1,6 +1,6 @@
 /* Evaluate expressions for GDB.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "value.h"
@@ -102,7 +101,7 @@ expression::uses_objfile (struct objfile *objfile) const
 struct value *
 expression::evaluate (struct type *expect_type, enum noside noside)
 {
-  gdb::optional<enable_thread_stack_temporaries> stack_temporaries;
+  std::optional<enable_thread_stack_temporaries> stack_temporaries;
   if (target_has_execution () && inferior_ptid != null_ptid
       && language_defn->la_language == language_cplus
       && !thread_stack_temporaries_enabled_p (inferior_thread ()))
@@ -172,7 +171,7 @@ fetch_subexp_value (struct expression *exp,
 	case MEMORY_ERROR:
 	  if (!preserve_errors)
 	    break;
-	  /* Fall through.  */
+	  [[fallthrough]];
 	default:
 	  throw;
 	  break;
@@ -730,7 +729,7 @@ scope_operation::evaluate_funcall (struct type *expect_type,
       function = cp_lookup_symbol_namespace (type->name (),
 					     name.c_str (),
 					     get_selected_block (0),
-					     VAR_DOMAIN).symbol;
+					     SEARCH_FUNCTION_DOMAIN).symbol;
       if (function == NULL)
 	error (_("No symbol \"%s\" in namespace \"%s\"."),
 	       name.c_str (), type->name ());
@@ -1070,13 +1069,14 @@ eval_op_var_entry_value (struct type *expect_type, struct expression *exp,
   if (noside == EVAL_AVOID_SIDE_EFFECTS)
     return value::zero (sym->type (), not_lval);
 
-  if (SYMBOL_COMPUTED_OPS (sym) == NULL
-      || SYMBOL_COMPUTED_OPS (sym)->read_variable_at_entry == NULL)
+  const symbol_computed_ops *computed_ops = sym->computed_ops ();
+  if (computed_ops == nullptr
+      || computed_ops->read_variable_at_entry == nullptr)
     error (_("Symbol \"%s\" does not have any specific entry value"),
 	   sym->print_name ());
 
   frame_info_ptr frame = get_selected_frame (NULL);
-  return SYMBOL_COMPUTED_OPS (sym)->read_variable_at_entry (sym, frame);
+  return computed_ops->read_variable_at_entry (sym, frame);
 }
 
 /* Helper function that implements the body of OP_VAR_MSYM_VALUE.  */
@@ -1105,7 +1105,8 @@ eval_op_func_static_var (struct type *expect_type, struct expression *exp,
 {
   CORE_ADDR addr = func->address ();
   const block *blk = block_for_pc (addr);
-  struct block_symbol sym = lookup_symbol (var, blk, VAR_DOMAIN, NULL);
+  struct block_symbol sym = lookup_symbol (var, blk, SEARCH_VAR_DOMAIN,
+					   nullptr);
   if (sym.symbol == NULL)
     error (_("No symbol \"%s\" in specified context."), var);
   return evaluate_var_value (noside, sym.block, sym.symbol);
@@ -1134,7 +1135,8 @@ eval_op_register (struct type *expect_type, struct expression *exp,
       && regno < gdbarch_num_cooked_regs (exp->gdbarch))
     val = value::zero (register_type (exp->gdbarch, regno), not_lval);
   else
-    val = value_of_register (regno, get_selected_frame (NULL));
+    val = value_of_register
+      (regno, get_next_frame_sentinel_okay (get_selected_frame ()));
   if (val == NULL)
     error (_("Value of register %s not available."), name);
   else
@@ -1682,7 +1684,7 @@ eval_op_ind (struct type *expect_type, struct expression *exp,
      BUILTIN_TYPE_LONGEST would seem to be a mistake.  */
   if (type->code () == TYPE_CODE_INT)
     return value_at_lazy (builtin_type (exp->gdbarch)->builtin_int,
-			  (CORE_ADDR) value_as_address (arg1));
+			  value_as_address (arg1));
   return value_ind (arg1);
 }
 
@@ -2705,6 +2707,13 @@ evaluate_subexp_for_sizeof_base (struct expression *exp, struct type *type)
   if (exp->language_defn->la_language == language_cplus
       && (TYPE_IS_REFERENCE (type)))
     type = check_typedef (type->target_type ());
+  else if (exp->language_defn->la_language == language_fortran
+	   && type->code () == TYPE_CODE_PTR)
+    {
+      /* Dereference Fortran pointer types to allow them for the Fortran
+	 sizeof intrinsic.  */
+      type = check_typedef (type->target_type ());
+    }
   return value_from_longest (size_type, (LONGEST) type->length ());
 }
 
@@ -2818,7 +2827,7 @@ var_value_operation::evaluate_for_sizeof (struct expression *exp,
 	  if (type_not_allocated (type) || type_not_associated (type))
 	    return value::zero (size_type, not_lval);
 	  else if (is_dynamic_type (type->index_type ())
-		   && type->bounds ()->high.kind () == PROP_UNDEFINED)
+		   && !type->bounds ()->high.is_available ())
 	    return value::allocate_optimized_out (size_type);
 	}
     }

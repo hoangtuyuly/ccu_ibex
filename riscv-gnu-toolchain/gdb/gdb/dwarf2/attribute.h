@@ -1,6 +1,6 @@
 /* DWARF attributes
 
-   Copyright (C) 1994-2023 Free Software Foundation, Inc.
+   Copyright (C) 1994-2024 Free Software Foundation, Inc.
 
    Adapted by Gary Funck (gary@intrepid.com), Intrepid Technology,
    Inc.  with support from Florida State University (under contract
@@ -29,7 +29,7 @@
 
 #include "dwarf2.h"
 #include "dwarf2/types.h"
-#include "gdbsupport/gdb_optional.h"
+#include <optional>
 
 /* Blocks are a bunch of untyped bytes.  */
 struct dwarf_block

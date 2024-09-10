@@ -1,6 +1,6 @@
 /* Definitions for BFD wrappers used by GDB.
 
-   Copyright (C) 2011-2023 Free Software Foundation, Inc.
+   Copyright (C) 2011-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -44,6 +44,14 @@ struct registry_accessor<bfd>
    otherwise.  */
 
 int is_target_filename (const char *name);
+
+/* An overload for strings.  */
+
+static inline int
+is_target_filename (const std::string &name)
+{
+  return is_target_filename (name.c_str ());
+}
 
 /* Returns nonzero if the filename associated with ABFD starts with
    TARGET_SYSROOT_PREFIX, zero otherwise.  */
@@ -249,5 +257,10 @@ gdb_bfd_sections (const gdb_bfd_ref_ptr &abfd)
    bfd_check_format_matches, and will be freed.  */
 
 extern std::string gdb_bfd_errmsg (bfd_error_type error_tag, char **matching);
+
+/* A wrapper for bfd_init that also handles setting up for
+   multi-threading.  */
+
+extern void gdb_bfd_init ();
 
 #endif /* GDB_BFD_H */

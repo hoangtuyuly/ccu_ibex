@@ -1,5 +1,5 @@
 /* Annotation routines for GDB.
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,7 +16,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "annotate.h"
 #include "value.h"
 #include "target.h"
@@ -29,6 +28,10 @@
 #include "objfiles.h"
 #include "source-cache.h"
 #include "ui.h"
+
+/* See annotate.h.  */
+
+int annotation_level = 0;
 
 /* Prototypes for local functions.  */
 
@@ -233,7 +236,7 @@ annotate_thread_changed (void)
 
 static void
 annotate_thread_exited (thread_info *t,
-			gdb::optional<ULONGEST> exit_code,
+			std::optional<ULONGEST> exit_code,
 			bool /* silent */)
 {
   if (annotation_level > 1)

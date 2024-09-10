@@ -1,6 +1,6 @@
 /* Objective-C language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 2002-2023 Free Software Foundation, Inc.
+   Copyright (C) 2002-2024 Free Software Foundation, Inc.
 
    Contributed by Apple Computer, Inc.
    Written by Michael Snyder.
@@ -20,7 +20,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "event-top.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "expression.h"
@@ -35,7 +35,7 @@
 #include "objfiles.h"
 #include "target.h"
 #include "gdbcore.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "frame.h"
 #include "gdbsupport/gdb_regex.h"
 #include "regcache.h"
@@ -87,7 +87,7 @@ lookup_struct_typedef (const char *name, const struct block *block, int noerr)
 {
   struct symbol *sym;
 
-  sym = lookup_symbol (name, block, STRUCT_DOMAIN, 0).symbol;
+  sym = lookup_symbol (name, block, SEARCH_STRUCT_DOMAIN, 0).symbol;
 
   if (sym == NULL)
     {
@@ -1129,7 +1129,7 @@ find_imps (const char *method, std::vector<const char *> *symbol_names)
      add the selector itself as a symbol, if it exists.  */
   if (selector_case && !symbol_names->empty ())
     {
-      struct symbol *sym = lookup_symbol (selector, NULL, VAR_DOMAIN,
+      struct symbol *sym = lookup_symbol (selector, NULL, SEARCH_VFT,
 					  0).symbol;
 
       if (sym != NULL) 

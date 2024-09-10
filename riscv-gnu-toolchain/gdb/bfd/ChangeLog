@@ -1,3 +1,67 @@
+2024-01-15  Nick Clifton  <nickc@redhat.com>
+
+	* 2.42 branch point.
+
+2023-12-05  Nick Clifton  <nickc@redhat.com>
+
+	PR 31106
+	* elfcode.h (elf_write_relocs): Do not convert a relocation
+	against a zero-value absolute symbol into a relocation without a
+	symbol if the symbol is being used for a complex relocation.
+
+2023-11-21  Nick Clifton  <nickc@redhat.com>
+
+	PR 31067
+	linker.c (_bfd_generic_link_add_one_symbol): When issuing a
+	warning message, also display a message about the warning not
+	being affected by garbage colleciton.
+
+2023-11-15  Arsen Arsenović  <arsen@aarsen.me>
+
+	* aclocal.m4: Regenerate.
+	* configure.ac (SHARED_LIBADD): Use LTLIBINTL rather than
+	LIBINTL.
+	* configure: Regenerate.
+	* po/Make-in ($(srcdir)/$(PACKAGE).pot): Output to a .pot
+	temporary file, to suppress xgettext checking charset names.
+
+2023-11-10  Simon Marchi  <simon.marchi@efficios.com>
+
+	* archures.c (bfd_mach_amdgcn_gfx1100, bfd_mach_amdgcn_gfx1101,
+	bfd_mach_amdgcn_gfx1102): New.
+	* bfd-in2.h (bfd_mach_amdgcn_gfx1100, bfd_mach_amdgcn_gfx1101,
+	bfd_mach_amdgcn_gfx1102): New.
+	* cpu-amdgcn.c (arch_info_struct): Add entries for
+	bfd_mach_amdgcn_gfx1100, bfd_mach_amdgcn_gfx1101,
+	bfd_mach_amdgcn_gfx1102.
+
+2023-11-10  Nick Clifton  <nickc@redhat.com>
+
+	* elf.c (assign_file_positions_except_relocs): Turn warnings about
+	executable segments into errors if so requested.
+	* elflink.c (bfd_elf_size_dynamic_sections): Turn warnings about
+	executable stacks into errors if so requested.
+
+2023-10-30  Nick Clifton  <nickc@redhat.com>
+
+	* bpf-reloc.def (R_BPF_64_NODLD32): Add entry.
+
+2023-10-16  Nick Clifton  <nickc@redhat.com>
+
+	PR 28910
+	* elf32-arm.c (elf32_arm_merge_private_bfd_data): Do not set
+	output flags if the input flags have not been set.
+
+2023-10-09  Nick Clifton  <nickc@redhat.com>
+
+	PR 30950
+	* elf32-i386.c (elf_i386_convert_load_reloc): Check for
+	elf_x86_hash_table returning a NULL pointer.
+
+	PR 30949
+	* elflink.c (elf_gc_mark_debug_section): Check for
+	bfd_section_from_elf_index returning a NULL pointer.
+
 2023-10-06  Nick Clifton  <nickc@redhat.com>
 
 	PR 30940
@@ -2896,7 +2960,7 @@
 
 For older changes see ChangeLog-2020
 
-Copyright (C) 2021-2023 Free Software Foundation, Inc.
+Copyright (C) 2021-2024 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

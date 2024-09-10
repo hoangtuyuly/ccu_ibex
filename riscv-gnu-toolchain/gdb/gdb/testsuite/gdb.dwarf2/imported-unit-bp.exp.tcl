@@ -1,4 +1,4 @@
-# Copyright 2020-2023 Free Software Foundation, Inc.
+# Copyright 2020-2024 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -96,6 +96,7 @@ Dwarf::assemble $asm_file {
 	    DW_LNS_advance_line 1
 	    DW_LNS_copy
 
+	    DW_LNS_advance_pc 0
 	    DW_LNS_advance_line -4
 	    DW_LNS_negate_stmt
 	    DW_LNS_copy
@@ -109,7 +110,7 @@ Dwarf::assemble $asm_file {
 	    DW_LNS_negate_stmt
 	    DW_LNS_copy
 
-	    DW_LNE_set_address line_label_7
+	    DW_LNE_set_address "$func_start + $func_len"
 	    DW_LNE_end_sequence
 	}
     }

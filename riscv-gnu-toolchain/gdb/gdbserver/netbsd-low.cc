@@ -1,4 +1,4 @@
-/* Copyright (C) 2020-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2020-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -15,7 +15,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "server.h"
 #include "target.h"
 #include "netbsd-low.h"
 #include "nat/netbsd-nat.h"
@@ -410,7 +409,7 @@ netbsd_process_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
 	case TARGET_WAITKIND_THREAD_CREATED:
 	case TARGET_WAITKIND_THREAD_EXITED:
 	  /* The core needlessly stops on these events.  */
-	  /* FALLTHROUGH */
+	  [[fallthrough]];
 	case TARGET_WAITKIND_SPURIOUS:
 	  /* Spurious events are unhandled by the gdbserver core.  */
 	  if (ptrace (PT_CONTINUE, current_process ()->pid, (void *) 1, 0)

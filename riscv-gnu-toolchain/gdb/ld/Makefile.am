@@ -1,6 +1,6 @@
 ## Process this file with automake to generate Makefile.in
 #
-#   Copyright (C) 2012-2023 Free Software Foundation, Inc.
+#   Copyright (C) 2012-2024 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -198,8 +198,10 @@ ALL_EMULATION_SOURCES = \
 	eavrtiny.c   \
 	eavrxmega1.c \
 	eavrxmega2.c \
+	eavrxmega2_flmap.c \
 	eavrxmega3.c \
 	eavrxmega4.c \
+	eavrxmega4_flmap.c \
 	eavrxmega5.c \
 	eavrxmega6.c \
 	eavrxmega7.c \

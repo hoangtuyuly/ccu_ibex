@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2023 Free Software Foundation, Inc.
+# Copyright (C) 2012-2024 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -468,6 +468,11 @@ setup_xfail "tic30-*-*"
 run_list_test cond-2 "-al"
 setup_xfail "tic30-*-*"
 run_list_test linefile ""
+
+# Again, .byte does not emit 8 bits on either tic4x or tic54x.
+if { ![istarget "tic4x*-*-*"] && ![istarget "tic54x*-*-*"] } {
+    run_list_test const-1 "-alm"
+}
 
 run_list_test macro "-alm"
 

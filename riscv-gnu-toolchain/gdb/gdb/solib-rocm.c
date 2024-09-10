@@ -1,6 +1,6 @@
 /* Handle ROCm Code Objects for GDB, the GNU Debugger.
 
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,13 +17,13 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 
 #include "amd-dbgapi-target.h"
 #include "amdgpu-tdep.h"
 #include "arch-utils.h"
 #include "elf-bfd.h"
 #include "elf/amdgpu.h"
+#include "event-top.h"
 #include "gdbsupport/fileio.h"
 #include "inferior.h"
 #include "observable.h"
@@ -126,14 +126,26 @@ rocm_solib_fd_cache::close (int fd, fileio_error *target_errno)
 
 /* ROCm-specific inferior data.  */
 
+struct rocm_so
+{
+  rocm_so (const char *name, std::string unique_name, lm_info_svr4_up lm_info)
+    : name (name),
+      unique_name (std::move (unique_name)),
+      lm_info (std::move (lm_info))
+  {}
+
+  std::string name, unique_name;
+  lm_info_svr4_up lm_info;
+};
+
 struct solib_info
 {
   explicit solib_info (inferior *inf)
-    : solib_list (nullptr), fd_cache (inf)
+    : fd_cache (inf)
   {};
 
   /* List of code objects loaded into the inferior.  */
-  so_list *solib_list;
+  std::vector<rocm_so> solib_list;
 
   /* Cache of opened FD in the inferior.  */
   rocm_solib_fd_cache fd_cache;
@@ -142,24 +154,7 @@ struct solib_info
 /* Per-inferior data key.  */
 static const registry<inferior>::key<solib_info> rocm_solib_data;
 
-static target_so_ops rocm_solib_ops;
-
-/* Free the solib linked list.  */
-
-static void
-rocm_free_solib_list (struct solib_info *info)
-{
-  while (info->solib_list != nullptr)
-    {
-      struct so_list *next = info->solib_list->next;
-
-      free_so (info->solib_list);
-      info->solib_list = next;
-    }
-
-  info->solib_list = nullptr;
-}
-
+static solib_ops rocm_solib_ops;
 
 /* Fetch the solib_info data for INF.  */
 
@@ -177,16 +172,16 @@ get_solib_info (inferior *inf)
 /* Relocate section addresses.  */
 
 static void
-rocm_solib_relocate_section_addresses (struct so_list *so,
+rocm_solib_relocate_section_addresses (solib &so,
 				       struct target_section *sec)
 {
-  if (!is_amdgpu_arch (gdbarch_from_bfd (so->abfd)))
+  if (!is_amdgpu_arch (gdbarch_from_bfd (so.abfd.get ())))
     {
       svr4_so_ops.relocate_section_addresses (so, sec);
       return;
     }
 
-  lm_info_svr4 *li = (lm_info_svr4 *) so->lm_info;
+  auto *li = gdb::checked_static_cast<lm_info_svr4 *> (so.lm_info.get ());
   sec->addr = sec->addr + li->l_addr;
   sec->endaddr = sec->endaddr + li->l_addr;
 }
@@ -207,61 +202,51 @@ rocm_solib_handle_event ()
   rocm_update_solib_list ();
 }
 
-/* Make a deep copy of the solib linked list.  */
+/* Create so_list objects from rocm_so objects in SOS.  */
 
-static so_list *
-rocm_solib_copy_list (const so_list *src)
+static intrusive_list<solib>
+so_list_from_rocm_sos (const std::vector<rocm_so> &sos)
 {
-  struct so_list *dst = nullptr;
-  struct so_list **link = &dst;
+  intrusive_list<solib> dst;
 
-  while (src != nullptr)
+  for (const rocm_so &so : sos)
     {
-      struct so_list *newobj;
+      solib *newobj = new solib;
+      newobj->lm_info = std::make_unique<lm_info_svr4> (*so.lm_info);
 
-      newobj = XNEW (struct so_list);
-      memcpy (newobj, src, sizeof (struct so_list));
+      newobj->so_name = so.name;
+      newobj->so_original_name = so.unique_name;
 
-      lm_info_svr4 *src_li = (lm_info_svr4 *) src->lm_info;
-      newobj->lm_info = new lm_info_svr4 (*src_li);
-
-      newobj->next = nullptr;
-      *link = newobj;
-      link = &newobj->next;
-
-      src = src->next;
+      dst.push_back (*newobj);
     }
 
   return dst;
 }
 
-/* Build a list of `struct so_list' objects describing the shared
+/* Build a list of `struct solib' objects describing the shared
    objects currently loaded in the inferior.  */
 
-static struct so_list *
+static intrusive_list<solib>
 rocm_solib_current_sos ()
 {
   /* First, retrieve the host-side shared library list.  */
-  so_list *head = svr4_so_ops.current_sos ();
+  intrusive_list<solib> sos = svr4_so_ops.current_sos ();
 
   /* Then, the device-side shared library list.  */
-  so_list *list = get_solib_info (current_inferior ())->solib_list;
+  std::vector<rocm_so> &dev_sos = get_solib_info (current_inferior ())->solib_list;
 
-  if (list == nullptr)
-    return head;
+  if (dev_sos.empty ())
+    return sos;
 
-  list = rocm_solib_copy_list (list);
+  intrusive_list<solib> dev_so_list = so_list_from_rocm_sos (dev_sos);
 
-  if (head == nullptr)
-    return list;
+  if (sos.empty ())
+    return dev_so_list;
 
   /* Append our libraries to the end of the list.  */
-  so_list *tail;
-  for (tail = head; tail->next; tail = tail->next)
-    /* Nothing.  */;
-  tail->next = list;
+  sos.splice (std::move (dev_so_list));
 
-  return head;
+  return sos;
 }
 
 namespace {
@@ -451,16 +436,16 @@ rocm_code_object_stream_memory::read (bfd *, void *buf, file_ptr size,
 static gdb_bfd_iovec_base *
 rocm_bfd_iovec_open (bfd *abfd, inferior *inferior)
 {
-  gdb::string_view uri (bfd_get_filename (abfd));
-  gdb::string_view protocol_delim = "://";
+  std::string_view uri (bfd_get_filename (abfd));
+  std::string_view protocol_delim = "://";
   size_t protocol_end = uri.find (protocol_delim);
-  std::string protocol = gdb::to_string (uri.substr (0, protocol_end));
+  std::string protocol (uri.substr (0, protocol_end));
   protocol_end += protocol_delim.length ();
 
   std::transform (protocol.begin (), protocol.end (), protocol.begin (),
 		  [] (unsigned char c) { return std::tolower (c); });
 
-  gdb::string_view path;
+  std::string_view path;
   size_t path_end = uri.find_first_of ("#?", protocol_end);
   if (path_end != std::string::npos)
     path = uri.substr (protocol_end, path_end++ - protocol_end);
@@ -476,15 +461,15 @@ rocm_bfd_iovec_open (bfd *abfd, inferior *inferior)
 	&& std::isxdigit (path[i + 1])
 	&& std::isxdigit (path[i + 2]))
       {
-	gdb::string_view hex_digits = path.substr (i + 1, 2);
-	decoded_path += std::stoi (gdb::to_string (hex_digits), 0, 16);
+	std::string_view hex_digits = path.substr (i + 1, 2);
+	decoded_path += std::stoi (std::string (hex_digits), 0, 16);
 	i += 2;
       }
     else
       decoded_path += path[i];
 
   /* Tokenize the query/fragment.  */
-  std::vector<gdb::string_view> tokens;
+  std::vector<std::string_view> tokens;
   size_t pos, last = path_end;
   while ((pos = uri.find ('&', last)) != std::string::npos)
     {
@@ -496,15 +481,15 @@ rocm_bfd_iovec_open (bfd *abfd, inferior *inferior)
     tokens.emplace_back (uri.substr (last));
 
   /* Create a tag-value map from the tokenized query/fragment.  */
-  std::unordered_map<gdb::string_view, gdb::string_view,
+  std::unordered_map<std::string_view, std::string_view,
 		     gdb::string_view_hash> params;
-  for (gdb::string_view token : tokens)
+  for (std::string_view token : tokens)
     {
       size_t delim = token.find ('=');
       if (delim != std::string::npos)
 	{
-	  gdb::string_view tag = token.substr (0, delim);
-	  gdb::string_view val = token.substr (delim + 1);
+	  std::string_view tag = token.substr (0, delim);
+	  std::string_view val = token.substr (delim + 1);
 	  params.emplace (tag, val);
 	}
     }
@@ -514,7 +499,7 @@ rocm_bfd_iovec_open (bfd *abfd, inferior *inferior)
       ULONGEST offset = 0;
       ULONGEST size = 0;
 
-      auto try_strtoulst = [] (gdb::string_view v)
+      auto try_strtoulst = [] (std::string_view v)
 	{
 	  errno = 0;
 	  ULONGEST value = strtoulst (v.data (), nullptr, 0);
@@ -563,7 +548,7 @@ rocm_bfd_iovec_open (bfd *abfd, inferior *inferior)
 	  if (pid != inferior->pid)
 	    {
 	      warning (_("`%s': code object is from another inferior"),
-		       gdb::to_string (uri).c_str ());
+		       std::string (uri).c_str ());
 	      bfd_set_error (bfd_error_bad_value);
 	      return nullptr;
 	    }
@@ -580,7 +565,7 @@ rocm_bfd_iovec_open (bfd *abfd, inferior *inferior)
 	}
 
       warning (_("`%s': protocol not supported: %s"),
-	       gdb::to_string (uri).c_str (), protocol.c_str ());
+	       std::string (uri).c_str (), protocol.c_str ());
       bfd_set_error (bfd_error_bad_value);
       return nullptr;
     }
@@ -689,7 +674,7 @@ rocm_solib_bfd_open (const char *pathname)
 static void
 rocm_solib_create_inferior_hook (int from_tty)
 {
-  rocm_free_solib_list (get_solib_info (current_inferior ()));
+  get_solib_info (current_inferior ())->solib_list.clear ();
 
   svr4_so_ops.solib_create_inferior_hook (from_tty);
 }
@@ -705,8 +690,8 @@ rocm_update_solib_list ()
 
   solib_info *info = get_solib_info (inf);
 
-  rocm_free_solib_list (info);
-  struct so_list **link = &info->solib_list;
+  info->solib_list.clear ();
+  std::vector<rocm_so> &sos = info->solib_list;
 
   amd_dbgapi_code_object_id_t *code_object_list;
   size_t count;
@@ -738,24 +723,18 @@ rocm_update_solib_list ()
       if (status != AMD_DBGAPI_STATUS_SUCCESS)
 	continue;
 
-      struct so_list *so = XCNEW (struct so_list);
-      lm_info_svr4 *li = new lm_info_svr4;
+      gdb::unique_xmalloc_ptr<char> uri_bytes_holder (uri_bytes);
+
+      lm_info_svr4_up li = std::make_unique<lm_info_svr4> ();
       li->l_addr = l_addr;
-      so->lm_info = li;
 
-      strncpy (so->so_name, uri_bytes, sizeof (so->so_name));
-      so->so_name[sizeof (so->so_name) - 1] = '\0';
-      xfree (uri_bytes);
-
-      /* Make so_original_name unique so that code objects with the same URI
-	 but different load addresses are seen by gdb core as different shared
+      /* Generate a unique name so that code objects with the same URI but
+	 different load addresses are seen by gdb core as different shared
 	 objects.  */
-      xsnprintf (so->so_original_name, sizeof (so->so_original_name),
-		 "code_object_%ld", code_object_list[i].handle);
+      std::string unique_name
+	= string_printf ("code_object_%ld", code_object_list[i].handle);
 
-      so->next = nullptr;
-      *link = so;
-      link = &so->next;
+      sos.emplace_back (uri_bytes, std::move (unique_name), std::move (li));
     }
 
   xfree (code_object_list);
@@ -773,14 +752,15 @@ rocm_update_solib_list ()
       rocm_solib_ops.handle_event = rocm_solib_handle_event;
 
       /* Engage the ROCm so_ops.  */
-      set_gdbarch_so_ops (current_inferior ()->gdbarch, &rocm_solib_ops);
+      set_gdbarch_so_ops (current_inferior ()->arch (), &rocm_solib_ops);
     }
 }
 
 static void
 rocm_solib_target_inferior_created (inferior *inf)
 {
-  rocm_free_solib_list (get_solib_info (inf));
+  get_solib_info (inf)->solib_list.clear ();
+
   rocm_update_solib_list ();
 
   /* Force GDB to reload the solibs.  */

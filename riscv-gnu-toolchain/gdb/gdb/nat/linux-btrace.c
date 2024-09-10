@@ -1,6 +1,6 @@
 /* Linux-dependent part of branch trace support for GDB, and GDBserver.
 
-   Copyright (C) 2013-2023 Free Software Foundation, Inc.
+   Copyright (C) 2013-2024 Free Software Foundation, Inc.
 
    Contributed by Intel Corp. <markus.t.metzger@intel.com>
 
@@ -19,7 +19,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "gdbsupport/common-defs.h"
 #include "linux-btrace.h"
 #include "gdbsupport/common-regcache.h"
 #include "gdbsupport/gdb_wait.h"
@@ -284,13 +283,12 @@ perf_event_read_bts (btrace_target_info *tinfo, const uint8_t *begin,
   struct perf_event_sample sample;
   size_t read = 0;
   struct btrace_block block = { 0, 0 };
-  struct regcache *regcache;
 
   gdb_assert (begin <= start);
   gdb_assert (start <= end);
 
   /* The first block ends at the current pc.  */
-  regcache = get_thread_regcache_for_ptid (tinfo->ptid);
+  reg_buffer_common *regcache = get_thread_regcache_for_ptid (tinfo->ptid);
   block.end = regcache_read_pc (regcache);
 
   /* The buffer may contain a partial record as its last entry (i.e. when the
@@ -423,7 +421,8 @@ cpu_supports_bts (void)
 static void
 diagnose_perf_event_open_fail ()
 {
-  switch (errno)
+  int orig_errno = errno;
+  switch (orig_errno)
     {
     case EPERM:
     case EACCES:
@@ -444,7 +443,7 @@ diagnose_perf_event_open_fail ()
       break;
     }
 
-  error (_("Failed to start recording: %s"), safe_strerror (errno));
+  error (_("Failed to start recording: %s"), safe_strerror (orig_errno));
 }
 
 /* Get the linux version of a btrace_target_info.  */
@@ -468,7 +467,7 @@ linux_enable_bts (ptid_t ptid, const struct btrace_config_bts *conf)
     error (_("BTS support has been disabled for the target cpu."));
 
   std::unique_ptr<linux_btrace_target_info> tinfo
-    { gdb::make_unique<linux_btrace_target_info> (ptid) };
+    { std::make_unique<linux_btrace_target_info> (ptid) };
 
   tinfo->conf.format = BTRACE_FORMAT_BTS;
 
@@ -617,7 +616,7 @@ linux_enable_pt (ptid_t ptid, const struct btrace_config_pt *conf)
     pid = ptid.pid ();
 
   std::unique_ptr<linux_btrace_target_info> tinfo
-    { gdb::make_unique<linux_btrace_target_info> (ptid) };
+    { std::make_unique<linux_btrace_target_info> (ptid) };
 
   tinfo->conf.format = BTRACE_FORMAT_PT;
 
@@ -895,8 +894,7 @@ linux_read_pt (btrace_data_pt *btrace, linux_btrace_target_info *tinfo,
     case BTRACE_READ_NEW:
       if (!perf_event_new_data (&tinfo->pev))
 	return BTRACE_ERR_NONE;
-
-      /* Fall through.  */
+      [[fallthrough]];
     case BTRACE_READ_ALL:
       perf_event_read_all (&tinfo->pev, &btrace->data, &btrace->size);
       return BTRACE_ERR_NONE;

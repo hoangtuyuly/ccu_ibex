@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "command.h"
 #include "inferior.h"
 #include "terminal.h"
@@ -76,6 +75,9 @@ inf_ptrace_target::create_inferior (const char *exec_file,
 				    const std::string &allargs,
 				    char **env, int from_tty)
 {
+  if (exec_file == nullptr)
+    no_executable_specified_error ();
+
   inferior *inf = current_inferior ();
 
   /* Do not change either targets above or the same target if already present.

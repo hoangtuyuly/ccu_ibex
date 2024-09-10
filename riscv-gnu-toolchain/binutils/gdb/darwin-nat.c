@@ -18,14 +18,14 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "top.h"
 #include "inferior.h"
 #include "target.h"
 #include "symfile.h"
 #include "symtab.h"
 #include "objfiles.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbcore.h"
 #include "gdbthread.h"
 #include "regcache.h"
@@ -68,6 +68,7 @@
 #include "gdbsupport/gdb_unlinker.h"
 #include "gdbsupport/pathstuff.h"
 #include "gdbsupport/scoped_fd.h"
+#include "gdbsupport/scoped_restore.h"
 #include "nat/fork-inferior.h"
 
 /* Quick overview.
@@ -1968,6 +1969,9 @@ darwin_nat_target::create_inferior (const char *exec_file,
 				    const std::string &allargs,
 				    char **env, int from_tty)
 {
+  if (exec_file == nullptr)
+    no_executable_specified_error ();
+
   std::optional<scoped_restore_tmpl<bool>> restore_startup_with_shell;
   darwin_nat_target *the_target = this;
 

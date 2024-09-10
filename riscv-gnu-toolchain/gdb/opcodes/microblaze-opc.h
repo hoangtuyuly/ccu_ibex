@@ -1,6 +1,6 @@
 /* microblaze-opc.h -- MicroBlaze Opcodes
 
-   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+   Copyright (C) 2009-2024 Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -59,6 +59,9 @@
 /* For mbar.  */
 #define INST_TYPE_IMM5 20
 
+/* For bsefi and bsifi */
+#define INST_TYPE_RD_R1_IMMW_IMMS  21
+
 #define INST_TYPE_NONE 25
 
 
@@ -89,7 +92,11 @@
 #define OPCODE_MASK_H124  0xFFFF07FF /* High 16, and low 11 bits.  */
 #define OPCODE_MASK_H1234 0xFFFFFFFF /* All 32 bits.  */
 #define OPCODE_MASK_H3    0xFC000600 /* High 6 bits and bits 21, 22.  */
+#define OPCODE_MASK_H3B   0xFC00F9E0 /* High 6 bits and bits 16:20 and
+					bits 23:26. */
 #define OPCODE_MASK_H32   0xFC00FC00 /* High 6 bits and bit 16-21.  */
+#define OPCODE_MASK_H32B  0xFC00F820 /* High 6 bits and bits 16:20 and
+					bit 26 */
 #define OPCODE_MASK_H34B  0xFC0000FF /* High 6 bits and low 8 bits.  */
 #define OPCODE_MASK_H35B  0xFC0004FF /* High 6 bits and low 9 bits.  */
 #define OPCODE_MASK_H34C  0xFC0007E0 /* High 6 bits and bits 21-26.  */
@@ -102,7 +109,7 @@
 #define DELAY_SLOT 1
 #define NO_DELAY_SLOT 0
 
-#define MAX_OPCODES 300
+#define MAX_OPCODES 291
 
 const struct op_code_struct
 {
@@ -156,9 +163,11 @@ const struct op_code_struct
   {"ncget", INST_TYPE_RD_RFSL, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x6C006000, OPCODE_MASK_H32, ncget, anyware_inst },
   {"ncput", INST_TYPE_R1_RFSL, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x6C00E000, OPCODE_MASK_H32, ncput, anyware_inst },
   {"muli",  INST_TYPE_RD_R1_IMM, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x60000000, OPCODE_MASK_H, muli, mult_inst },
-  {"bslli", INST_TYPE_RD_R1_IMM5, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x64000400, OPCODE_MASK_H3, bslli, barrel_shift_inst },
-  {"bsrai", INST_TYPE_RD_R1_IMM5, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x64000200, OPCODE_MASK_H3, bsrai, barrel_shift_inst },
-  {"bsrli", INST_TYPE_RD_R1_IMM5, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x64000000, OPCODE_MASK_H3, bsrli, barrel_shift_inst },
+  {"bslli", INST_TYPE_RD_R1_IMM5, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x64000400, OPCODE_MASK_H3B, bslli, barrel_shift_inst },
+  {"bsrai", INST_TYPE_RD_R1_IMM5, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x64000200, OPCODE_MASK_H3B, bsrai, barrel_shift_inst },
+  {"bsrli", INST_TYPE_RD_R1_IMM5, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x64000000, OPCODE_MASK_H3B, bsrli, barrel_shift_inst },
+  {"bsefi", INST_TYPE_RD_R1_IMMW_IMMS, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x64004000, OPCODE_MASK_H32B, bsefi, barrel_shift_inst },
+  {"bsifi", INST_TYPE_RD_R1_IMMW_IMMS, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x64008000, OPCODE_MASK_H32B, bsifi, barrel_shift_inst },
   {"or",    INST_TYPE_RD_R1_R2, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x80000000, OPCODE_MASK_H4, microblaze_or, logical_inst },
   {"and",   INST_TYPE_RD_R1_R2, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x84000000, OPCODE_MASK_H4, microblaze_and, logical_inst },
   {"xor",   INST_TYPE_RD_R1_R2, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x88000000, OPCODE_MASK_H4, microblaze_xor, logical_inst },
@@ -418,7 +427,7 @@ const struct op_code_struct
   {"suspend",   INST_TYPE_NONE,  INST_PC_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0xBB020004, OPCODE_MASK_HN,   invalid_inst, special_inst }, /* translates to mbar 24.  */
   {"swapb",     INST_TYPE_RD_R1, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x900001E0, OPCODE_MASK_H4,   swapb,     arithmetic_inst },
   {"swaph",     INST_TYPE_RD_R1, INST_NO_OFFSET, NO_DELAY_SLOT, IMMVAL_MASK_NON_SPECIAL, 0x900001E2, OPCODE_MASK_H4,   swaph,     arithmetic_inst },
-  {"", 0, 0, 0, 0, 0, 0, 0, 0},
+  {NULL, 0, 0, 0, 0, 0, 0, 0, 0},
 };
 
 /* Prefix for register names.  */
@@ -437,6 +446,9 @@ char pvr_register_prefix[] = "rpvr";
 
 #define MIN_IMM5  ((int) 0x00000000)
 #define MAX_IMM5  ((int) 0x0000001f)
+
+#define MIN_IMM_WIDTH  ((int) 0x00000001)
+#define MAX_IMM_WIDTH  ((int) 0x00000020)
 
 #endif /* MICROBLAZE_OPC */
 

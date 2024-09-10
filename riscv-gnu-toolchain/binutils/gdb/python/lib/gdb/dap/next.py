@@ -16,8 +16,8 @@
 import gdb
 
 from .events import exec_and_expect_stop
-from .server import capability, request
-from .startup import in_gdb_thread, send_gdb, send_gdb_with_response
+from .server import capability, request, send_gdb, send_gdb_with_response
+from .startup import in_gdb_thread
 from .state import set_thread
 
 
@@ -73,10 +73,10 @@ def step_in(
     exec_and_expect_stop(cmd)
 
 
-@request("stepOut", response=False)
+@request("stepOut", defer_stop_events=True)
 def step_out(*, threadId: int, singleThread: bool = False, **args):
     _handle_thread_step(threadId, singleThread, True)
-    exec_and_expect_stop("finish")
+    exec_and_expect_stop("finish &", propagate_exception=True)
 
 
 # This is a server-side request because it is funny: it wants to

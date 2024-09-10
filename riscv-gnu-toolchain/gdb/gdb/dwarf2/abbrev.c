@@ -1,6 +1,6 @@
 /* DWARF 2 abbreviations
 
-   Copyright (C) 1994-2023 Free Software Foundation, Inc.
+   Copyright (C) 1994-2024 Free Software Foundation, Inc.
 
    Adapted by Gary Funck (gary@intrepid.com), Intrepid Technology,
    Inc.  with support from Florida State University (under contract
@@ -24,7 +24,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "dwarf2/read.h"
 #include "dwarf2/abbrev.h"
 #include "dwarf2/leb.h"
@@ -88,6 +87,7 @@ tag_interesting_for_index (dwarf_tag tag)
     case DW_TAG_base_type:
     case DW_TAG_class_type:
     case DW_TAG_constant:
+    case DW_TAG_entry_point:
     case DW_TAG_enumeration_type:
     case DW_TAG_enumerator:
     case DW_TAG_imported_declaration:

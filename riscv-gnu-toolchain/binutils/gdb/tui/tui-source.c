@@ -19,9 +19,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include <math.h>
-#include <ctype.h>
 #include "symtab.h"
 #include "frame.h"
 #include "breakpoint.h"
@@ -29,16 +27,11 @@
 #include "objfiles.h"
 #include "filenames.h"
 #include "source-cache.h"
-
-#include "tui/tui.h"
-#include "tui/tui-data.h"
-#include "tui/tui-io.h"
 #include "tui/tui-status.h"
 #include "tui/tui-win.h"
 #include "tui/tui-winsource.h"
 #include "tui/tui-source.h"
 #include "tui/tui-location.h"
-#include "gdb_curses.h"
 
 /* Function to display source in the source window.  */
 bool
@@ -143,7 +136,8 @@ tui_source_window::do_scroll_vertical (int num_to_scroll)
   if (!m_content.empty ())
     {
       struct symtab *s;
-      struct symtab_and_line cursal = get_current_source_symtab_and_line ();
+      symtab_and_line cursal
+	= get_current_source_symtab_and_line (current_program_space);
       struct gdbarch *arch = m_gdbarch;
 
       if (cursal.symtab == NULL)
@@ -199,7 +193,7 @@ tui_source_window::line_is_displayed (int line) const
 }
 
 void
-tui_source_window::maybe_update (frame_info_ptr fi, symtab_and_line sal)
+tui_source_window::maybe_update (const frame_info_ptr &fi, symtab_and_line sal)
 {
   int start_line = (sal.line - ((height - box_size ()) / 2)) + 1;
   if (start_line <= 0)
@@ -227,7 +221,7 @@ void
 tui_source_window::display_start_addr (struct gdbarch **gdbarch_p,
 				       CORE_ADDR *addr_p)
 {
-  struct symtab_and_line cursal = get_current_source_symtab_and_line ();
+  symtab_and_line cursal = get_current_source_symtab_and_line (current_program_space);
 
   *gdbarch_p = m_gdbarch;
   find_line_pc (cursal.symtab, m_start_line_or_addr.u.line_no, addr_p);

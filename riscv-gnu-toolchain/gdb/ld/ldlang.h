@@ -1,5 +1,5 @@
 /* ldlang.h - linker command language support
-   Copyright (C) 1991-2023 Free Software Foundation, Inc.
+   Copyright (C) 1991-2024 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -141,7 +141,12 @@ typedef struct lang_output_section_phdr_list
 typedef struct lang_output_section_statement_struct
 {
   lang_statement_header_type header;
+  /* Input sections to be mapped to this output section.  */
   lang_statement_list_type children;
+  /* Input sections to be mapped to the start of this output section.
+     These sections are provided by the --section-ordering file, if used.  */
+  lang_statement_list_type sort_children;
+
   struct lang_output_section_statement_struct *next;
   struct lang_output_section_statement_struct *prev;
   const char *name;
@@ -390,18 +395,19 @@ typedef struct lang_section_bst
 
 struct lang_wild_statement_struct
 {
-  lang_statement_header_type header;
-  const char *filename;
-  bool filenames_sorted;
-  bool any_specs_sorted;
-  struct wildcard_list *section_list;
-  bool keep_sections;
-  lang_statement_list_type children;
-  struct name_list *exclude_name_list;
-  lang_statement_list_type matching_sections;
-
-  lang_section_bst_type *tree, **rightmost;
-  struct flag_info *section_flag_list;
+  lang_statement_header_type  header;
+  lang_statement_list_type    children;
+  lang_statement_list_type    matching_sections;
+  lang_section_bst_type *     tree;
+  lang_section_bst_type **    rightmost;
+  struct wildcard_list *      section_list;
+  struct name_list *          exclude_name_list;
+  struct flag_info *          section_flag_list;
+  const char *                filename;
+  bool                        filenames_sorted;
+  bool                        filenames_reversed;
+  bool                        any_specs_sorted;
+  bool                        keep_sections;
 };
 
 typedef struct lang_address_statement_struct

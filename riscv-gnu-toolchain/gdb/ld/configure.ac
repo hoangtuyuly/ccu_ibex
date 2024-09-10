@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script
 dnl
-dnl   Copyright (C) 2012-2023 Free Software Foundation, Inc.
+dnl   Copyright (C) 2012-2024 Free Software Foundation, Inc.
 dnl
 dnl This file is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -213,6 +213,16 @@ AC_ARG_ENABLE(separate-code,
   no) ac_default_ld_z_separate_code=0 ;;
 esac])
 
+# Decide if -z mark-plt should be enabled in ELF x86-64 linker by default.
+ac_default_ld_z_mark_plt=unset
+AC_ARG_ENABLE(mark-plt,
+	      AS_HELP_STRING([--enable-mark-plt],
+	      [enable -z mark-plt in ELF x86-64 linker by default]),
+[case "${enableval}" in
+  yes) ac_default_ld_z_mark_plt=1 ;;
+  no) ac_default_ld_z_mark_plt=0 ;;
+esac])
+
 
 # By default warn when an executable stack is created due to object files
 # requesting such, not when the user specifies -z execstack.
@@ -225,6 +235,15 @@ AC_ARG_ENABLE(warn-execstack,
   no)  ac_default_ld_warn_execstack=0 ;;
 esac])
 
+ac_default_ld_error_execstack=0
+AC_ARG_ENABLE(error-execstack,
+	      AS_HELP_STRING([--enable-error-execstack],
+	      [turn executable stack warnings into errors]),
+[case "${enableval}" in
+  yes) ac_default_ld_error_execstack=1 ;;
+  no)  ac_default_ld_error_execstack=0 ;;
+esac])
+
 ac_default_ld_warn_rwx_segments=unset
 AC_ARG_ENABLE(warn-rwx-segments,
 	      AS_HELP_STRING([--enable-warn-rwx-segments],
@@ -232,6 +251,15 @@ AC_ARG_ENABLE(warn-rwx-segments,
 [case "${enableval}" in
   yes) ac_default_ld_warn_rwx_segments=1 ;;
   no)  ac_default_ld_warn_rwx_segments=0 ;;
+esac])
+
+ac_default_ld_error_rwx_segments=0
+AC_ARG_ENABLE(error-rwx-segments,
+	      AS_HELP_STRING([--enable-error-rwx-segments],
+	      [turn executable segment warnings into errors]),
+[case "${enableval}" in
+  yes) ac_default_ld_error_rwx_segments=1 ;;
+  no)  ac_default_ld_error_rwx_segments=0 ;;
 esac])
 
 ac_default_ld_default_execstack=unset
@@ -373,7 +401,7 @@ BFD_BINARY_FOPEN
 
 AC_CHECK_DECLS([asprintf, environ, stpcpy])
 
-AC_FUNC_MMAP
+GCC_AC_FUNC_MMAP
 
 AC_SEARCH_LIBS([dlopen], [dl])
 
@@ -544,10 +572,21 @@ AC_DEFINE_UNQUOTED(DEFAULT_LD_Z_SEPARATE_CODE,
   $ac_default_ld_z_separate_code,
   [Define to 1 if you want to enable -z separate-code in ELF linker by default.])
 
+if test "${ac_default_ld_z_mark_plt}" = unset; then
+  ac_default_ld_z_mark_plt=0
+fi
+AC_DEFINE_UNQUOTED(DEFAULT_LD_Z_MARK_PLT,
+  $ac_default_ld_z_mark_plt,
+  [Define to 1 if you want to enable -z mark-plt in ELF x86-64 linker by default.])
+
 
 AC_DEFINE_UNQUOTED(DEFAULT_LD_WARN_EXECSTACK,
   $ac_default_ld_warn_execstack,
   [Define to 1 if you want to enable --warn-execstack in ELF linker by default.])
+
+AC_DEFINE_UNQUOTED(DEFAULT_LD_ERROR_EXECSTACK,
+  $ac_default_ld_error_execstack,
+  [Define to 1 if you want to turn executable stack warnings into errors by default.])
 
 if test "${ac_default_ld_warn_rwx_segments}" = unset; then
   ac_default_ld_warn_rwx_segments=1
@@ -555,6 +594,10 @@ fi
 AC_DEFINE_UNQUOTED(DEFAULT_LD_WARN_RWX_SEGMENTS,
   $ac_default_ld_warn_rwx_segments,
   [Define to 0 if you want to disable --warn-rwx-segments in ELF linker by default.])
+
+AC_DEFINE_UNQUOTED(DEFAULT_LD_ERROR_RWX_SEGMENTS,
+  $ac_default_ld_error_rwx_segments,
+  [Define to 1 if you want to turn executable segment warnings into errors by default.])
 
 if test "${ac_default_ld_default_execstack}" = unset; then
   ac_default_ld_default_execstack=1

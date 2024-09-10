@@ -1,6 +1,6 @@
 /* Read a symbol table in ECOFF format (Third-Eye).
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    Original version contributed by Alessandro Forin (af@cs.cmu.edu) at
    CMU.  Major work by Per Bothner, John Gilmore and Ian Lance Taylor
@@ -39,7 +39,6 @@
    This module can read all four of the known byte-order combinations,
    on any type of host.  */
 
-#include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "gdbcore.h"
@@ -711,7 +710,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 
     case stLabel:		/* label, goes into current block.  */
       s = new_symbol (name);
-      s->set_domain (VAR_DOMAIN);	/* So that it can be used */
+      s->set_domain (LABEL_DOMAIN);	/* So that it can be used */
       s->set_aclass_index (LOC_LABEL);	/* but not misused.  */
       s->set_section_index (section_index);
       s->set_value_address (sh->value);
@@ -753,7 +752,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	  break;
 	}
       s = new_symbol (name);
-      s->set_domain (VAR_DOMAIN);
+      s->set_domain (FUNCTION_DOMAIN);
       s->set_aclass_index (LOC_BLOCK);
       s->set_section_index (section_index);
       /* Type of the return value.  */
@@ -1297,7 +1296,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
       if (has_opaque_xref (cur_fdr, sh))
 	break;
       s = new_symbol (name);
-      s->set_domain (VAR_DOMAIN);
+      s->set_domain (TYPE_DOMAIN);
       s->set_aclass_index (LOC_TYPEDEF);
       s->set_value_block (top_stack->cur_block);
       s->set_type (t);
@@ -2582,7 +2581,7 @@ parse_partial_symbols (minimal_symbol_reader &reader,
 	     those too.  */
 	  if (name[0] == '.')
 	    continue;
-	  /* Fall through.  */
+	  [[fallthrough]];
 	default:
 	  ms_type = mst_unknown;
 	  unknown_ext_complaint (name);
@@ -3050,7 +3049,7 @@ parse_partial_symbols (minimal_symbol_reader &reader,
 		    switch (p[1])
 		      {
 		      case 'S':
-			pst->add_psymbol (gdb::string_view (namestring,
+			pst->add_psymbol (std::string_view (namestring,
 							    p - namestring),
 					  true, VAR_DOMAIN, LOC_STATIC,
 					  SECT_OFF_DATA (objfile),
@@ -3063,7 +3062,7 @@ parse_partial_symbols (minimal_symbol_reader &reader,
 			/* The addresses in these entries are reported
 			   to be wrong.  See the code that reads 'G's
 			   for symtabs.  */
-			pst->add_psymbol (gdb::string_view (namestring,
+			pst->add_psymbol (std::string_view (namestring,
 							    p - namestring),
 					  true, VAR_DOMAIN, LOC_STATIC,
 					  SECT_OFF_DATA (objfile),
@@ -3085,7 +3084,7 @@ parse_partial_symbols (minimal_symbol_reader &reader,
 				&& namestring[0] != ' '))
 			  {
 			    pst->add_psymbol
-			      (gdb::string_view (namestring, p - namestring),
+			      (std::string_view (namestring, p - namestring),
 			       true, STRUCT_DOMAIN, LOC_TYPEDEF, -1,
 			       psymbol_placement::STATIC,
 			       unrelocated_addr (0),
@@ -3095,7 +3094,7 @@ parse_partial_symbols (minimal_symbol_reader &reader,
 			      {
 				/* Also a typedef with the same name.  */
 				pst->add_psymbol
-				  (gdb::string_view (namestring,
+				  (std::string_view (namestring,
 						     p - namestring),
 				   true, VAR_DOMAIN, LOC_TYPEDEF, -1,
 				   psymbol_placement::STATIC,
@@ -3111,7 +3110,7 @@ parse_partial_symbols (minimal_symbol_reader &reader,
 						   just :T...  */
 			  {
 			    pst->add_psymbol
-			      (gdb::string_view (namestring,
+			      (std::string_view (namestring,
 						 p - namestring),
 			       true, VAR_DOMAIN, LOC_TYPEDEF, -1,
 			       psymbol_placement::STATIC,
@@ -3178,7 +3177,7 @@ parse_partial_symbols (minimal_symbol_reader &reader,
 				/* Note that the value doesn't matter for
 				   enum constants in psymtabs, just in
 				   symtabs.  */
-				pst->add_psymbol (gdb::string_view (p,
+				pst->add_psymbol (std::string_view (p,
 								    q - p),
 						  true, VAR_DOMAIN,
 						  LOC_CONST, -1,
@@ -3199,7 +3198,7 @@ parse_partial_symbols (minimal_symbol_reader &reader,
 			continue;
 		      case 'c':
 			/* Constant, e.g. from "const" in Pascal.  */
-			pst->add_psymbol (gdb::string_view (namestring,
+			pst->add_psymbol (std::string_view (namestring,
 							    p - namestring),
 					  true, VAR_DOMAIN, LOC_CONST, -1,
 					  psymbol_placement::STATIC,
@@ -3215,7 +3214,7 @@ parse_partial_symbols (minimal_symbol_reader &reader,
 			    function_outside_compilation_unit_complaint
 			      (copy.c_str ());
 			  }
-			pst->add_psymbol (gdb::string_view (namestring,
+			pst->add_psymbol (std::string_view (namestring,
 							    p - namestring),
 					  true, VAR_DOMAIN, LOC_BLOCK,
 					  SECT_OFF_TEXT (objfile),
@@ -3236,7 +3235,7 @@ parse_partial_symbols (minimal_symbol_reader &reader,
 			    function_outside_compilation_unit_complaint
 			      (copy.c_str ());
 			  }
-			pst->add_psymbol (gdb::string_view (namestring,
+			pst->add_psymbol (std::string_view (namestring,
 							    p - namestring),
 					  true, VAR_DOMAIN, LOC_BLOCK,
 					  SECT_OFF_TEXT (objfile),
@@ -3430,7 +3429,7 @@ parse_partial_symbols (minimal_symbol_reader &reader,
 					   mst_file_text,
 					   SECT_OFF_TEXT (objfile));
 
-		  /* FALLTHROUGH */
+		  [[fallthrough]];
 
 		case stProc:
 		  /* Ignore all parameter symbol records.  */
@@ -3666,7 +3665,7 @@ parse_partial_symbols (minimal_symbol_reader &reader,
 		default:
 		  unknown_ext_complaint (debug_info->ssext + psh->iss);
 		  /* Pretend it's global.  */
-		  /* Fall through.  */
+		  [[fallthrough]];
 		case stGlobal:
 		  /* Global common symbols are resolved by the runtime loader,
 		     ignore them.  */

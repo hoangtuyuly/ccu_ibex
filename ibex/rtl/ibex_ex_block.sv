@@ -50,12 +50,17 @@ module ibex_ex_block #(
   output logic [31:0]           branch_target_o,       // to IF
   output logic                  branch_decision_o,     // to ID
 
-  output logic                  ex_valid_o             // EX has valid output
+  output logic                  ex_valid_o,            // EX has valid output
+
+  input  logic                  ccu_en_i,
+  input  logic [9:0]            ccu_cmd_payload_function_id_i,
+  input  logic [31:0]           ccu_cmd_payload_inputs_0_i,
+  input  logic [31:0]           ccu_cmd_payload_inputs_1_i
 );
 
   import ibex_pkg::*;
 
-  logic [31:0] alu_result, multdiv_result;
+  logic [31:0] alu_result, multdiv_result, ccu_result;
 
   logic [32:0] multdiv_alu_operand_b, multdiv_alu_operand_a;
   logic [33:0] alu_adder_result_ext;
@@ -67,7 +72,7 @@ module ibex_ex_block #(
   logic [ 1:0] alu_imd_val_we;
   logic [33:0] multdiv_imd_val_d[2];
   logic [ 1:0] multdiv_imd_val_we;
-
+  logic ccu_ready;
   /*
     The multdiv_i output is never selected if RV32M=RV32MNone
     At synthesis time, all the combinational and sequential logic
@@ -86,7 +91,7 @@ module ibex_ex_block #(
 
   assign alu_imd_val_q = '{imd_val_q_i[0][31:0], imd_val_q_i[1][31:0]};
 
-  assign result_ex_o  = multdiv_sel ? multdiv_result : alu_result;
+  assign result_ex_o  = multdiv_sel ? multdiv_result : ccu_en_i ? ccu_result : alu_result;
 
   // branch handling
   assign branch_decision_o  = alu_cmp_result;
@@ -108,6 +113,17 @@ module ibex_ex_block #(
 
     assign branch_target_o = alu_adder_result_ex_o;
   end
+
+  ibex_ccu ccu_i (
+    .reset (rst_ni),
+    .clk (clk_i),
+    .en (ccu_en_i),
+    .cmd_payload_function_id (ccu_cmd_payload_function_id_i),
+    .cmd_payload_inputs_0 (ccu_cmd_payload_inputs_0_i),
+    .cmd_payload_inputs_1 (ccu_cmd_payload_inputs_1_i),
+    .rsp_valid (ccu_ready),
+    .rsp_payload_outputs_0 (ccu_result)
+  );
 
   /////////
   // ALU //
@@ -194,7 +210,7 @@ module ibex_ex_block #(
   // Multiplier/divider may require multiple cycles. The ALU output is valid in the same cycle
   // unless the intermediate result register is being written (which indicates this isn't the
   // final cycle of ALU operation).
-  assign ex_valid_o = multdiv_sel ? multdiv_valid : ~(|alu_imd_val_we);
+  assign ex_valid_o = multdiv_sel ? multdiv_valid : ccu_en_i ? ccu_ready : ~(|alu_imd_val_we);
 
 `ifdef INC_ASSERT
   // This is intended to be accessed via hierarchal references so isn't output from this module nor

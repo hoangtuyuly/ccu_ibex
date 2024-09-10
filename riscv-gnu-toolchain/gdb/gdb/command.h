@@ -1,6 +1,6 @@
 /* Header file for command creation.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -126,7 +126,7 @@ struct literal_def
   LONGEST use;
 
   /* An optional number accepted that stands for the literal.  */
-  gdb::optional<LONGEST> val;
+  std::optional<LONGEST> val;
 };
 
 /* Return true if a setting of type VAR_TYPE is backed with type T.
@@ -292,8 +292,8 @@ struct setting
     /* Getters and setters are cast to and from the arbitrary `void (*) ()`
        function pointer type.  Make sure that the two types are really of the
        same size.  */
-    gdb_static_assert (sizeof (m_getter) == sizeof (getter));
-    gdb_static_assert (sizeof (m_setter) == sizeof (setter));
+    static_assert (sizeof (m_getter) == sizeof (getter));
+    static_assert (sizeof (m_setter) == sizeof (setter));
 
     m_getter = reinterpret_cast<erased_func> (getter);
     m_setter = reinterpret_cast<erased_func> (setter);

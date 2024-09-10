@@ -1,5 +1,5 @@
 /* tc-ppc.c -- Assemble for the PowerPC or POWER (RS/6000)
-   Copyright (C) 1994-2023 Free Software Foundation, Inc.
+   Copyright (C) 1994-2024 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
 
    This file is part of GAS, the GNU Assembler.
@@ -1391,6 +1391,8 @@ PowerPC options:\n"));
 -mpower9, -mpwr9        generate code for Power9 architecture\n"));
   fprintf (stream, _("\
 -mpower10, -mpwr10      generate code for Power10 architecture\n"));
+  fprintf (stream, _("\
+-mpower11, -mpwr11      generate code for Power11 architecture\n"));
   fprintf (stream, _("\
 -mlibresoc              generate code for Libre-SOC architecture\n"));
   fprintf (stream, _("\

@@ -1,6 +1,6 @@
 /* Python interface to finish breakpoints
 
-   Copyright (C) 2011-2023 Free Software Foundation, Inc.
+   Copyright (C) 2011-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,7 +19,6 @@
 
 
 
-#include "defs.h"
 #include "top.h"
 #include "python-internal.h"
 #include "breakpoint.h"
@@ -212,7 +211,8 @@ bpfinishpy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 				 "be set on a dummy frame."));
 	    }
 	  else
-	    frame_id = get_frame_id (prev_frame);
+	    /* Get the real calling frame ID, ignoring inline frames.  */
+	    frame_id = frame_unwind_caller_id (frame);
 	}
     }
   catch (const gdb_exception &except)
@@ -427,7 +427,7 @@ bpfinishpy_handle_stop (struct bpstat *bs, int print_frame)
 static void
 bpfinishpy_handle_exit (struct inferior *inf)
 {
-  gdbpy_enter enter_py (target_gdbarch ());
+  gdbpy_enter enter_py (current_inferior ()->arch ());
 
   for (breakpoint &bp : all_breakpoints_safe ())
     bpfinishpy_detect_out_scope_cb (&bp, nullptr, true);

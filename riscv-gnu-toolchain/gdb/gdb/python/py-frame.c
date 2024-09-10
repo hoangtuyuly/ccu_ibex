@@ -1,6 +1,6 @@
 /* Python interface to stack frames
 
-   Copyright (C) 2008-2023 Free Software Foundation, Inc.
+   Copyright (C) 2008-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "language.h"
 #include "charset.h"
 #include "block.h"
@@ -82,6 +81,23 @@ frapy_str (PyObject *self)
 {
   const frame_id &fid = ((frame_object *) self)->frame_id;
   return PyUnicode_FromString (fid.to_string ().c_str ());
+}
+
+/* Implement repr() for gdb.Frame.  */
+
+static PyObject *
+frapy_repr (PyObject *self)
+{
+  frame_object *frame_obj = (frame_object *) self;
+  frame_info_ptr f_info = frame_find_by_id (frame_obj->frame_id);
+  if (f_info == nullptr)
+    return gdb_py_invalid_object_repr (self);
+
+  const frame_id &fid = frame_obj->frame_id;
+  return PyUnicode_FromFormat ("<%s level=%d frame-id=%s>",
+			       Py_TYPE (self)->tp_name,
+			       frame_relative_level (f_info),
+			       fid.to_string ().c_str ());
 }
 
 /* Implementation of gdb.Frame.is_valid (self) -> Boolean.
@@ -260,7 +276,8 @@ frapy_read_register (PyObject *self, PyObject *args, PyObject *kw)
 	return nullptr;
 
       gdb_assert (regnum >= 0);
-      struct value *val = value_of_register (regnum, frame);
+      value *val
+	= value_of_register (regnum, get_next_frame_sentinel_okay (frame));
 
       if (val == NULL)
 	PyErr_SetString (PyExc_ValueError, _("Can't read register."));
@@ -343,7 +360,7 @@ frapy_function (PyObject *self, PyObject *args)
    Sets a Python exception and returns NULL on error.  */
 
 PyObject *
-frame_info_to_frame_object (frame_info_ptr frame)
+frame_info_to_frame_object (const frame_info_ptr &frame)
 {
   gdbpy_ref<frame_object> frame_obj (PyObject_New (frame_object,
 						   &frame_object_type));
@@ -514,7 +531,8 @@ frapy_read_var (PyObject *self, PyObject *args, PyObject *kw)
 
 	  if (!block)
 	    block = get_frame_block (frame, NULL);
-	  lookup_sym = lookup_symbol (var_name.get (), block, VAR_DOMAIN, NULL);
+	  lookup_sym = lookup_symbol (var_name.get (), block,
+				      SEARCH_VFT, nullptr);
 	  var = lookup_sym.symbol;
 	  block = lookup_sym.block;
 	}
@@ -839,7 +857,7 @@ PyTypeObject frame_object_type = {
   0,				  /* tp_getattr */
   0,				  /* tp_setattr */
   0,				  /* tp_compare */
-  0,				  /* tp_repr */
+  frapy_repr,			  /* tp_repr */
   0,				  /* tp_as_number */
   0,				  /* tp_as_sequence */
   0,				  /* tp_as_mapping */

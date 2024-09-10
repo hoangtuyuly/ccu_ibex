@@ -1,6 +1,6 @@
 /* Definition of objfile flags.
 
-   Copyright (C) 1992-2023 Free Software Foundation, Inc.
+   Copyright (C) 1992-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -43,10 +43,6 @@ enum objfile_flag : unsigned
        to preserve ones that the user explicitly loaded via the
        add-symbol-file command.  */
     OBJF_USERLOADED = 1 << 2,	/* User loaded */
-
-    /* Set if we have tried to read partial symtabs for this objfile.
-       This is used to allow lazy reading of partial symtabs.  */
-    OBJF_PSYMTABS_READ = 1 << 3,
 
     /* Set if this is the main symbol file (as opposed to symbol file
        for dynamically loaded code).  */

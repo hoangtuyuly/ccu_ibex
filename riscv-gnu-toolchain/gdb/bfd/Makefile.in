@@ -15,7 +15,7 @@
 @SET_MAKE@
 
 #
-#   Copyright (C) 2012-2023 Free Software Foundation, Inc.
+#   Copyright (C) 2012-2024 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -116,10 +116,16 @@ am__aclocal_m4_deps = $(top_srcdir)/../config/acx.m4 \
 	$(top_srcdir)/../config/bfd64.m4 \
 	$(top_srcdir)/../config/depstand.m4 \
 	$(top_srcdir)/../config/gettext-sister.m4 \
+	$(top_srcdir)/../config/gettext.m4 \
+	$(top_srcdir)/../config/iconv.m4 \
+	$(top_srcdir)/../config/intlmacosx.m4 \
 	$(top_srcdir)/../config/jobserver.m4 \
 	$(top_srcdir)/../config/largefile.m4 \
 	$(top_srcdir)/../config/lead-dot.m4 \
-	$(top_srcdir)/../config/nls.m4 \
+	$(top_srcdir)/../config/lib-ld.m4 \
+	$(top_srcdir)/../config/lib-link.m4 \
+	$(top_srcdir)/../config/lib-prefix.m4 \
+	$(top_srcdir)/../config/mmap.m4 $(top_srcdir)/../config/nls.m4 \
 	$(top_srcdir)/../config/override.m4 \
 	$(top_srcdir)/../config/pkg.m4 \
 	$(top_srcdir)/../config/plugins.m4 \
@@ -129,9 +135,9 @@ am__aclocal_m4_deps = $(top_srcdir)/../config/acx.m4 \
 	$(top_srcdir)/../config/zstd.m4 $(top_srcdir)/../libtool.m4 \
 	$(top_srcdir)/../ltoptions.m4 $(top_srcdir)/../ltsugar.m4 \
 	$(top_srcdir)/../ltversion.m4 $(top_srcdir)/../lt~obsolete.m4 \
-	$(top_srcdir)/bfd.m4 $(top_srcdir)/warning.m4 \
-	$(top_srcdir)/acinclude.m4 $(top_srcdir)/version.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/ax_tls.m4 $(top_srcdir)/bfd.m4 \
+	$(top_srcdir)/warning.m4 $(top_srcdir)/acinclude.m4 \
+	$(top_srcdir)/version.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(top_srcdir)/configure \
@@ -173,8 +179,8 @@ am__installdirs = "$(DESTDIR)$(bfdlibdir)" "$(DESTDIR)$(infodir)" \
 	"$(DESTDIR)$(bfdincludedir)"
 LTLIBRARIES = $(bfdlib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 am__DEPENDENCIES_1 =
-am__objects_1 = archive.lo archures.lo bfd.lo bfdio.lo bfdwin.lo \
-	cache.lo coff-bfd.lo compress.lo corefile.lo elf-properties.lo \
+am__objects_1 = archive.lo archures.lo bfd.lo bfdio.lo cache.lo \
+	coff-bfd.lo compress.lo corefile.lo elf-properties.lo \
 	format.lo hash.lo libbfd.lo linker.lo merge.lo opncls.lo \
 	reloc.lo section.lo simple.lo stab-syms.lo stabs.lo syms.lo \
 	targets.lo binary.lo ihex.lo srec.lo tekhex.lo verilog.lo
@@ -354,9 +360,12 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 INSTOBJEXT = @INSTOBJEXT@
+INTLLIBS = @INTLLIBS@
+INTL_MACOSX_LIBS = @INTL_MACOSX_LIBS@
 LARGEFILE_CPPFLAGS = @LARGEFILE_CPPFLAGS@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
+LIBICONV = @LIBICONV@
 LIBINTL = @LIBINTL@
 LIBINTL_DEP = @LIBINTL_DEP@
 LIBM = @LIBM@
@@ -365,6 +374,8 @@ LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
 LIPO = @LIPO@
 LN_S = @LN_S@
+LTLIBICONV = @LTLIBICONV@
+LTLIBINTL = @LTLIBINTL@
 LTLIBOBJS = @LTLIBOBJS@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
@@ -531,7 +542,7 @@ BFD_H = bfd.h
 # need two copies of the executable, one to download and one for the
 # debugger).
 BFD32_LIBS = \
-	archive.lo archures.lo bfd.lo bfdio.lo bfdwin.lo cache.lo \
+	archive.lo archures.lo bfd.lo bfdio.lo cache.lo \
 	coff-bfd.lo compress.lo corefile.lo elf-properties.lo format.lo \
 	hash.lo libbfd.lo linker.lo merge.lo opncls.lo reloc.lo \
 	section.lo simple.lo stab-syms.lo stabs.lo syms.lo targets.lo \
@@ -539,7 +550,7 @@ BFD32_LIBS = \
 
 BFD64_LIBS = archive64.lo
 BFD32_LIBS_CFILES = \
-	archive.c archures.c bfd.c bfdio.c bfdwin.c cache.c coff-bfd.c \
+	archive.c archures.c bfd.c bfdio.c cache.c coff-bfd.c \
 	compress.c corefile.c elf-properties.c format.c hash.c \
 	libbfd.c linker.c merge.c opncls.c reloc.c \
 	section.c simple.c stab-syms.c stabs.c syms.c targets.c \
@@ -1043,10 +1054,12 @@ BFD64_BACKENDS = \
 	pe-aarch64.lo \
 	pe-aarch64igen.lo \
 	pe-loongarch64igen.lo \
+	pe-riscv64igen.lo \
 	pe-x86_64.lo \
 	pei-aarch64.lo \
 	pei-ia64.lo \
 	pei-loongarch64.lo \
+	pei-riscv64.lo \
 	pei-x86_64.lo \
 	pepigen.lo \
 	pex64igen.lo \
@@ -1092,6 +1105,7 @@ BFD64_BACKENDS_CFILES = \
 	pei-aarch64.c \
 	pei-ia64.c \
 	pei-loongarch64.c \
+	pei-riscv64.c \
 	pei-x86_64.c \
 	vms-alpha.c
 
@@ -1147,7 +1161,8 @@ BUILD_CFILES = \
 	elf32-ia64.c elf64-ia64.c \
 	elf32-loongarch.c elf64-loongarch.c \
 	elf32-riscv.c elf64-riscv.c \
-	peigen.c pepigen.c pex64igen.c pe-aarch64igen.c pe-loongarch64igen.c
+	peigen.c pepigen.c pex64igen.c pe-aarch64igen.c pe-loongarch64igen.c \
+	pe-riscv64igen.c
 
 CFILES = $(SOURCE_CFILES) $(BUILD_CFILES)
 SOURCE_HFILES = \
@@ -1204,13 +1219,13 @@ EXTRA_libbfd_la_SOURCES = $(CFILES)
 libbfd_la_DEPENDENCIES = $(OFILES) ofiles ../libsframe/libsframe.la
 libbfd_la_LIBADD = `cat ofiles` @SHARED_LIBADD@ $(LIBDL) $(ZLIB) $(ZSTD_LIBS) ../libsframe/libsframe.la
 BFD_H_FILES = bfd-in.h libbfd.c hash.c section.c syms.c \
-	archive.c archures.c bfd.c bfdio.c bfdwin.c \
+	archive.c archures.c bfd.c bfdio.c \
 	cache.c compress.c corefile.c format.c linker.c opncls.c \
 	reloc.c simple.c stab-syms.c stabs.c targets.c
 
 BFD64_H_FILES = archive64.c
 LIBBFD_H_FILES = libbfd-in.h libbfd.c bfd.c bfdio.c \
-	archive.c archures.c bfdwin.c cache.c hash.c linker.c opncls.c \
+	archive.c archures.c cache.c hash.c linker.c opncls.c \
 	reloc.c section.c stabs.c targets.c
 
 LIBCOFF_H_FILES = libcoff-in.h coffcode.h
@@ -1243,7 +1258,6 @@ DOCFILES = \
 	doc/bfdio.texi \
 	doc/bfdt.texi \
 	doc/bfdver.texi \
-	doc/bfdwin.texi \
 	doc/cache.texi \
 	doc/coffcode.texi \
 	doc/corefile.texi \
@@ -1267,7 +1281,6 @@ DOCFILES = \
 SRCDOC = \
 	$(srcdir)/aoutx.h $(srcdir)/archive.c \
 	$(srcdir)/archures.c $(srcdir)/bfd.c \
-	$(srcdir)/bfdio.c $(srcdir)/bfdwin.c \
 	$(srcdir)/cache.c $(srcdir)/coffcode.h \
 	$(srcdir)/corefile.c $(srcdir)/elf.c \
 	$(srcdir)/elfcode.h $(srcdir)/format.c \
@@ -1280,13 +1293,12 @@ SRCDOC = \
 SRCPROT = $(srcdir)/archive.c $(srcdir)/archures.c \
 	$(srcdir)/bfd.c $(srcdir)/coffcode.h $(srcdir)/corefile.c \
 	$(srcdir)/format.c $(srcdir)/libbfd.c \
-	$(srcdir)/bfdio.c $(srcdir)/bfdwin.c \
 	$(srcdir)/opncls.c $(srcdir)/reloc.c \
 	$(srcdir)/section.c $(srcdir)/syms.c \
 	$(srcdir)/targets.c
 
 SRCIPROT = $(srcdir)/cache.c $(srcdir)/libbfd.c \
-	$(srcdir)/bfdio.c $(srcdir)/bfdwin.c \
+	$(srcdir)/bfdio.c \
 	$(srcdir)/reloc.c $(srcdir)/cpu-h8300.c \
 	$(srcdir)/archures.c
 
@@ -1440,7 +1452,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/archures.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bfd.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bfdio.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bfdwin.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/binary.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cf-i386lynx.Plo@am__quote@
@@ -1694,6 +1705,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pe-i386.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pe-loongarch64igen.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pe-mcore.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pe-riscv64igen.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pe-sh.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pe-x86_64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pef.Plo@am__quote@
@@ -1704,6 +1716,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pei-ia64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pei-loongarch64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pei-mcore.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pei-riscv64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pei-sh.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pei-x86_64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/peigen.Plo@am__quote@
@@ -2402,6 +2415,10 @@ pe-aarch64igen.c: peXXigen.c
 pe-loongarch64igen.c: peXXigen.c
 	$(AM_V_at)echo "#line 1 \"$<\"" > $@
 	$(AM_V_GEN)$(SED) -e s/XX/peLoongArch64/g < $< >> $@
+
+pe-riscv64igen.c: peXXigen.c
+	$(AM_V_at)echo "#line 1 \"peXXigen.c\"" > $@
+	$(AM_V_GEN)$(SED) -e s/XX/peRiscV64/g < $< >> $@
 
 host-aout.lo: Makefile
 

@@ -1,5 +1,5 @@
 /* Support for printing Pascal types for GDB, the GNU debugger.
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,7 +18,7 @@
 
 /* This file is derived from p-typeprint.c */
 
-#include "defs.h"
+#include "event-top.h"
 #include "gdbsupport/gdb_obstack.h"
 #include "bfd.h"
 #include "symtab.h"
@@ -55,7 +55,8 @@ pascal_language::print_type (struct type *type, const char *varstring,
       type_print_varspec_prefix (type, stream, show, 0, flags);
     }
   /* first the name */
-  gdb_puts (varstring, stream);
+  if (varstring != nullptr)
+    gdb_puts (varstring, stream);
 
   if ((varstring != NULL && *varstring != '\0')
       && !(code == TYPE_CODE_FUNC
@@ -486,7 +487,9 @@ pascal_language::type_print_base (struct type *type, struct ui_file *stream, int
 
 	      if (HAVE_CPLUS_STRUCT (type))
 		{
-		  if (TYPE_FIELD_PROTECTED (type, i))
+		  field &fld = type->field (i);
+
+		  if (fld.is_protected ())
 		    {
 		      if (section_type != s_protected)
 			{
@@ -495,7 +498,7 @@ pascal_language::type_print_base (struct type *type, struct ui_file *stream, int
 				      level + 2, "");
 			}
 		    }
-		  else if (TYPE_FIELD_PRIVATE (type, i))
+		  else if (fld.is_private ())
 		    {
 		      if (section_type != s_private)
 			{

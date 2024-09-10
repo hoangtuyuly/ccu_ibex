@@ -1,6 +1,6 @@
 /* Handle set and show GDB commands.
 
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2024 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,7 +15,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "readline/tilde.h"
 #include "value.h"
 #include <ctype.h>
@@ -379,7 +378,7 @@ do_set_command (const char *arg, int from_tty, struct cmd_list_element *c)
     case var_filename:
       if (*arg == '\0')
 	error_no_arg (_("filename to set it to."));
-      /* FALLTHROUGH */
+      [[fallthrough]];
     case var_optional_filename:
       {
 	char *val = NULL;

@@ -1,5 +1,5 @@
 /* RISC-V disassembler
-   Copyright (C) 2011-2023 Free Software Foundation, Inc.
+   Copyright (C) 2011-2024 Free Software Foundation, Inc.
 
    Contributed by Andrew Waterman (andrew@sifive.com).
    Based on MIPS target.
@@ -215,6 +215,48 @@ maybe_print_address (struct riscv_private_data *pd, int base_reg, int offset,
     pd->print_addr = (bfd_vma)(uint32_t)pd->print_addr;
 }
 
+/* Get Zcmp reg_list field.  */
+
+static void
+print_reg_list (disassemble_info *info, insn_t l)
+{
+  bool numeric = riscv_gpr_names == riscv_gpr_names_numeric;
+  unsigned reg_list = (int)EXTRACT_OPERAND (REG_LIST, l);
+  unsigned r_start = numeric ? X_S2 : X_S0;
+  info->fprintf_func (info->stream, "%s", riscv_gpr_names[X_RA]);
+
+  if (reg_list == 5)
+    info->fprintf_func (info->stream, ",%s",
+			riscv_gpr_names[X_S0]);
+  else if (reg_list == 6 || (numeric && reg_list > 6))
+    info->fprintf_func (info->stream, ",%s-%s",
+			riscv_gpr_names[X_S0],
+			riscv_gpr_names[X_S1]);
+  if (reg_list == 15)
+    info->fprintf_func (info->stream, ",%s-%s",
+			riscv_gpr_names[r_start],
+			riscv_gpr_names[X_S11]);
+  else if (reg_list == 7 && numeric)
+    info->fprintf_func (info->stream, ",%s",
+			riscv_gpr_names[X_S2]);
+  else if (reg_list > 6)
+    info->fprintf_func (info->stream, ",%s-%s",
+			riscv_gpr_names[r_start],
+			riscv_gpr_names[reg_list + 11]);
+}
+
+/* Get Zcmp sp adjustment immediate.  */
+
+static int
+riscv_get_spimm (insn_t l)
+{
+  int spimm = riscv_get_sp_base(l, *riscv_rps_dis.xlen);
+  spimm += EXTRACT_ZCMP_SPIMM (l);
+  if (((l ^ MATCH_CM_PUSH) & MASK_CM_PUSH) == 0)
+    spimm *= -1;
+  return spimm;
+}
+
 /* Print insn arguments for 32/64-bit code.  */
 
 static void
@@ -420,6 +462,8 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	case ')':
 	case '[':
 	case ']':
+	case '{':
+	case '}':
 	  print (info->stream, dis_style_text, "%c", *oparg);
 	  break;
 
@@ -568,8 +612,18 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	      }
 
 	    if (riscv_csr_hash[csr] != NULL)
-	      print (info->stream, dis_style_register, "%s",
-		     riscv_csr_hash[csr]);
+	      if (riscv_subset_supports (&riscv_rps_dis, "xtheadvector")
+		  && (csr == CSR_VSTART
+		      || csr == CSR_VXSAT
+		      || csr == CSR_VXRM
+		      || csr == CSR_VL
+		      || csr == CSR_VTYPE
+		      || csr == CSR_VLENB))
+		print (info->stream, dis_style_register, "%s",
+		       concat ("th.", riscv_csr_hash[csr], NULL));
+	      else
+		print (info->stream, dis_style_register, "%s",
+		       riscv_csr_hash[csr]);
 	    else
 	      print (info->stream, dis_style_immediate, "0x%x", csr);
 	    break;
@@ -624,6 +678,13 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 		  print (info->stream, dis_style_immediate, "%d",
 			 (int)EXTRACT_ZCB_HALFWORD_UIMM (l));
 		  break;
+		case 'r':
+		  print_reg_list (info, l);
+		  break;
+		case 'p':
+		  print (info->stream, dis_style_immediate, "%d",
+			 riscv_get_spimm (l));
+		  break;
 		default:
 		  goto undefined_modifier;
 		}
@@ -643,6 +704,28 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 		bool sign;
 		switch (*++oparg)
 		  {
+		  case 'V':
+		   ++oparg;
+		   if (*oparg != 'c')
+		      goto undefined_modifier;
+
+		    int imm = (*oparg == 'b') ? EXTRACT_RVV_VB_IMM (l)
+					      : EXTRACT_RVV_VC_IMM (l);
+		    unsigned int imm_vediv = EXTRACT_OPERAND (XTHEADVEDIV, imm);
+		    unsigned int imm_vlmul = EXTRACT_OPERAND (XTHEADVLMUL, imm);
+		    unsigned int imm_vsew = EXTRACT_OPERAND (XTHEADVSEW, imm);
+		    unsigned int imm_vtype_res
+		      = EXTRACT_OPERAND (XTHEADVTYPE_RES, imm);
+		    if (imm_vsew < ARRAY_SIZE (riscv_vsew)
+			&& imm_vlmul < ARRAY_SIZE (riscv_th_vlen)
+			&& imm_vediv < ARRAY_SIZE (riscv_th_vediv)
+			&& ! imm_vtype_res)
+		      print (info->stream, dis_style_text, "%s,%s,%s",
+			     riscv_vsew[imm_vsew], riscv_th_vlen[imm_vlmul],
+			     riscv_th_vediv[imm_vediv]);
+		    else
+		      print (info->stream, dis_style_immediate, "%d", imm);
+		    break;
 		  case 'l': /* Integer immediate, literal.  */
 		    oparg++;
 		    while (*oparg && *oparg != ',')
@@ -676,6 +759,48 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 		    goto undefined_modifier;
 		  }
 	      }
+	      break;
+	    case 'c': /* Vendor-specific (CORE-V) operands.  */
+	      switch (*++oparg)
+		{
+		  case '2':
+		    print (info->stream, dis_style_immediate, "%d",
+			((int) EXTRACT_CV_IS2_UIMM5 (l)));
+		    break;
+		  case '3':
+		    print (info->stream, dis_style_immediate, "%d",
+			((int) EXTRACT_CV_IS3_UIMM5 (l)));
+		    break;
+		  default:
+		    goto undefined_modifier;
+		}
+	      break;
+	    case 's': /* Vendor-specific (SiFive) operands.  */
+	      switch (*++oparg)
+		{
+		/* SiFive vector coprocessor interface.  */
+		case 'd':
+		  print (info->stream, dis_style_register, "0x%x",
+			 (unsigned) EXTRACT_OPERAND (RD, l));
+		  break;
+		case 't':
+		  print (info->stream, dis_style_register, "0x%x",
+			 (unsigned) EXTRACT_OPERAND (RS2, l));
+		  break;
+		case 'O':
+		  switch (*++oparg)
+		    {
+		    case '2':
+		      print (info->stream, dis_style_register, "0x%x",
+			     (unsigned) EXTRACT_OPERAND (XSO2, l));
+		      break;
+		    case '1':
+		      print (info->stream, dis_style_register, "0x%x",
+			     (unsigned) EXTRACT_OPERAND (XSO1, l));
+		      break;
+		    }
+		  break;
+		}
 	      break;
 	    default:
 	      goto undefined_modifier;
@@ -762,6 +887,9 @@ riscv_disassemble_insn (bfd_vma memaddr,
 
       for (; op->name; op++)
 	{
+	  /* Ignore macro insns.  */
+	  if (op->pinfo == INSN_MACRO)
+	    continue;
 	  /* Does the opcode match?  */
 	  if (! (op->match_func) (op, word))
 	    continue;
@@ -845,20 +973,20 @@ riscv_disassemble_insn (bfd_vma memaddr,
   return insnlen;
 }
 
-/* Return true if we find the suitable mapping symbol,
-   and also update the STATE.  Otherwise, return false.  */
+/* If we find the suitable mapping symbol update the STATE.
+   Otherwise, do nothing.  */
 
-static bool
-riscv_get_map_state (int n,
-		     enum riscv_seg_mstate *state,
-		     struct disassemble_info *info)
+static void
+riscv_update_map_state (int n,
+			enum riscv_seg_mstate *state,
+			struct disassemble_info *info)
 {
   const char *name;
 
   /* If the symbol is in a different section, ignore it.  */
   if (info->section != NULL
       && info->section != info->symtab[n]->section)
-    return false;
+    return;
 
   name = bfd_asymbol_name(info->symtab[n]);
   if (strcmp (name, "$x") == 0)
@@ -869,12 +997,40 @@ riscv_get_map_state (int n,
     {
       *state = MAP_INSN;
       riscv_release_subset_list (&riscv_subsets);
-      riscv_parse_subset (&riscv_rps_dis, name + 2);
+
+      /* ISA mapping string may be numbered, suffixed with '.n'. Do not
+	 consider this as part of the ISA string.  */
+      char *suffix = strchr (name, '.');
+      if (suffix)
+	{
+	  int suffix_index = (int)(suffix - name);
+	  char *name_substr = xmalloc (suffix_index + 1);
+	  strncpy (name_substr, name, suffix_index);
+	  name_substr[suffix_index] = '\0';
+	  riscv_parse_subset (&riscv_rps_dis, name_substr + 2);
+	  free (name_substr);
+	}
+      else
+	riscv_parse_subset (&riscv_rps_dis, name + 2);
     }
-  else
+}
+
+/* Return true if we find the suitable mapping symbol.
+   Otherwise, return false.  */
+
+static bool
+riscv_is_valid_mapping_symbol (int n,
+			     struct disassemble_info *info)
+{
+  const char *name;
+
+  /* If the symbol is in a different section, ignore it.  */
+  if (info->section != NULL
+      && info->section != info->symtab[n]->section)
     return false;
 
-  return true;
+  name = bfd_asymbol_name(info->symtab[n]);
+  return riscv_elf_is_mapping_symbols (name);
 }
 
 /* Check the sorted symbol table (sorted by the symbol value), find the
@@ -920,11 +1076,9 @@ riscv_search_mapping_symbol (bfd_vma memaddr,
   from_last_map_symbol = (last_map_symbol >= 0
 			  && info->stop_offset == last_stop_offset);
 
-  /* Start scanning at the start of the function, or wherever
-     we finished last time.  */
-  n = info->symtab_pos + 1;
-  if (from_last_map_symbol && n >= last_map_symbol)
-    n = last_map_symbol;
+  /* Start scanning from wherever we finished last time, or the start
+     of the function.  */
+  n = from_last_map_symbol ? last_map_symbol : info->symtab_pos + 1;
 
   /* Find the suitable mapping symbol to dump.  */
   for (; n < info->symtab_size; n++)
@@ -933,7 +1087,7 @@ riscv_search_mapping_symbol (bfd_vma memaddr,
       /* We have searched all possible symbols in the range.  */
       if (addr > memaddr)
 	break;
-      if (riscv_get_map_state (n, &mstate, info))
+      if (riscv_is_valid_mapping_symbol (n, info))
 	{
 	  symbol = n;
 	  found = true;
@@ -949,9 +1103,7 @@ riscv_search_mapping_symbol (bfd_vma memaddr,
      can pick up a text mapping symbol of a preceeding section.  */
   if (!found)
     {
-      n = info->symtab_pos;
-      if (from_last_map_symbol && n >= last_map_symbol)
-	n = last_map_symbol;
+      n = from_last_map_symbol ? last_map_symbol : info->symtab_pos;
 
       for (; n >= 0; n--)
 	{
@@ -960,7 +1112,7 @@ riscv_search_mapping_symbol (bfd_vma memaddr,
 	  if (addr < (info->section ? info->section->vma : 0))
 	    break;
 	  /* Stop searching once we find the closed mapping symbol.  */
-	  if (riscv_get_map_state (n, &mstate, info))
+	  if (riscv_is_valid_mapping_symbol (n, info))
 	    {
 	      symbol = n;
 	      found = true;
@@ -971,6 +1123,8 @@ riscv_search_mapping_symbol (bfd_vma memaddr,
 
   if (found)
     {
+      riscv_update_map_state (symbol, &mstate, info);
+
       /* Find the next mapping symbol to determine the boundary of this mapping
 	 symbol.  */
 
@@ -1026,11 +1180,12 @@ riscv_data_length (bfd_vma memaddr,
 	{
 	  bfd_vma addr = bfd_asymbol_value (info->symtab[n]);
 	  if (addr > memaddr
-	      && riscv_get_map_state (n, &m, info))
+	      && riscv_is_valid_mapping_symbol (n, info))
 	    {
 	      if (addr - memaddr < length)
 		length = addr - memaddr;
 	      found = true;
+	      riscv_update_map_state (n, &m, info);
 	      break;
 	    }
 	}

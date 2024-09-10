@@ -17,13 +17,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "value.h"
 #include "python-internal.h"
 #include "python.h"
 #include "charset.h"
 #include "breakpoint.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbthread.h"
 #include "observable.h"
 #include "cli/cli-script.h"
@@ -589,7 +588,6 @@ bppy_set_condition (PyObject *self, PyObject *newvalue, void *closure)
   gdb::unique_xmalloc_ptr<char> exp_holder;
   const char *exp = NULL;
   gdbpy_breakpoint_object *self_bp = (gdbpy_breakpoint_object *) self;
-  struct gdb_exception except;
 
   BPPY_SET_REQUIRE_VALID (self_bp);
 
@@ -615,10 +613,8 @@ bppy_set_condition (PyObject *self, PyObject *newvalue, void *closure)
     }
   catch (gdb_exception &ex)
     {
-      except = std::move (ex);
+      GDB_PY_SET_HANDLE_EXCEPTION (ex);
     }
-
-  GDB_PY_SET_HANDLE_EXCEPTION (except);
 
   return 0;
 }
@@ -657,7 +653,6 @@ static int
 bppy_set_commands (PyObject *self, PyObject *newvalue, void *closure)
 {
   gdbpy_breakpoint_object *self_bp = (gdbpy_breakpoint_object *) self;
-  struct gdb_exception except;
 
   BPPY_SET_REQUIRE_VALID (self_bp);
 
@@ -684,10 +679,8 @@ bppy_set_commands (PyObject *self, PyObject *newvalue, void *closure)
     }
   catch (gdb_exception &ex)
     {
-      except = std::move (ex);
+      GDB_PY_SET_HANDLE_EXCEPTION (ex);
     }
-
-  GDB_PY_SET_HANDLE_EXCEPTION (except);
 
   return 0;
 }
@@ -1181,7 +1174,7 @@ gdbpy_breakpoint_cond_says_stop (const struct extension_language_defn *extlang,
 
   if (PyObject_HasAttrString (py_bp, stop_func))
     {
-      gdbpy_ref<> result (PyObject_CallMethod (py_bp, stop_func, NULL));
+      gdbpy_ref<> result = gdbpy_call_method (py_bp, stop_func);
 
       stop = 1;
       if (result != NULL)
@@ -1723,10 +1716,10 @@ bplocpy_get_fullname (PyObject *py_self, void *closure)
   BPPY_REQUIRE_VALID (self->owner);
   BPLOCPY_REQUIRE_VALID (self->owner, self);
   const auto symtab = self->bp_loc->symtab;
-  if (symtab != nullptr && symtab->fullname != nullptr)
+  if (symtab != nullptr && symtab->fullname () != nullptr)
     {
       gdbpy_ref<> fullname
-	= host_string_to_python_string (symtab->fullname);
+	= host_string_to_python_string (symtab->fullname ());
       return fullname.release ();
     }
   Py_RETURN_NONE;

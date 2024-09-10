@@ -1,6 +1,6 @@
 /* Target-dependent code for Xilinx MicroBlaze.
 
-   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+   Copyright (C) 2009-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,14 +17,14 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "arch-utils.h"
 #include "dis-asm.h"
+#include "extract-store-integer.h"
 #include "frame.h"
 #include "trad-frame.h"
 #include "symtab.h"
 #include "value.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "breakpoint.h"
 #include "inferior.h"
 #include "regcache.h"
@@ -92,7 +92,7 @@ static unsigned int microblaze_debug_flag = 0;
 static const char *
 microblaze_register_name (struct gdbarch *gdbarch, int regnum)
 {
-  gdb_static_assert (ARRAY_SIZE (microblaze_register_names)
+  static_assert (ARRAY_SIZE (microblaze_register_names)
 		     == MICROBLAZE_NUM_REGS);
   return microblaze_register_names[regnum];
 }
@@ -115,7 +115,7 @@ microblaze_register_type (struct gdbarch *gdbarch, int regnum)
 static unsigned long
 microblaze_fetch_instruction (CORE_ADDR pc)
 {
-  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  bfd_endian byte_order = gdbarch_byte_order (current_inferior ()->arch ());
   gdb_byte buf[4];
 
   /* If we can't read the instruction at PC, return zero.  */
@@ -368,7 +368,7 @@ microblaze_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 }
 
 static CORE_ADDR
-microblaze_unwind_pc (struct gdbarch *gdbarch, frame_info_ptr next_frame)
+microblaze_unwind_pc (struct gdbarch *gdbarch, const frame_info_ptr &next_frame)
 {
   gdb_byte buf[4];
   CORE_ADDR pc;
@@ -417,7 +417,7 @@ microblaze_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
 /* Normal frames.  */
 
 static struct microblaze_frame_cache *
-microblaze_frame_cache (frame_info_ptr next_frame, void **this_cache)
+microblaze_frame_cache (const frame_info_ptr &next_frame, void **this_cache)
 {
   struct microblaze_frame_cache *cache;
   struct gdbarch *gdbarch = get_frame_arch (next_frame);
@@ -443,7 +443,7 @@ microblaze_frame_cache (frame_info_ptr next_frame, void **this_cache)
 }
 
 static void
-microblaze_frame_this_id (frame_info_ptr next_frame, void **this_cache,
+microblaze_frame_this_id (const frame_info_ptr &next_frame, void **this_cache,
 		       struct frame_id *this_id)
 {
   struct microblaze_frame_cache *cache =
@@ -457,7 +457,7 @@ microblaze_frame_this_id (frame_info_ptr next_frame, void **this_cache,
 }
 
 static struct value *
-microblaze_frame_prev_register (frame_info_ptr this_frame,
+microblaze_frame_prev_register (const frame_info_ptr &this_frame,
 				 void **this_cache, int regnum)
 {
   struct microblaze_frame_cache *cache =
@@ -490,7 +490,7 @@ static const struct frame_unwind microblaze_frame_unwind =
 };
 
 static CORE_ADDR
-microblaze_frame_base_address (frame_info_ptr next_frame,
+microblaze_frame_base_address (const frame_info_ptr &next_frame,
 			       void **this_cache)
 {
   struct microblaze_frame_cache *cache =

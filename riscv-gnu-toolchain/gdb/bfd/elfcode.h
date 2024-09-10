@@ -1,5 +1,5 @@
 /* ELF executable support for BFD.
-   Copyright (C) 1991-2023 Free Software Foundation, Inc.
+   Copyright (C) 1991-2024 Free Software Foundation, Inc.
 
    Written by Fred Fish @ Cygnus Support, from information published
    in "UNIX System V Release 4, Programmers Guide: ANSI C and
@@ -1014,7 +1014,13 @@ elf_write_relocs (bfd *abfd, asection *sec, void *data)
       sym = *ptr->sym_ptr_ptr;
       if (sym == last_sym)
 	n = last_sym_idx;
-      else if (bfd_is_abs_section (sym->section) && sym->value == 0)
+      /* If the relocation is against an absolute symbol whoes value is
+	 zero, then the symbol can be dropped, simplifying the reloc.
+	 PR 31106: Except for complex relocations where the symbols
+	 itself might be significant.  */
+      else if (bfd_is_abs_section (sym->section)
+	       && sym->value == 0
+	       && (sym->flags & BSF_RELC) == 0)
 	n = STN_UNDEF;
       else
 	{
@@ -1189,6 +1195,7 @@ elf_checksum_contents (bfd *abfd,
       Elf_Internal_Shdr i_shdr;
       Elf_External_Shdr x_shdr;
       bfd_byte *contents, *free_contents;
+      asection *sec = NULL;
 
       i_shdr = *i_shdrp[count];
       i_shdr.sh_offset = 0;
@@ -1204,8 +1211,6 @@ elf_checksum_contents (bfd *abfd,
       contents = i_shdr.contents;
       if (contents == NULL)
 	{
-	  asection *sec;
-
 	  sec = bfd_section_from_elf_index (abfd, count);
 	  if (sec != NULL)
 	    {
@@ -1214,7 +1219,7 @@ elf_checksum_contents (bfd *abfd,
 		{
 		  /* Force rereading from file.  */
 		  sec->flags &= ~SEC_IN_MEMORY;
-		  if (!bfd_malloc_and_get_section (abfd, sec, &free_contents))
+		  if (!_bfd_elf_mmap_section_contents (abfd, sec, &free_contents))
 		    continue;
 		  contents = free_contents;
 		}
@@ -1223,7 +1228,7 @@ elf_checksum_contents (bfd *abfd,
       if (contents != NULL)
 	{
 	  (*process) (contents, i_shdr.sh_size, arg);
-	  free (free_contents);
+	  _bfd_elf_munmap_section_contents (sec, free_contents);
 	}
     }
 

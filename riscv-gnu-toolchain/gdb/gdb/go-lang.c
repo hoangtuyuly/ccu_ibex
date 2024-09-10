@@ -1,6 +1,6 @@
 /* Go language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 2012-2023 Free Software Foundation, Inc.
+   Copyright (C) 2012-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -31,7 +31,6 @@
    - 6g mangling isn't supported yet
 */
 
-#include "defs.h"
 #include "gdbsupport/gdb_obstack.h"
 #include "block.h"
 #include "symtab.h"

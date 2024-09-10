@@ -1,6 +1,6 @@
 /* Minimal symbol table definitions for GDB.
 
-   Copyright (C) 2011-2023 Free Software Foundation, Inc.
+   Copyright (C) 2011-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -118,7 +118,7 @@ class minimal_symbol_reader
      SECTION - the symbol's section
   */
 
-  struct minimal_symbol *record_full (gdb::string_view name,
+  struct minimal_symbol *record_full (std::string_view name,
 				      bool copy_name,
 				      unrelocated_addr address,
 				      enum minimal_symbol_type ms_type,

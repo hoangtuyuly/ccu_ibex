@@ -1,6 +1,6 @@
 /* Target-dependent code for Atmel AVR, for GDB.
 
-   Copyright (C) 1996-2023 Free Software Foundation, Inc.
+   Copyright (C) 1996-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,12 +22,12 @@
 /* Portions of this file were taken from the original gdb-4.18 patch developed
    by Denis Chertykov, denisc@overta.ru */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "frame.h"
 #include "frame-unwind.h"
 #include "frame-base.h"
 #include "trad-frame.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbcore.h"
 #include "gdbtypes.h"
 #include "inferior.h"
@@ -216,7 +216,7 @@ avr_register_name (struct gdbarch *gdbarch, int regnum)
     "SREG", "SP", "PC2",
     "pc"
   };
-  gdb_static_assert (ARRAY_SIZE (register_names)
+  static_assert (ARRAY_SIZE (register_names)
 		     == (AVR_NUM_REGS + AVR_NUM_PSEUDO_REGS));
   return register_names[regnum];
 }
@@ -979,7 +979,7 @@ avr_return_value (struct gdbarch *gdbarch, struct value *function,
    for it IS the sp for the next frame.  */
 
 static struct avr_unwind_cache *
-avr_frame_unwind_cache (frame_info_ptr this_frame,
+avr_frame_unwind_cache (const frame_info_ptr &this_frame,
 			void **this_prologue_cache)
 {
   CORE_ADDR start_pc, current_pc;
@@ -1059,7 +1059,7 @@ avr_frame_unwind_cache (frame_info_ptr this_frame,
 }
 
 static CORE_ADDR
-avr_unwind_pc (struct gdbarch *gdbarch, frame_info_ptr next_frame)
+avr_unwind_pc (struct gdbarch *gdbarch, const frame_info_ptr &next_frame)
 {
   ULONGEST pc;
 
@@ -1069,7 +1069,7 @@ avr_unwind_pc (struct gdbarch *gdbarch, frame_info_ptr next_frame)
 }
 
 static CORE_ADDR
-avr_unwind_sp (struct gdbarch *gdbarch, frame_info_ptr next_frame)
+avr_unwind_sp (struct gdbarch *gdbarch, const frame_info_ptr &next_frame)
 {
   ULONGEST sp;
 
@@ -1082,7 +1082,7 @@ avr_unwind_sp (struct gdbarch *gdbarch, frame_info_ptr next_frame)
    frame.  This will be used to create a new GDB frame struct.  */
 
 static void
-avr_frame_this_id (frame_info_ptr this_frame,
+avr_frame_this_id (const frame_info_ptr &this_frame,
 		   void **this_prologue_cache,
 		   struct frame_id *this_id)
 {
@@ -1107,7 +1107,7 @@ avr_frame_this_id (frame_info_ptr this_frame,
 }
 
 static struct value *
-avr_frame_prev_register (frame_info_ptr this_frame,
+avr_frame_prev_register (const frame_info_ptr &this_frame,
 			 void **this_prologue_cache, int regnum)
 {
   struct avr_unwind_cache *info
@@ -1166,7 +1166,7 @@ static const struct frame_unwind avr_frame_unwind = {
 };
 
 static CORE_ADDR
-avr_frame_base_address (frame_info_ptr this_frame, void **this_cache)
+avr_frame_base_address (const frame_info_ptr &this_frame, void **this_cache)
 {
   struct avr_unwind_cache *info
     = avr_frame_unwind_cache (this_frame, this_cache);
@@ -1186,7 +1186,7 @@ static const struct frame_base avr_frame_base = {
    save_dummy_frame_tos(), and the PC match the dummy frame's breakpoint.  */
 
 static struct frame_id
-avr_dummy_id (struct gdbarch *gdbarch, frame_info_ptr this_frame)
+avr_dummy_id (struct gdbarch *gdbarch, const frame_info_ptr &this_frame)
 {
   ULONGEST base;
 
@@ -1510,7 +1510,8 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_num_pseudo_regs (gdbarch, AVR_NUM_PSEUDO_REGS);
   set_gdbarch_pseudo_register_read (gdbarch, avr_pseudo_register_read);
-  set_gdbarch_pseudo_register_write (gdbarch, avr_pseudo_register_write);
+  set_gdbarch_deprecated_pseudo_register_write (gdbarch,
+						avr_pseudo_register_write);
 
   set_gdbarch_return_value (gdbarch, avr_return_value);
 
@@ -1566,7 +1567,7 @@ avr_io_reg_read_command (const char *args, int from_tty)
   unsigned int val;
 
   /* Find out how many io registers the target has.  */
-  gdb::optional<gdb::byte_vector> buf
+  std::optional<gdb::byte_vector> buf
     = target_read_alloc (current_inferior ()->top_target (),
 			 TARGET_OBJECT_AVR, "avr.io_reg");
 

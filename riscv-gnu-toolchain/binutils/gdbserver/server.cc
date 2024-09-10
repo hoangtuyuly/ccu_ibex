@@ -16,7 +16,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "server.h"
 #include "gdbthread.h"
 #include "gdbsupport/agent.h"
 #include "notif.h"
@@ -110,7 +109,7 @@ static struct {
 	   its name with CURRENT_DIRECTORY.  Otherwise, we leave the
 	   name as-is because we'll try searching for it in $PATH.  */
 	if (is_regular_file (m_path.c_str (), &reg_file_errno))
-	  m_path = gdb_abspath (m_path.c_str ());
+	  m_path = gdb_abspath (m_path);
       }
   }
 
@@ -281,17 +280,6 @@ const char *
 get_exec_wrapper ()
 {
   return !wrapper_argv.empty () ? wrapper_argv.c_str () : NULL;
-}
-
-/* See gdbsupport/common-inferior.h.  */
-
-const char *
-get_exec_file (int err)
-{
-  if (err && program_path.get () == NULL)
-    error (_("No executable file specified."));
-
-  return program_path.get ();
 }
 
 /* See server.h.  */
@@ -2711,6 +2699,8 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 		  if (target_supports_memory_tagging ())
 		    cs.memory_tagging_feature = true;
 		}
+	      else if (feature == "error-message+")
+		cs.error_message_supported = true;
 	      else
 		{
 		  /* Move the unknown features all together.  */
@@ -3295,29 +3285,39 @@ static void
 handle_v_attach (char *own_buf)
 {
   client_state &cs = get_client_state ();
-  int pid;
 
-  pid = strtol (own_buf + 8, NULL, 16);
-  if (pid != 0 && attach_inferior (pid) == 0)
+  int pid = strtol (own_buf + 8, NULL, 16);
+
+  try
     {
-      /* Don't report shared library events after attaching, even if
-	 some libraries are preloaded.  GDB will always poll the
-	 library list.  Avoids the "stopped by shared library event"
-	 notice on the GDB side.  */
-      current_process ()->dlls_changed = false;
-
-      if (non_stop)
+      if (attach_inferior (pid) == 0)
 	{
-	  /* In non-stop, we don't send a resume reply.  Stop events
-	     will follow up using the normal notification
-	     mechanism.  */
-	  write_ok (own_buf);
+	  /* Don't report shared library events after attaching, even if
+	     some libraries are preloaded.  GDB will always poll the
+	     library list.  Avoids the "stopped by shared library event"
+	     notice on the GDB side.  */
+	  current_process ()->dlls_changed = false;
+
+	  if (non_stop)
+	    {
+	      /* In non-stop, we don't send a resume reply.  Stop events
+		 will follow up using the normal notification
+		 mechanism.  */
+	      write_ok (own_buf);
+	    }
+	  else
+	    prepare_resume_reply (own_buf, cs.last_ptid, cs.last_status);
 	}
       else
-	prepare_resume_reply (own_buf, cs.last_ptid, cs.last_status);
+	{
+	  /* Not supported.  */
+	  own_buf[0] = 0;
+	}
     }
-  else
-    write_enn (own_buf);
+  catch (const gdb_exception_error &exception)
+    {
+      sprintf (own_buf, "E.%s", exception.what ());
+    }
 }
 
 /* Decode an argument from the vRun packet buffer.  PTR points to the
@@ -3428,7 +3428,15 @@ handle_v_run (char *own_buf)
   free_vector_argv (program_args);
   program_args = new_argv;
 
-  target_create_inferior (program_path.get (), program_args);
+  try
+    {
+      target_create_inferior (program_path.get (), program_args);
+    }
+  catch (const gdb_exception_error &exception)
+    {
+      sprintf (own_buf, "E.%s", exception.what ());
+      return;
+    }
 
   if (cs.last_status.kind () == TARGET_WAITKIND_STOPPED)
     {
@@ -4030,7 +4038,7 @@ test_memory_tagging_functions (void)
 /* Main function.  This is called by the real "main" function,
    wrapped in a TRY_CATCH that handles any uncaught exceptions.  */
 
-static void ATTRIBUTE_NORETURN
+[[noreturn]] static void
 captured_main (int argc, char *argv[])
 {
   int bad_attach;
@@ -4358,6 +4366,7 @@ captured_main (int argc, char *argv[])
       cs.hwbreak_feature = 0;
       cs.vCont_supported = 0;
       cs.memory_tagging_feature = false;
+      cs.error_message_supported = false;
 
       remote_open (port);
 

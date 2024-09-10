@@ -1,5 +1,5 @@
 /* Read coff symbol tables and convert to internal format, for GDB.
-   Copyright (C) 1987-2023 Free Software Foundation, Inc.
+   Copyright (C) 1987-2024 Free Software Foundation, Inc.
    Contributed by David D. Johnson, Brown University (ddj@cs.brown.edu).
 
    This file is part of GDB.
@@ -17,7 +17,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "event-top.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "demangle.h"
@@ -39,8 +39,6 @@
 #include "dwarf2/public.h"
 
 #include "coff-pe-read.h"
-
-#include "build-id.h"
 
 /* The objfile we are currently reading.  */
 
@@ -718,35 +716,19 @@ coff_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
 			       *info->stabsects,
 			       info->stabstrsect->filepos, stabstrsize);
     }
-  if (dwarf2_has_info (objfile, NULL))
+
+  if (dwarf2_initialize_objfile (objfile))
     {
-      /* DWARF2 sections.  */
-      dwarf2_initialize_objfile (objfile);
+      /* Nothing.  */
     }
 
   /* Try to add separate debug file if no symbols table found.   */
-  if (!objfile->has_partial_symbols ())
+  else if (!objfile->has_partial_symbols ()
+	   && objfile->separate_debug_objfile == NULL
+	   && objfile->separate_debug_objfile_backlink == NULL)
     {
-      deferred_warnings warnings;
-      std::string debugfile
-	= find_separate_debug_file_by_buildid (objfile, &warnings);
-
-      if (debugfile.empty ())
-	debugfile
-	  = find_separate_debug_file_by_debuglink (objfile, &warnings);
-
-      if (!debugfile.empty ())
-	{
-	  gdb_bfd_ref_ptr debug_bfd (symfile_bfd_open (debugfile.c_str ()));
-
-	  symbol_file_add_separate (debug_bfd, debugfile.c_str (),
-				    symfile_flags, objfile);
-	}
-      /* If all the methods to collect the debuginfo failed, print any
-	 warnings that were collected, this is a no-op if there are no
-	 warnings.  */
-      if (debugfile.empty ())
-	warnings.emit ();
+      if (objfile->find_and_add_separate_symbol_file (symfile_flags))
+	gdb_assert (objfile->separate_debug_objfile != nullptr);
     }
 }
 
@@ -914,7 +896,7 @@ coff_symtab_read (minimal_symbol_reader &reader,
 	     backtraces, so filter them out (from phdm@macqel.be).  */
 	  if (within_function)
 	    break;
-	  /* Fall through.  */
+	  [[fallthrough]];
 	case C_STAT:
 	case C_THUMBLABEL:
 	case C_THUMBSTAT:
@@ -952,7 +934,7 @@ coff_symtab_read (minimal_symbol_reader &reader,
 	       that look like this.  Ignore them.  */
 	    break;
 	  /* For static symbols that don't start with '.'...  */
-	  /* Fall through.  */
+	  [[fallthrough]];
 	case C_THUMBEXT:
 	case C_THUMBEXTFUNC:
 	case C_EXT:
@@ -1491,7 +1473,7 @@ patch_opaque_types (struct symtab *s)
 	 but search the whole chain, as there may be several syms
 	 from different files with the same name.  */
       if (real_sym->aclass () == LOC_TYPEDEF
-	  && real_sym->domain () == VAR_DOMAIN
+	  && real_sym->domain () == TYPE_DOMAIN
 	  && real_sym->type ()->code () == TYPE_CODE_PTR
 	  && real_sym->type ()->target_type ()->length () != 0)
 	{
@@ -1562,6 +1544,7 @@ process_coff_symbol (struct coff_symbol *cs,
 
   if (ISFCN (cs->c_type))
     {
+      sym->set_domain (FUNCTION_DOMAIN);
       sym->set_value_longest
 	(sym->value_longest () + objfile->text_section_offset ());
       sym->set_type
@@ -1644,7 +1627,7 @@ process_coff_symbol (struct coff_symbol *cs,
 
 	case C_TPDEF:
 	  sym->set_aclass_index (LOC_TYPEDEF);
-	  sym->set_domain (VAR_DOMAIN);
+	  sym->set_domain (TYPE_DOMAIN);
 
 	  /* If type has no name, give it one.  */
 	  if (sym->type ()->name () == 0)

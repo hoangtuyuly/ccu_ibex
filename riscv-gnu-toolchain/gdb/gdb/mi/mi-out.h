@@ -1,5 +1,5 @@
 /* MI Command Set - MI output generating routines for GDB.
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2024 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.
@@ -44,6 +44,9 @@ public:
   {
     return false;
   }
+
+  ui_file *current_stream () const override
+  { return m_streams.back (); }
 
 protected:
 

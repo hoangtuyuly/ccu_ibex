@@ -1,6 +1,6 @@
 /* Target-dependent code for the i386.
 
-   Copyright (C) 2001-2023 Free Software Foundation, Inc.
+   Copyright (C) 2001-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -227,10 +227,10 @@ struct i386_gdbarch_tdep : gdbarch_tdep_base
   CORE_ADDR sigtramp_end = 0;
 
   /* Detect sigtramp.  */
-  int (*sigtramp_p) (frame_info_ptr) = nullptr;
+  int (*sigtramp_p) (const frame_info_ptr &) = nullptr;
 
   /* Get address of sigcontext for sigtramp.  */
-  CORE_ADDR (*sigcontext_addr) (frame_info_ptr) = nullptr;
+  CORE_ADDR (*sigcontext_addr) (const frame_info_ptr &) = nullptr;
 
   /* Offset of registers in `struct sigcontext'.  */
   int *sc_reg_offset = 0;
@@ -295,7 +295,7 @@ enum i386_regnum
   I386_FS_REGNUM,		/* %fs */
   I386_GS_REGNUM,		/* %gs */
   I386_ST0_REGNUM,		/* %st(0) */
-  I386_MXCSR_REGNUM = 40,	/* %mxcsr */ 
+  I386_MXCSR_REGNUM = 40,	/* %mxcsr */
   I386_YMM0H_REGNUM,		/* %ymm0h */
   I386_YMM7H_REGNUM = I386_YMM0H_REGNUM + 7,
   I386_BND0R_REGNUM,
@@ -376,14 +376,13 @@ extern const char *i386_pseudo_register_name (struct gdbarch *gdbarch,
 extern struct type *i386_pseudo_register_type (struct gdbarch *gdbarch,
 					       int regnum);
 
-extern void i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
-						  readable_regcache *regcache,
-						  int regnum,
-						  struct value *result);
+extern value *i386_pseudo_register_read_value (gdbarch *gdbarch,
+					       const frame_info_ptr &next_frame,
+					       int regnum);
 
-extern void i386_pseudo_register_write (struct gdbarch *gdbarch,
-					struct regcache *regcache,
-					int regnum, const gdb_byte *buf);
+extern void i386_pseudo_register_write (gdbarch *gdbarch,
+					const frame_info_ptr &next_frame, int regnum,
+					gdb::array_view<const gdb_byte> buf);
 
 extern int i386_ax_pseudo_register_collect (struct gdbarch *gdbarch,
 					    struct agent_expr *ax,
@@ -399,7 +398,7 @@ extern int i386_ax_pseudo_register_collect (struct gdbarch *gdbarch,
 #define I386_MAX_INSN_LEN (16)
 
 /* Functions exported from i386-tdep.c.  */
-extern CORE_ADDR i386_pe_skip_trampoline_code (frame_info_ptr frame,
+extern CORE_ADDR i386_pe_skip_trampoline_code (const frame_info_ptr &frame,
 					       CORE_ADDR pc, char *name);
 extern CORE_ADDR i386_skip_main_prologue (struct gdbarch *gdbarch,
 					  CORE_ADDR pc);
@@ -418,7 +417,7 @@ extern CORE_ADDR i386_thiscall_push_dummy_call (struct gdbarch *gdbarch,
 						bool thiscall);
 
 /* Return whether the THIS_FRAME corresponds to a sigtramp routine.  */
-extern int i386_sigtramp_p (frame_info_ptr this_frame);
+extern int i386_sigtramp_p (const frame_info_ptr &this_frame);
 
 /* Return non-zero if REGNUM is a member of the specified group.  */
 extern int i386_register_reggroup_p (struct gdbarch *gdbarch, int regnum,

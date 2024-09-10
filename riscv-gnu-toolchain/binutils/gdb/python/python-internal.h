@@ -102,20 +102,31 @@
 
 /* Python supplies HAVE_LONG_LONG and some `long long' support when it
    is available.  These defines let us handle the differences more
-   cleanly.  */
-#ifdef HAVE_LONG_LONG
+   cleanly.
+
+   Starting with python 3.6, support for platforms without long long support
+   has been removed [1].  HAVE_LONG_LONG and PY_LONG_LONG are still defined,
+   but only for compatibility, so we no longer rely on them.
+
+   [1] https://github.com/python/cpython/issues/72148.  */
+#if PY_VERSION_HEX >= 0x03060000 || defined (HAVE_LONG_LONG)
 
 #define GDB_PY_LL_ARG "L"
 #define GDB_PY_LLU_ARG "K"
+#if PY_VERSION_HEX >= 0x03060000
+typedef long long gdb_py_longest;
+typedef unsigned long long gdb_py_ulongest;
+#else
 typedef PY_LONG_LONG gdb_py_longest;
 typedef unsigned PY_LONG_LONG gdb_py_ulongest;
+#endif
 #define gdb_py_long_as_ulongest PyLong_AsUnsignedLongLong
 #define gdb_py_long_as_long_and_overflow PyLong_AsLongLongAndOverflow
 
 #else /* HAVE_LONG_LONG */
 
-#define GDB_PY_LL_ARG "L"
-#define GDB_PY_LLU_ARG "K"
+#define GDB_PY_LL_ARG "l"
+#define GDB_PY_LLU_ARG "k"
 typedef long gdb_py_longest;
 typedef unsigned long gdb_py_ulongest;
 #define gdb_py_long_as_ulongest PyLong_AsUnsignedLong
@@ -134,26 +145,97 @@ typedef long Py_hash_t;
 #define PyMem_RawMalloc PyMem_Malloc
 #endif
 
-/* PyObject_CallMethod's 'method' and 'format' parameters were missing
-   the 'const' qualifier before Python 3.4.  Hence, we wrap the
-   function in our own version to avoid errors with string literals.
-   Note, this is a variadic template because PyObject_CallMethod is a
-   varargs function and Python doesn't have a "PyObject_VaCallMethod"
-   variant taking a va_list that we could defer to instead.  */
+/* A template variable holding the format character (as for
+   Py_BuildValue) for a given type.  */
+template<typename T>
+struct gdbpy_method_format {};
+
+template<>
+struct gdbpy_method_format<gdb_py_longest>
+{
+  static constexpr char format = GDB_PY_LL_ARG[0];
+};
+
+template<>
+struct gdbpy_method_format<gdb_py_ulongest>
+{
+  static constexpr char format = GDB_PY_LLU_ARG[0];
+};
+
+template<>
+struct gdbpy_method_format<int>
+{
+  static constexpr char format = 'i';
+};
+
+template<>
+struct gdbpy_method_format<unsigned>
+{
+  static constexpr char format = 'I';
+};
+
+/* A helper function to compute the PyObject_CallMethod /
+   Py_BuildValue format given the argument types.  */
 
 template<typename... Args>
-static inline PyObject *
-gdb_PyObject_CallMethod (PyObject *o, const char *method, const char *format,
-			 Args... args) /* ARI: editCase function */
+constexpr std::array<char, sizeof... (Args) + 1>
+gdbpy_make_fmt ()
 {
-  return PyObject_CallMethod (o,
-			      const_cast<char *> (method),
-			      const_cast<char *> (format),
-			      args...);
+  return { gdbpy_method_format<Args>::format..., '\0' };
 }
 
+/* Typesafe wrapper around PyObject_CallMethod.
+
+   This variant accepts no arguments.  */
+
+static inline gdbpy_ref<>
+gdbpy_call_method (PyObject *o, const char *method)
+{
+  /* PyObject_CallMethod's 'method' and 'format' parameters were missing the
+     'const' qualifier before Python 3.4.  */
+  return gdbpy_ref<> (PyObject_CallMethod (o,
+					   const_cast<char *> (method),
+					   nullptr));
+}
+
+/* Typesafe wrapper around PyObject_CallMethod.
+
+   This variant accepts any number of arguments and automatically
+   computes the format string, ensuring that format/argument
+   mismatches are impossible.  */
+
+template<typename Arg, typename... Args>
+static inline gdbpy_ref<>
+gdbpy_call_method (PyObject *o, const char *method,
+		   Arg arg, Args... args)
+{
+  constexpr const auto fmt = gdbpy_make_fmt<Arg, Args...> ();
+
+  /* PyObject_CallMethod's 'method' and 'format' parameters were missing the
+     'const' qualifier before Python 3.4.  */
+  return gdbpy_ref<> (PyObject_CallMethod (o,
+					   const_cast<char *> (method),
+					   const_cast<char *> (fmt.data ()),
+					   arg, args...));
+}
+
+/* An overload that takes a gdbpy_ref<> rather than a raw 'PyObject *'.  */
+
+template<typename... Args>
+static inline gdbpy_ref<>
+gdbpy_call_method (const gdbpy_ref<> &o, const char *method, Args... args)
+{
+  return gdbpy_call_method (o.get (), method, args...);
+}
+
+/* Poison PyObject_CallMethod.  The typesafe wrapper gdbpy_call_method should be
+   used instead.  */
 #undef PyObject_CallMethod
-#define PyObject_CallMethod gdb_PyObject_CallMethod
+#ifdef __GNUC__
+# pragma GCC poison PyObject_CallMethod
+#else
+# define PyObject_CallMethod POISONED_PyObject_CallMethod
+#endif
 
 /* The 'name' parameter of PyErr_NewException was missing the 'const'
    qualifier in Python <= 3.4.  Hence, we wrap it in a function to
@@ -384,7 +466,7 @@ extern enum ext_lang_rc gdbpy_apply_val_pretty_printer
    const struct language_defn *language);
 extern enum ext_lang_bt_status gdbpy_apply_frame_filter
   (const struct extension_language_defn *,
-   frame_info_ptr frame, frame_filter_flags flags,
+   const frame_info_ptr &frame, frame_filter_flags flags,
    enum ext_lang_frame_args args_type,
    struct ui_out *out, int frame_low, int frame_high);
 extern void gdbpy_preserve_values (const struct extension_language_defn *,
@@ -444,7 +526,7 @@ PyObject *block_to_block_object (const struct block *block,
 				 struct objfile *objfile);
 PyObject *value_to_value_object (struct value *v);
 PyObject *type_to_type_object (struct type *);
-PyObject *frame_info_to_frame_object (frame_info_ptr frame);
+PyObject *frame_info_to_frame_object (const frame_info_ptr &frame);
 PyObject *symtab_to_linetable_object (PyObject *symtab);
 gdbpy_ref<> pspace_to_pspace_object (struct program_space *);
 PyObject *pspy_get_printers (PyObject *, void *);
@@ -640,12 +722,18 @@ public:
 
   gdbpy_err_fetch ()
   {
+#if PY_VERSION_HEX < 0x030c0000
     PyObject *error_type, *error_value, *error_traceback;
 
     PyErr_Fetch (&error_type, &error_value, &error_traceback);
     m_error_type.reset (error_type);
     m_error_value.reset (error_value);
     m_error_traceback.reset (error_traceback);
+#else
+    /* PyErr_Fetch is deprecated in python 3.12, use PyErr_GetRaisedException
+       instead.  */
+    m_exc.reset (PyErr_GetRaisedException ());
+#endif
   }
 
   /* Call PyErr_Restore using the values stashed in this object.
@@ -654,9 +742,15 @@ public:
 
   void restore ()
   {
+#if PY_VERSION_HEX < 0x030c0000
     PyErr_Restore (m_error_type.release (),
 		   m_error_value.release (),
 		   m_error_traceback.release ());
+#else
+    /* PyErr_Restore is deprecated in python 3.12, use PyErr_SetRaisedException
+       instead.  */
+    PyErr_SetRaisedException (m_exc.release ());
+#endif
   }
 
   /* Return the string representation of the exception represented by
@@ -675,19 +769,54 @@ public:
 
   bool type_matches (PyObject *type) const
   {
-    return PyErr_GivenExceptionMatches (m_error_type.get (), type);
+    gdbpy_ref<> err_type = this->type ();
+    return PyErr_GivenExceptionMatches (err_type.get (), type);
   }
 
   /* Return a new reference to the exception value object.  */
 
-  gdbpy_ref<> value ()
+  gdbpy_ref<> value () const
   {
+#if PY_VERSION_HEX < 0x030c0000
+    if (!m_normalized)
+      {
+	PyObject *error_type, *error_value, *error_traceback;
+	error_type = m_error_type.release ();
+	error_value = m_error_value.release ();
+	error_traceback = m_error_traceback.release ();
+	PyErr_NormalizeException (&error_type, &error_value, &error_traceback);
+	m_error_type.reset (error_type);
+	m_error_value.reset (error_value);
+	m_error_traceback.reset (error_traceback);
+	m_normalized = true;
+      }
     return m_error_value;
+#else
+    return m_exc;
+#endif
+  }
+
+  /* Return a new reference to the exception type object.  */
+
+  gdbpy_ref<> type () const
+  {
+#if PY_VERSION_HEX < 0x030c0000
+    return m_error_type;
+#else
+    if (m_exc.get() == nullptr)
+      return nullptr;
+    return gdbpy_ref<>::new_reference ((PyObject *)Py_TYPE (m_exc.get ()));
+#endif
   }
 
 private:
 
-  gdbpy_ref<> m_error_type, m_error_value, m_error_traceback;
+#if PY_VERSION_HEX < 0x030c0000
+  mutable gdbpy_ref<> m_error_type, m_error_value, m_error_traceback;
+  mutable bool m_normalized = false;
+#else
+  gdbpy_ref<> m_exc;
+#endif
 };
 
 /* Called before entering the Python interpreter to install the
@@ -800,32 +929,26 @@ private:
   PyGILState_STATE m_state;
 };
 
-/* Use this after a TRY_EXCEPT to throw the appropriate Python
-   exception.  */
+/* Use this in a 'catch' block to convert the exception to a Python
+   exception and return nullptr.  */
 #define GDB_PY_HANDLE_EXCEPTION(Exception)	\
   do {						\
-    if (Exception.reason < 0)			\
-      {						\
-	gdbpy_convert_exception (Exception);	\
-	return NULL;				\
-      }						\
+    gdbpy_convert_exception (Exception);	\
+    return nullptr;				\
   } while (0)
 
-/* Use this after a TRY_EXCEPT to throw the appropriate Python
-   exception.  This macro is for use inside setter functions.  */
+/* Use this in a 'catch' block to convert the exception to a Python
+   exception and return -1.  */
 #define GDB_PY_SET_HANDLE_EXCEPTION(Exception)				\
     do {								\
-      if (Exception.reason < 0)						\
-	{								\
-	  gdbpy_convert_exception (Exception);				\
-	  return -1;							\
-	}								\
+      gdbpy_convert_exception (Exception);				\
+      return -1;							\
     } while (0)
 
 int gdbpy_print_python_errors_p (void);
 void gdbpy_print_stack (void);
 void gdbpy_print_stack_or_quit ();
-void gdbpy_handle_exception () ATTRIBUTE_NORETURN;
+[[noreturn]] void gdbpy_handle_exception ();
 
 /* A wrapper around calling 'error'.  Prefixes the error message with an
    'Error occurred in Python' string.  Use this in C++ code if we spot
@@ -835,8 +958,7 @@ void gdbpy_handle_exception () ATTRIBUTE_NORETURN;
 
    This always calls error, and never returns.  */
 
-void gdbpy_error (const char *fmt, ...)
-  ATTRIBUTE_NORETURN ATTRIBUTE_PRINTF (1, 2);
+[[noreturn]] void gdbpy_error (const char *fmt, ...) ATTRIBUTE_PRINTF (1, 2);
 
 gdbpy_ref<> python_string_to_unicode (PyObject *obj);
 gdb::unique_xmalloc_ptr<char> unicode_to_target_string (PyObject *unicode_str);

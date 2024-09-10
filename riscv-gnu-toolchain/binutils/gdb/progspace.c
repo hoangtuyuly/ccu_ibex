@@ -17,10 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "objfiles.h"
-#include "arch-utils.h"
 #include "gdbcore.h"
 #include "solib.h"
 #include "solist.h"
@@ -117,7 +115,7 @@ program_space::~program_space ()
   set_current_program_space (this);
 
   breakpoint_program_space_exit (this);
-  no_shared_libraries (NULL, 0);
+  no_shared_libraries (this);
   free_all_objfiles ();
   /* Defer breakpoint re-set because we don't want to create new
      locations for this pspace which we're tearing down.  */
@@ -130,7 +128,7 @@ void
 program_space::free_all_objfiles ()
 {
   /* Any objfile reference would become stale.  */
-  for (const shobj &so : current_program_space->solibs ())
+  for (const solib &so : this->solibs ())
     gdb_assert (so.objfile == NULL);
 
   while (!objfiles_list.empty ())
@@ -211,7 +209,7 @@ program_space::exec_close ()
 
       remove_target_sections (saved_ebfd);
 
-      exec_filename.reset (nullptr);
+      m_exec_filename.reset ();
     }
 }
 
@@ -225,8 +223,8 @@ clone_program_space (struct program_space *dest, struct program_space *src)
 
   set_current_program_space (dest);
 
-  if (src->exec_filename != NULL)
-    exec_file_attach (src->exec_filename.get (), 0);
+  if (src->exec_filename () != nullptr)
+    exec_file_attach (src->exec_filename (), 0);
 
   if (src->symfile_object_file != NULL)
     symbol_file_add_main (objfile_name (src->symfile_object_file),
@@ -279,8 +277,8 @@ print_program_space (struct ui_out *uiout, int requested)
       if (requested != -1 && pspace->num != requested)
 	continue;
 
-      if (pspace->exec_filename != nullptr)
-	longest_exec_name = std::max (strlen (pspace->exec_filename.get ()),
+      if (pspace->exec_filename () != nullptr)
+	longest_exec_name = std::max (strlen (pspace->exec_filename ()),
 				      longest_exec_name);
 
       ++count;
@@ -312,8 +310,8 @@ print_program_space (struct ui_out *uiout, int requested)
 
       uiout->field_signed ("id", pspace->num);
 
-      if (pspace->exec_filename != nullptr)
-	uiout->field_string ("exec", pspace->exec_filename.get (),
+      if (pspace->exec_filename () != nullptr)
+	uiout->field_string ("exec", pspace->exec_filename (),
 			     file_name_style.style ());
       else
 	uiout->field_skip ("exec");
@@ -436,10 +434,10 @@ program_space::clear_solib_cache ()
   deleted_solibs.clear ();
 }
 
-
+/* See progspace.h.  */
 
 void
-initialize_progspace (void)
+initialize_progspace ()
 {
   add_cmd ("program-spaces", class_maintenance,
 	   maintenance_info_program_spaces_command,

@@ -16,13 +16,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "server.h"
 #include "i387-fp.h"
 #include "gdbsupport/x86-xstate.h"
 #include "nat/x86-xstate.h"
 
 /* Default to SSE.  */
-static unsigned long long x86_xcr0 = X86_XSTATE_SSE_MASK;
+static uint64_t x86_xcr0 = X86_XSTATE_SSE_MASK;
 
 static const int num_mpx_bnd_registers = 4;
 static const int num_mpx_cfg_registers = 2;
@@ -945,9 +944,8 @@ i387_xsave_to_cache (struct regcache *regcache, const void *buf)
 
 /* See i387-fp.h.  */
 
-void
-i387_set_xsave_mask (uint64_t xcr0, int len)
+std::pair<uint64_t *, x86_xsave_layout *>
+i387_get_xsave_storage ()
 {
-  x86_xcr0 = xcr0;
-  xsave_layout = x86_fetch_xsave_layout (xcr0, len);
+  return { &x86_xcr0, &xsave_layout };
 }

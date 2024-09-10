@@ -1,6 +1,6 @@
 /* Python interface to breakpoints
 
-   Copyright (C) 2008-2023 Free Software Foundation, Inc.
+   Copyright (C) 2008-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,13 +17,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "value.h"
 #include "python-internal.h"
 #include "python.h"
 #include "charset.h"
 #include "breakpoint.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbthread.h"
 #include "observable.h"
 #include "cli/cli-script.h"
@@ -589,7 +588,6 @@ bppy_set_condition (PyObject *self, PyObject *newvalue, void *closure)
   gdb::unique_xmalloc_ptr<char> exp_holder;
   const char *exp = NULL;
   gdbpy_breakpoint_object *self_bp = (gdbpy_breakpoint_object *) self;
-  struct gdb_exception except;
 
   BPPY_SET_REQUIRE_VALID (self_bp);
 
@@ -615,10 +613,8 @@ bppy_set_condition (PyObject *self, PyObject *newvalue, void *closure)
     }
   catch (gdb_exception &ex)
     {
-      except = std::move (ex);
+      GDB_PY_SET_HANDLE_EXCEPTION (ex);
     }
-
-  GDB_PY_SET_HANDLE_EXCEPTION (except);
 
   return 0;
 }
@@ -657,7 +653,6 @@ static int
 bppy_set_commands (PyObject *self, PyObject *newvalue, void *closure)
 {
   gdbpy_breakpoint_object *self_bp = (gdbpy_breakpoint_object *) self;
-  struct gdb_exception except;
 
   BPPY_SET_REQUIRE_VALID (self_bp);
 
@@ -684,10 +679,8 @@ bppy_set_commands (PyObject *self, PyObject *newvalue, void *closure)
     }
   catch (gdb_exception &ex)
     {
-      except = std::move (ex);
+      GDB_PY_SET_HANDLE_EXCEPTION (ex);
     }
-
-  GDB_PY_SET_HANDLE_EXCEPTION (except);
 
   return 0;
 }
@@ -1010,12 +1003,12 @@ bppy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 		std::unique_ptr<explicit_location_spec> explicit_loc
 		  (new explicit_location_spec ());
 
-		explicit_loc->source_filename
-		  = source != nullptr ? xstrdup (source) : nullptr;
-		explicit_loc->function_name
-		  = function != nullptr ? xstrdup (function) : nullptr;
-		explicit_loc->label_name
-		  = label != nullptr ? xstrdup (label) : nullptr;
+		if (source != nullptr)
+		  explicit_loc->source_filename = make_unique_xstrdup (source);
+		if (function != nullptr)
+		  explicit_loc->function_name = make_unique_xstrdup (function);
+		if (label != nullptr)
+		  explicit_loc->label_name = make_unique_xstrdup (label);
 
 		if (line != NULL)
 		  explicit_loc->line_offset
@@ -1750,8 +1743,8 @@ bplocpy_repr (PyObject *py_self)
 {
   const auto self = (gdbpy_breakpoint_location_object *) py_self;
   if (self->owner == nullptr || self->owner->bp == nullptr
-    || self->owner->bp != self->bp_loc->owner)
-    return PyUnicode_FromFormat ("<%s (invalid)>", Py_TYPE (self)->tp_name);
+      || self->owner->bp != self->bp_loc->owner)
+    return gdb_py_invalid_object_repr (py_self);
 
   const auto enabled = self->bp_loc->enabled ? "enabled" : "disabled";
 

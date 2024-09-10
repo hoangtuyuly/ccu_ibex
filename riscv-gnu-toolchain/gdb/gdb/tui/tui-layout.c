@@ -1,6 +1,6 @@
 /* TUI layout window management.
 
-   Copyright (C) 1998-2023 Free Software Foundation, Inc.
+   Copyright (C) 1998-2024 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -19,7 +19,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "arch-utils.h"
 #include "command.h"
 #include "symtab.h"
@@ -35,7 +34,7 @@
 #include "tui/tui-command.h"
 #include "tui/tui-data.h"
 #include "tui/tui-wingeneral.h"
-#include "tui/tui-stack.h"
+#include "tui/tui-status.h"
 #include "tui/tui-regs.h"
 #include "tui/tui-win.h"
 #include "tui/tui-winsource.h"
@@ -44,8 +43,6 @@
 #include "tui/tui-source.h"
 #include "gdb_curses.h"
 #include "gdbsupport/gdb-safe-ctype.h"
-
-static void extract_display_start_addr (struct gdbarch **, CORE_ADDR *);
 
 /* The layouts.  */
 static std::vector<std::unique_ptr<tui_layout_split>> layouts;
@@ -69,11 +66,6 @@ std::vector<tui_win_info *> tui_windows;
 void
 tui_apply_current_layout (bool preserve_cmd_win_size_p)
 {
-  struct gdbarch *gdbarch;
-  CORE_ADDR addr;
-
-  extract_display_start_addr (&gdbarch, &addr);
-
   for (tui_win_info *win_info : tui_windows)
     win_info->make_visible (false);
 
@@ -108,10 +100,6 @@ tui_apply_current_layout (bool preserve_cmd_win_size_p)
 
   /* Replace the global list of active windows.  */
   tui_windows = std::move (new_tui_windows);
-
-  if (gdbarch == nullptr && TUI_DISASM_WIN != nullptr)
-    tui_get_begin_asm_address (&gdbarch, &addr);
-  tui_update_source_windows_with_addr (gdbarch, addr);
 }
 
 /* See tui-layout.  */
@@ -284,20 +272,6 @@ tui_remove_some_windows ()
   tui_apply_current_layout (true);
 }
 
-static void
-extract_display_start_addr (struct gdbarch **gdbarch_p, CORE_ADDR *addr_p)
-{
-  if (TUI_SRC_WIN != nullptr)
-    TUI_SRC_WIN->display_start_addr (gdbarch_p, addr_p);
-  else if (TUI_DISASM_WIN != nullptr)
-    TUI_DISASM_WIN->display_start_addr (gdbarch_p, addr_p);
-  else
-    {
-      *gdbarch_p = nullptr;
-      *addr_p = 0;
-    }
-}
-
 void
 tui_win_info::resize (int height_, int width_,
 		      int origin_x_, int origin_y_)
@@ -331,7 +305,7 @@ tui_win_info::resize (int height_, int width_,
 
 
 
-/* Helper function to create one of the built-in (non-locator)
+/* Helper function to create one of the built-in (non-status)
    windows.  */
 
 template<enum tui_win_type V, class T>
@@ -394,7 +368,7 @@ initialize_known_windows ()
 						    tui_disasm_window>);
   known_window_types.emplace (STATUS_NAME,
 			       make_standard_window<STATUS_WIN,
-						    tui_locator_window>);
+						    tui_status_window>);
 }
 
 /* See tui-layout.h.  */
@@ -452,6 +426,13 @@ tui_layout_window::apply (int x_, int y_, int width_, int height_,
   width = width_;
   height = height_;
   gdb_assert (m_window != nullptr);
+  if (width == 0 || height == 0)
+    {
+      /* The window was dropped, so it's going to be deleted, reset the
+	 soon to be dangling pointer.  */
+      m_window = nullptr;
+      return;
+    }
   m_window->resize (height, width, x, y);
 }
 
@@ -819,7 +800,7 @@ tui_layout_split::apply (int x_, int y_, int width_, int height_,
   };
 
   /* This is given a value only if we fix the size of the cmd window.  */
-  gdb::optional<old_size_info> old_cmd_info;
+  std::optional<old_size_info> old_cmd_info;
 
   std::vector<size_info> info (m_splits.size ());
 
@@ -833,6 +814,7 @@ tui_layout_split::apply (int x_, int y_, int width_, int height_,
   int available_size = m_vertical ? height : width;
   int last_index = -1;
   int total_weight = 0;
+  int prev = -1;
   for (int i = 0; i < m_splits.size (); ++i)
     {
       bool cmd_win_already_exists = TUI_CMD_WIN != nullptr;
@@ -864,20 +846,36 @@ tui_layout_split::apply (int x_, int y_, int width_, int height_,
 	  info[i].max_size = info[i].min_size;
 	}
 
+      if (info[i].min_size > info[i].max_size)
+	{
+	  /* There is not enough room for this window, drop it.  */
+	  info[i].min_size = 0;
+	  info[i].max_size = 0;
+	  continue;
+	}
+
+      /* Two adjacent boxed windows will share a border.  */
+      if (prev != -1
+	  && m_splits[prev].layout->last_edge_has_border_p ()
+	  && m_splits[i].layout->first_edge_has_border_p ())
+	info[i].share_box = true;
+
       if (info[i].min_size == info[i].max_size)
-	available_size -= info[i].min_size;
+	{
+	  available_size -= info[i].min_size;
+	  if (info[i].share_box)
+	    {
+	      /* A shared border makes a bit more size available.  */
+	      ++available_size;
+	    }
+	}
       else
 	{
 	  last_index = i;
 	  total_weight += m_splits[i].weight;
 	}
 
-      /* Two adjacent boxed windows will share a border, making a bit
-	 more size available.  */
-      if (i > 0
-	  && m_splits[i - 1].layout->last_edge_has_border_p ()
-	  && m_splits[i].layout->first_edge_has_border_p ())
-	info[i].share_box = true;
+      prev = i;
     }
 
   /* If last_index is set then we have a window that is not of a fixed
@@ -907,7 +905,10 @@ tui_layout_split::apply (int x_, int y_, int width_, int height_,
 	     this function.  */
 	  used_size += info[i].size;
 	  if (info[i].share_box)
-	    --used_size;
+	    {
+	      /* A shared border makes a bit more size available.  */
+	      --used_size;
+	    }
 	}
       else
 	info[i].size = info[i].min_size;

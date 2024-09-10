@@ -1,5 +1,5 @@
 /* CRIS base simulator support code
-   Copyright (C) 2004-2023 Free Software Foundation, Inc.
+   Copyright (C) 2004-2024 Free Software Foundation, Inc.
    Contributed by Axis Communications.
 
 This file is part of the GNU simulators.
@@ -66,6 +66,10 @@ MY (f_break_handler) (SIM_CPU *cpu, USI breaknum, USI pc)
       /* Re-use the Linux exit call.  */
       cris_break_13_handler (cpu, /* TARGET_SYS_exit */ 1, 0,
 			     0, 0, 0, 0, 0, pc);
+
+      /* This shouldn't be reached, but we can't mark break 13 as noreturn
+	 since there are some calls which should return.  */
+      ATTRIBUTE_FALLTHROUGH;
 
     default:
       abort ();

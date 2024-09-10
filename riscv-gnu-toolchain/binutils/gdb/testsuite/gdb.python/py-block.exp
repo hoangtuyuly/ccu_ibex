@@ -44,9 +44,9 @@ gdb_test "python print (block.function)" "None" "first anonymous block"
 gdb_test "python print (block.start)" "${decimal}" "check start not None"
 gdb_test "python print (block.end)" "${decimal}" "check end not None"
 gdb_test "python print (block\['f'\].name == 'f')" "True" "check variable access"
-gdb_test "python print (block\['nonexistent'\])" ".*KeyError: 'nonexistent'.*" \
+gdb_test "python print (block\['nonexistent'\])" ".*KeyError.*: 'nonexistent'.*" \
          "check nonexistent variable"
-gdb_test "python print (block\[42\])" ".*TypeError: Expected a string.*" \
+gdb_test "python print (block\[42\])" ".*TypeError.*: Expected a string.*" \
          "check non-string key"
 
 # Test global/static blocks
@@ -119,8 +119,12 @@ gdb_test "python print (block.is_valid())" "True" \
          "Check block validity"
 gdb_test "python print (block_iter.is_valid())" "True" \
          "Check block_iter validity"
+gdb_test_no_output "python x = hash(block)" "block is hashable"
+gdb_test "python print (type (x))" "<class 'int'>" "block hash is integer"
 gdb_unload
 gdb_test "python print (block.is_valid())" "False" \
          "Check block validity after unload"
 gdb_test "python print (block_iter.is_valid())" "False" \
          "Check block_iter validity after unload"
+gdb_test "python print (hash (block) == x)" "True" \
+    "block hash did not change"

@@ -1,3 +1,143 @@
+2024-02-19 Will Hawkins  <hawkinsw@obs.cr>
+
+	* config/tc-bpf.c (parse_expression): Change switch to if so that
+	error condition is handled.
+	* testsuite/gas/bpf/indcall-badoperand.d: New test.
+	* testsuite/gas/bpf/indcall-badoperand.l: Likewise.
+	* testsuite/gas/bpf/indcall-badoperand.s: Likewise.
+	* testsuite/gas/bpf/bpf.exp: Invoke new test.
+
+2024-02-19  Jose E. Marchesi  <jose.marchesi@oracle.com>
+
+	* config/tc-bpf.c (md_assemble): Fix to take into account that
+	parse_expression can return NULL.
+	(PARSE_ERROR): Avoid passing invalid length to parse_error.
+
+2024-02-15 Will Hawkins  <hawkinsw@obs.cr>
+
+	* testsuite/gas/bpf/indcall-1-pseudoc.d: Do not select xbpf cpu
+	version.
+	* testsuite/gas/bpf/indcall-1.d: Likewise.
+
+2024-02-14  Yuriy Kolerov  <ykolerov@synopsys.com>
+
+	* config/tc-arc.c (is_br_jmp_insn_p): Add check against "DBNZ".
+
+2024-01-29  Jose E. Marchesi  <jose.marchesi@oracle.com>
+
+	* doc/c-bpf.texi (BPF Instructions): There is no indirect 64-bit
+	load instruction.
+	(BPF Instructions): There is no absolute 64-bit load instruction.
+	* testsuite/gas/bpf/mem.s: Update test accordingly.
+	* testsuite/gas/bpf/mem-be-pseudoc.d: Likewise.
+	* testsuite/gas/bpf/mem-be.d: Likewise.
+	* testsuite/gas/bpf/mem-pseudoc.d: Likewise.
+	* testsuite/gas/bpf/mem-pseudoc.s: Likewise.
+	* testsuite/gas/bpf/mem.d: Likewise.
+	* testsuite/gas/bpf/mem.s: Likewise.
+
+2024-01-15  Nick Clifton  <nickc@redhat.com>
+
+	* configure: Regenerate.
+	* po/POTFILES.in: Regenerate.
+	* po/gas.pot: Regenerate.
+
+2024-01-15  Nick Clifton  <nickc@redhat.com>
+
+	* 2.42 branch point.
+
+2023-11-30  Jose E. Marchesi  <jose.marchesi@oracle.com>
+
+	* config/tc-bpf.h (DOUBLESLASH_LINE_COMMENTS): Define.
+	* testsuite/gas/bpf/comments.s: New file.
+	* testsuite/gas/bpf/comments.d: Likewise.
+	* testsuite/gas/bpf/comments-pseudoc.d: Likewise.
+	* testsuite/gas/bpf/comments-pseudoc.s: Likewise.
+	* testsuite/gas/bpf/bpf.exp: Run comments and comments-pseudoc.
+	* doc/c-bpf.texi (BPF Special Characters): Document // comments.
+	* NEWS: Update.
+
+2023-11-28  Jose E. Marchesi  <jose.marchesi@oracle.com>
+
+	* NEWS: Add entry about change of comment syntax in the BPF
+	assembler.
+
+2023-11-28  Jose E. Marchesi  <jose.marchesi@oracle.com>
+
+	* config/tc-bpf.c: Semicolon does not start a comment, but
+	separates multiple commands on a single line.
+	* testsuite/gas/bpf/alu-pseudoc.s: Adapt test accordingly.
+	* testsuite/gas/bpf/spacing-pseudoc.s: Likewise.
+	* testsuite/gas/bpf/offset16-overflow.s: Likewise.
+	* testsuite/gas/bpf/jump-relax-jump.s: Likewise.
+	* testsuite/gas/bpf/jump-relax-ja.s: Likewise.
+	* testsuite/gas/bpf/imm32-overflow.s: Likewise.
+	* testsuite/gas/bpf/disp32-overflow.s: Likewise.
+	* testsuite/gas/bpf/disp16-overflow-relax.s: Likewise.
+	* testsuite/gas/bpf/disp16-overflow.s: Likewise.
+	* doc/c-bpf.texi (BPF Special Characters): Update.
+
+2023-11-23  YunQiang Su  <yunqiang.su@cipunited.com>
+
+	* testsuite/gas/mips/elf-rel.s: Use addiu in place of addi.
+	* testsuite/gas/mips/elf-rel.d: Update expected output.
+	* testsuite/gas/mips/elfel-rel.d: Likewise.
+
+2023-11-23  YunQiang Su  <yunqiang.su@cipunited.com>
+
+	* testsuite/gas/mips/branch-section-1.d: Allow for r6 encoding of
+	JR instruction.
+	* testsuite/gas/mips/branch-weak-1.d: Likewise.
+	* testsuite/gas/mips/option-pic-1.d: Likewise.
+	* testsuite/gas/mips/option-pic-relax-0.d: Likewise.
+	* testsuite/gas/mips/option-pic-relax-1.d: Likewise.
+
+2023-11-18  Jose E. Marchesi  <jemarch@gnu.org>
+
+	* config/tc-bpf.c (parse_bpf_register): Move before
+	bpf_parse_name.
+	(bpf_parse_name): Do not allow using symbols that are also
+	register names as operands in pseudo-c syntax.
+	* testsuite/gas/bpf/regs-for-symbols-pseudoc.d: New file.
+	* testsuite/gas/bpf/regs-for-symbols-pseudoc.s: Likewise.
+	* testsuite/gas/bpf/regs-for-symbols-pseudoc.l: Likewise.
+	* doc/c-bpf.texi (BPF Registers): Document that it is not possible
+	to refer to register names as symbols in instruction operands.
+
+2023-11-15  YunQiang Su  <yunqiang.su@cipunited.com>
+
+	* testsuite/gas/mips/mips.exp (mips_arch_create): Add "--defsym
+	r6=" to as_flags for r6 targets.
+
+2023-11-15  Arsen Arsenović  <arsen@aarsen.me>
+
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
+	* po/Make-in ($(srcdir)/$(PACKAGE).pot): Output to a .pot
+	temporary file, to suppress xgettext checking charset names.
+
+2023-11-15  YunQiang Su  <yunqiang.su@cipunited.com>
+
+	* testsuite/gas/elf/elf.exp (section2): Add -mpdr option to
+	assembler command line for mips-irix targets.
+	* testsuite/gas/mips/elf-rel26.d: Add -mpdr command line option.
+	* testsuite/gas/mips/mips16-e.d: Likewise.
+	* testsuite/gas/mips/mips16-f.d: Likewise.
+	* testsuite/gas/mips/mips16-hilo-match.d: Likewise.
+	* testsuite/gas/mips/mips16-e-irix.d: Likewise.
+	* testsuite/gas/mips/call-nonpic-1.d: Adjust regexp to allow for
+	mips-irix targets.
+	* testsuite/gas/mips/irix-no-pdr.d: New test file.
+	* testsuite/gas/mips/mips.exp: Run new test for mips-irix
+	targets.
+
+2023-10-30  Jose E. Marchesi  <jose.marchesi@oracle.com>
+
+	* testsuite/gas/bpf/alu-pseudoc.s: Add test to make sure C-like
+	suffix `ll' is not interpreted as lddw syntax.
+	* testsuite/gas/bpf/alu-pseudoc.d: Update expected results.
+	* testsuite/gas/bpf/alu-be-pseudoc.d: Likewise.
+
 2023-10-02  Nick Clifton  <nickc@redhat.com>
 
 	PR 30861
@@ -3254,7 +3394,7 @@
 
 For older changes see ChangeLog-2020
 
-Copyright (C) 2021-2023 Free Software Foundation, Inc.
+Copyright (C) 2021-2024 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

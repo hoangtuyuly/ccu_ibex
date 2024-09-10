@@ -1,5 +1,5 @@
 /* Support for the generic parts of most COFF variants, for BFD.
-   Copyright (C) 1990-2023 Free Software Foundation, Inc.
+   Copyright (C) 1990-2024 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -2235,6 +2235,12 @@ coff_set_arch_mach_hook (bfd *abfd, void * filehdr)
       machine = internal_f->f_flags & F_LOONGARCH64_ARCHITECTURE_MASK;
       break;
 #endif
+#ifdef RISCV64MAGIC
+    case RISCV64MAGIC:
+      arch = bfd_arch_riscv;
+      machine = bfd_mach_riscv64;
+      break;
+#endif
 #ifdef Z80MAGIC
     case Z80MAGIC:
       arch = bfd_arch_z80;
@@ -2803,6 +2809,12 @@ coff_set_flags (bfd * abfd,
 #ifdef LOONGARCH64MAGIC
     case bfd_arch_loongarch:
       * magicp = LOONGARCH64MAGIC;
+      return true;
+#endif
+
+#ifdef RISCV64MAGIC
+    case bfd_arch_riscv:
+      * magicp = RISCV64MAGIC;
       return true;
 #endif
 
@@ -4002,7 +4014,7 @@ coff_write_object_contents (bfd * abfd)
     internal_f.f_flags |= IMAGE_FILE_LARGE_ADDRESS_AWARE;
 #endif
 
-#if !defined(COFF_WITH_pex64) && !defined(COFF_WITH_peAArch64) && !defined(COFF_WITH_peLoongArch64)
+#if !defined(COFF_WITH_pex64) && !defined(COFF_WITH_peAArch64) && !defined(COFF_WITH_peLoongArch64) && !defined (COFF_WITH_peRiscV64)
 #ifdef COFF_WITH_PE
   internal_f.f_flags |= IMAGE_FILE_32BIT_MACHINE;
 #else
@@ -4057,6 +4069,11 @@ coff_write_object_contents (bfd * abfd)
 #endif
 
 #if defined(LOONGARCH64)
+#define __A_MAGIC_SET__
+    internal_a.magic = ZMAGIC;
+#endif
+
+#if defined(RISCV64)
 #define __A_MAGIC_SET__
     internal_a.magic = ZMAGIC;
 #endif
@@ -5950,6 +5967,8 @@ static const bfd_coff_backend_data bigobj_swap_table =
 #ifndef coff_bfd_copy_private_header_data
 #define coff_bfd_copy_private_header_data   _bfd_generic_bfd_copy_private_header_data
 #endif
+
+#define coff_init_private_section_data	    _bfd_generic_init_private_section_data
 
 #ifndef coff_bfd_copy_private_section_data
 #define coff_bfd_copy_private_section_data  _bfd_generic_bfd_copy_private_section_data

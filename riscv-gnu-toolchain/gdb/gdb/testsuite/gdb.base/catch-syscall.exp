@@ -1,4 +1,4 @@
-#   Copyright 1997-2023 Free Software Foundation, Inc.
+#   Copyright 1997-2024 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -752,7 +752,7 @@ proc setup_all_syscalls {} {
 		pass $gdb_test_name
 		set ok 1
 	    }
-	    -re -wrap "Catchpoint $decimal \\(call to syscall (pipe2|$SYS_pipe)\\).*" {
+	    -re -wrap "Catchpoint $decimal \\(call to syscall (pipe2|$SYS_pipe2)\\).*" {
 		lappend all_syscalls pipe2
 		pass $gdb_test_name
 		set ok 1

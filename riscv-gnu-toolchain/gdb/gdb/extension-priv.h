@@ -1,7 +1,7 @@
 /* Private implementation details of interface between gdb and its
    extension languages.
 
-   Copyright (C) 2014-2023 Free Software Foundation, Inc.
+   Copyright (C) 2014-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -119,6 +119,10 @@ struct extension_language_ops
      This method is required.  */
   int (*initialized) (const struct extension_language_defn *);
 
+  /* Called just before GDB exits.  This shuts down the extension
+     language.  This can be NULL.  */
+  void (*shutdown) (const struct extension_language_defn *);
+
   /* Process a sequence of commands embedded in GDB's own scripting language.
      E.g.,
      python
@@ -180,7 +184,7 @@ struct extension_language_ops
      or SCR_BT_COMPLETED on success.  */
   enum ext_lang_bt_status (*apply_frame_filter)
     (const struct extension_language_defn *,
-     frame_info_ptr frame, frame_filter_flags flags,
+     const frame_info_ptr &frame, frame_filter_flags flags,
      enum ext_lang_frame_args args_type,
      struct ui_out *out, int frame_low, int frame_high);
 
@@ -225,9 +229,9 @@ struct extension_language_ops
      This is called by GDB's SIGINT handler and must be async-safe.  */
   void (*set_quit_flag) (const struct extension_language_defn *);
 
-  /* Return non-zero if a SIGINT has occurred.
+  /* Return true if a SIGINT has occurred.
      This is expected to also clear the indicator.  */
-  int (*check_quit_flag) (const struct extension_language_defn *);
+  bool (*check_quit_flag) (const struct extension_language_defn *);
 
   /* Called before gdb prints its prompt, giving extension languages an
      opportunity to change it with set_prompt.
@@ -256,13 +260,13 @@ struct extension_language_ops
      CONTENTS is the contents of the file.  This should either return
      colorized (using ANSI terminal escapes) version of the contents,
      or an empty option.  */
-  gdb::optional<std::string> (*colorize) (const std::string &name,
+  std::optional<std::string> (*colorize) (const std::string &name,
 					  const std::string &contents);
 
   /* Colorize a single line of disassembler output, CONTENT.  This should
      either return colorized (using ANSI terminal escapes) version of the
      contents, or an empty optional.  */
-  gdb::optional<std::string> (*colorize_disasm) (const std::string &content,
+  std::optional<std::string> (*colorize_disasm) (const std::string &content,
 						 gdbarch *gdbarch);
 
   /* Print a single instruction from ADDRESS in architecture GDBARCH.  INFO
@@ -276,9 +280,16 @@ struct extension_language_ops
      If no instruction can be disassembled then return an empty value and
      other extension languages will get a chance to perform the
      disassembly.  */
-  gdb::optional<int> (*print_insn) (struct gdbarch *gdbarch,
+  std::optional<int> (*print_insn) (struct gdbarch *gdbarch,
 				    CORE_ADDR address,
 				    struct disassemble_info *info);
+
+  /* Give extension languages a chance to deal with missing debug
+     information.  OBJFILE is the file for which GDB was unable to find
+     any debug information.  */
+  ext_lang_missing_debuginfo_result
+    (*handle_missing_debuginfo) (const struct extension_language_defn *,
+				 struct objfile *objfile);
 };
 
 /* State necessary to restore a signal handler to its previous value.  */

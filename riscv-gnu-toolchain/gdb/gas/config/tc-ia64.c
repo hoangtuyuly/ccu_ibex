@@ -1,5 +1,5 @@
 /* tc-ia64.c -- Assembler for the HP/Intel IA-64 architecture.
-   Copyright (C) 1998-2023 Free Software Foundation, Inc.
+   Copyright (C) 1998-2024 Free Software Foundation, Inc.
    Contributed by David Mosberger-Tang <davidm@hpl.hp.com>
 
    This file is part of GAS, the GNU Assembler.
@@ -68,8 +68,7 @@
 enum special_section
   {
     /* IA-64 ABI section pseudo-ops.  */
-    SPECIAL_SECTION_BSS = 0,
-    SPECIAL_SECTION_SBSS,
+    SPECIAL_SECTION_SBSS = 0,
     SPECIAL_SECTION_SDATA,
     SPECIAL_SECTION_RODATA,
     SPECIAL_SECTION_COMMENT,
@@ -645,7 +644,7 @@ static const bfd_vma nop[IA64_NUM_UNITS] =
    habit of setting temporary sentinels.  */
 static char special_section_name[][20] =
   {
-    {".bss"}, {".sbss"}, {".sdata"}, {".rodata"}, {".comment"},
+    {".sbss"}, {".sdata"}, {".rodata"}, {".comment"},
     {".IA_64.unwind"}, {".IA_64.unwind_info"},
     {".init_array"}, {".fini_array"}
   };
@@ -1139,7 +1138,7 @@ obj_elf_vms_common (int ignore ATTRIBUTE_UNUSED)
   obj_elf_change_section
     (sec_name, SHT_NOBITS,
      SHF_ALLOC | SHF_WRITE | SHF_IA_64_VMS_OVERLAID | SHF_IA_64_VMS_GLOBAL,
-     0, NULL, 1, 0);
+     0, NULL, true);
 
   S_SET_VALUE (symbolP, 0);
   S_SET_SIZE (symbolP, size);
@@ -3172,7 +3171,7 @@ dot_loc (int x)
   dwarf2_directive_loc (x);
 }
 
-/* .sbss, .bss etc. are macros that expand into ".section SECNAME".  */
+/* .sbss, .srodata etc. are macros that expand into ".section SECNAME".  */
 static void
 dot_special_section (int which)
 {
@@ -5201,7 +5200,6 @@ const pseudo_typeS md_pseudo_table[] =
     { "radix", dot_radix, 0 },
     { "lcomm", s_lcomm_bytes, 1 },
     { "loc", dot_loc, 0 },
-    { "bss", dot_special_section, SPECIAL_SECTION_BSS },
     { "sbss", dot_special_section, SPECIAL_SECTION_SBSS },
     { "sdata", dot_special_section, SPECIAL_SECTION_SDATA },
     { "rodata", dot_special_section, SPECIAL_SECTION_RODATA },

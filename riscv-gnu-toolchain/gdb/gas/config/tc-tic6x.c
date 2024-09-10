@@ -1,5 +1,5 @@
 /* TI C6X assembler.
-   Copyright (C) 2010-2023 Free Software Foundation, Inc.
+   Copyright (C) 2010-2024 Free Software Foundation, Inc.
    Contributed by Joseph Myers <joseph@codesourcery.com>
    		  Bernd Schmidt  <bernds@codesourcery.com>
 
@@ -4662,7 +4662,7 @@ tic6x_start_unwind_section (const segT text_seg, int idx)
     }
 
   obj_elf_change_section (sec_name, type, flags, 0, &match,
-			  linkonce, 0);
+			  linkonce);
 
   /* Set the section link for index tables.  */
   if (idx)

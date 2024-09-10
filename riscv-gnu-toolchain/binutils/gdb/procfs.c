@@ -20,13 +20,13 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "inferior.h"
 #include "infrun.h"
 #include "target.h"
 #include "gdbcore.h"
 #include "elf-bfd.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbthread.h"
 #include "regcache.h"
 #include "inf-child.h"
@@ -2760,6 +2760,9 @@ procfs_target::create_inferior (const char *exec_file,
 				const std::string &allargs,
 				char **env, int from_tty)
 {
+  if (exec_file == nullptr)
+    no_executable_specified_error ();
+
   const char *shell_file = get_shell ();
   char *tryname;
   int pid;
@@ -3577,11 +3580,12 @@ procfs_target::make_corefile_notes (bfd *obfd, int *note_size)
   gdb::unique_xmalloc_ptr<char> note_data;
   enum gdb_signal stop_signal;
 
-  if (get_exec_file (0))
+  if (const auto exec_filename = current_program_space->exec_filename ();
+      exec_filename != nullptr)
     {
-      strncpy (fname, lbasename (get_exec_file (0)), sizeof (fname));
+      strncpy (fname, lbasename (exec_filename), sizeof (fname));
       fname[sizeof (fname) - 1] = 0;
-      strncpy (psargs, get_exec_file (0), sizeof (psargs));
+      strncpy (psargs, exec_filename, sizeof (psargs));
       psargs[sizeof (psargs) - 1] = 0;
 
       const std::string &inf_args = current_inferior ()->args ();

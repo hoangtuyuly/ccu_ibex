@@ -18,7 +18,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "server.h"
 #include "regcache.h"
 #include "gdbsupport/fileio.h"
 #include "mem-break.h"
@@ -502,7 +501,7 @@ create_process (const char *program, char *args,
 			/* current directory */
 			(inferior_cwd.empty ()
 			 ? NULL
-			 : gdb_tilde_expand (inferior_cwd.c_str ()).c_str()),
+			 : gdb_tilde_expand (inferior_cwd).c_str()),
 			get_client_state ().disable_randomization,
 			&si,               /* start info */
 			pi);               /* proc info */

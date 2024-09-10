@@ -1,6 +1,6 @@
 \input texinfo
 @setfilename ld.info
-@c Copyright (C) 1991-2023 Free Software Foundation, Inc.
+@c Copyright (C) 1991-2024 Free Software Foundation, Inc.
 @syncodeindex ky cp
 @c man begin INCLUDE
 @include configdoc.texi
@@ -57,7 +57,7 @@ This file documents the @sc{gnu} linker LD
 @end ifset
 version @value{VERSION}.
 
-Copyright @copyright{} 1991-2023 Free Software Foundation, Inc.
+Copyright @copyright{} 1991-2024 Free Software Foundation, Inc.
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3
@@ -94,7 +94,7 @@ section entitled ``GNU Free Documentation License''.
 
 @vskip 0pt plus 1filll
 @c man begin COPYRIGHT
-Copyright @copyright{} 1991-2023 Free Software Foundation, Inc.
+Copyright @copyright{} 1991-2024 Free Software Foundation, Inc.
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3
@@ -127,6 +127,7 @@ in the section entitled ``GNU Free Documentation License''.
 * Invocation::                  Invocation
 * Scripts::                     Linker Scripts
 * Plugins::                     Linker Plugins
+* Special Sections::            Special Sections
 @ifset GENERIC
 * Machine Dependent::           Machine Dependent Features
 @end ifset
@@ -301,6 +302,7 @@ and the script command language.  If @emph{no} binary input files at all
 are specified, the linker does not produce any output, and issues the
 message @samp{No input files}.
 
+@anchor{unrecognised-input-files}
 If the linker cannot recognize the format of an object file, it will
 assume that it is a linker script.  A script specified in this way
 augments the main linker script used for the link (either the default
@@ -757,6 +759,7 @@ behaviour of the AIX linker.
 @kindex --library-path=@var{dir}
 @item -L @var{searchdir}
 @itemx --library-path=@var{searchdir}
+@anchor{-L}
 Add path @var{searchdir} to the list of paths that @command{ld} will search
 for archive libraries and @command{ld} control scripts.  You may use this
 option any number of times.  The directories are searched in the order
@@ -920,6 +923,17 @@ Updated property 0xc0010001 (0x1) to merge foo.o (0x1) and bar.o (0x1)
 This indicates that property 0xc0010001 value is updated to 0x1 in output
 when merging properties in  @file{foo.o}, whose 0xc0010001 property value
 is 0x1, and @file{bar.o}, whose 0xc0010001 property value is 0x1.
+
+@item
+On some ELF targets, a list of fixups inserted by @option{--relax}
+
+@smallexample
+foo.o: Adjusting branch at 0x00000008 towards "far" in section .text
+@end smallexample
+
+This indicates that the branch at 0x00000008 in foo.o, targeting
+the symbol "far" in section .text, has been replaced by a trampoline.
+
 @end itemize
 
 @cindex link map discarded
@@ -1128,6 +1142,10 @@ Omit debugger symbol information (but not all symbols) from the output file.
 Omit (or do not omit) global symbols defined in discarded sections.
 Enabled by default.
 
+@kindex -plugin-save-temps
+@item -plugin-save-temps
+Store the plugin ``temporary'' intermediate files permanently.
+
 @kindex -t
 @kindex --trace
 @cindex input files, displaying
@@ -1146,18 +1164,32 @@ a linker bug report.
 @itemx --script=@var{scriptfile}
 Use @var{scriptfile} as the linker script.  This script replaces
 @command{ld}'s default linker script (rather than adding to it),
-unless the script contains @code{INSERT}, so
-@var{commandfile} must specify everything necessary to describe the
-output file.  @xref{Scripts}.  If @var{scriptfile} does not exist in
-the current directory, @code{ld} looks for it in the directories
-specified by any preceding @samp{-L} options.  Multiple @samp{-T}
-options accumulate.
+unless the script contains @code{INSERT}, so @var{commandfile} must
+specify everything necessary to describe the output file.
+@xref{Scripts}.
+
+If @var{scriptfile} does not exist in the current directory, @code{ld}
+looks for it in the directories specified by any preceding @samp{-L}
+options.
+
+Command line options that appear before the @option{-T} option can
+affect the script, but command line options that appear after it do
+not.
+
+Multiple @samp{-T} options will accumulate if they are augmenting the
+current script, otherwise the last, non-augmenting, @option{-T} option
+will be used.
+
+There are other ways of specifying linker scripts.  See
+@xref{--default-script}, @xref{--section-ordering-file}, and
+@xref{unrecognised-input-files}.
 
 @kindex -dT @var{script}
 @kindex --default-script=@var{script}
 @cindex script files
 @item -dT @var{scriptfile}
 @itemx --default-script=@var{scriptfile}
+@anchor{--default-script}
 Use @var{scriptfile} as the default linker script.  @xref{Scripts}.
 
 This option is similar to the @option{--script} option except that
@@ -2282,12 +2314,13 @@ the i386 PE and ELF targetted ports of the linker.
 @item -pie
 @itemx --pic-executable
 @cindex position independent executables
-Create a position independent executable.  This is currently only supported on
-ELF platforms.  Position independent executables are similar to shared
-libraries in that they are relocated by the dynamic linker to the virtual
-address the OS chooses for them (which can vary between invocations).  Like
-normal dynamically linked executables they can be executed and symbols
-defined in the executable cannot be overridden by shared libraries.
+Create a position independent executable.  This is currently only
+supported on ELF platforms.  Position independent executables are
+relocated by the dynamic linker to the virtual address the OS chooses
+for them, which can vary between invocations.  They are marked ET_DYN
+in the ELF file header, but differ from shared libraries in a number
+of ways.  In particular, defined symbols in a PIE by default can not
+be overridden by another object as they can be in a shared library.
 
 @kindex -no-pie
 @item -no-pie
@@ -2410,11 +2443,11 @@ of the input files.
 When the linker encounters such a dependency when doing a non-shared,
 non-relocatable link, it will automatically try to locate the required
 shared library and include it in the link, if it is not included
-explicitly.  In such a case, the @option{-rpath-link} option
-specifies the first set of directories to search.  The
-@option{-rpath-link} option may specify a sequence of directory names
-either by specifying a list of names separated by colons, or by
-appearing multiple times.
+explicitly.  In such a case, several directories are searched as
+described below.  The @option{-rpath-link} option specifies the first
+set of directories to search.  This option may specify a sequence of
+directory names either by providing a list of names separated by
+colons, or by appearing multiple times.
 
 The tokens @var{$ORIGIN} and @var{$LIB} can appear in these search
 directories.  They will be replaced by the full path to the directory
@@ -2426,13 +2459,18 @@ The alternative form of these tokens - @var{$@{ORIGIN@}} and
 @var{$@{LIB@}} can also be used.  The token @var{$PLATFORM} is not
 supported.
 
-This option should be used with caution as it overrides the search path
-that may have been hard compiled into a shared library. In such a case it
-is possible to use unintentionally a different search path than the
-runtime linker would do.
+The @option{--rpath-link} option should be used with caution as it
+overrides the search path that may have been hard compiled into a
+shared library.  In such a case it is possible to unintentionally use
+a different search path than the runtime linker would have used.
 
-The linker uses the following search paths to locate required shared
-libraries:
+When additional shared libraries are required, the linker will search
+directories in the order listed below in order to find them.  Note
+however that this only applies to additional libraries needed to
+satisfy already included shared libraries.  It does @emph{not}
+apply to libraries that are included via the @option{-l} command line
+option.  Searches for @option{-l} libraries are only conducted in
+directories specified by the @option{-L} option (@pxref{-L}).
 
 @enumerate
 @item
@@ -2497,6 +2535,51 @@ If the required shared library is not found, the linker will issue a
 warning and continue with the link.
 
 @end ifset
+
+@kindex --section-ordering-file
+@item --section-ordering-file=@var{script}
+@anchor{--section-ordering-file}
+This option is used to augment the current linker script with
+additional mapping of input sections to output sections.  This file
+must use the same syntax for @code{SECTIONS} as is used in normal
+linker scripts, but it should not do anything other than place input
+sections into output sections. @pxref{SECTIONS}
+
+A second constraint on the section ordering script is that it can only
+reference output sections that are already defined by whichever linker
+script is currently in use.  (Ie the default linker script or a script
+specified on the command line).  The benefit of the section ordering
+script however is that the input sections are mapped to the start of
+the output sections, so that they can ensure the ordering of sections
+in the output section.  For example, imagine that the default linker
+script looks like this:
+
+@smallexample
+SECTIONS @{
+  .text : @{ *(.text.hot) ; *(.text .text.*) @}
+  .data : @{ *(.data.big) ; *(.data .data.*) @}
+  @}
+@end smallexample
+
+Then if a section ordering file like this is used:
+
+@smallexample
+  .text : @{ *(.text.first) ; *(.text.z*) @}
+  .data : @{ foo.o(.data.first) ; *(.data.small) @}
+@end smallexample
+
+This would be equivalent to a linker script like this:
+
+@smallexample
+SECTIONS @{
+  .text : @{ *(.text.first) ; *(.text.z*) ; *(.text.hot) ; *(.text .text.*) @}
+  .data : @{ foo.o(.data.first) ; *(.data.small) ; *(.data.big) ; *(.data .data.*) @}
+  @}
+@end smallexample
+
+The advantage of the section ordering file is that it can be used to
+order those sections that matter to the user without having to worry
+about any other sections, or memory regions, or anything else.
 
 @kindex -shared
 @kindex -Bshareable
@@ -2611,7 +2694,10 @@ Same as @option{--section-start}, with @code{.bss}, @code{.data} or
 @item -Ttext-segment=@var{org}
 @cindex text segment origin, cmd line
 When creating an ELF executable, it will set the address of the first
-byte of the text segment.
+byte of the text segment.  Note that when @option{-pie} is used with
+@option{-Ttext-segment=@var{org}}, the output executable is marked
+ET_EXEC so that the address of the first byte of the text segment will
+be guaranteed to be @var{org} at run time.
 
 @kindex -Trodata-segment=@var{org}
 @item -Trodata-segment=@var{org}
@@ -2773,28 +2859,51 @@ detect the use of global constructors.
 @cindex warnings, on executable stack
 @cindex executable stack, warnings on
 @item --warn-execstack
+@itemx --warn-execstack-objects
 @itemx --no-warn-execstack
-On ELF platforms this option controls how the linker generates warning
-messages when it creates an output file with an executable stack.  By
-default the linker will not warn if the @command{-z execstack} command
-line option has been used, but this behaviour can be overridden by the
-@option{--warn-execstack} option.
+On ELF platforms the linker may generate warning messages if it is
+asked to create an output file that contains an executable stack.
+There are three possible states:
+@enumerate
+@item
+Do not generate any warnings.
+@item
+Always generate warnings, even if the executable stack is requested
+via the @option{-z execstack} command line option.
+@item
+Only generate a warning if an object file requests an executable
+stack, but not if the @option{-z execstack} option is used.
+@end enumerate
 
-On the other hand the linker will normally warn if the stack is made
-executable because one or more of the input files need an execuable
-stack and neither of the @command{-z execstack} or @command{-z
-noexecstack} command line options have been specified.  This warning
-can be disabled via the @command{--no-warn-execstack} option.
+The default state depends upon how the linker was configured when it
+was built.  The @option{--no-warn-execstack} option always puts the
+linker into the no-warnings state.  The @option{--warn-execstack}
+option puts the linker into the warn-always state.  The
+@option{--warn-execstack-objects} option puts the linker into the
+warn-for-object-files-only state.
 
-Note: ELF format input files specify that they need an executable
+Note: ELF format input files can specify that they need an executable
 stack by having a @var{.note.GNU-stack} section with the executable
 bit set in its section flags.  They can specify that they do not need
-an executable stack by having that section, but without the executable
-flag bit set.  If an input file does not have a @var{.note.GNU-stack}
-section present then the default behaviour is target specific.  For
-some targets, then absence of such a section implies that an
-executable stack @emph{is} required.  This is often a problem for hand
-crafted assembler files.
+an executable stack by having the same section, but without the
+executable flag bit set.  If an input file does not have a
+@var{.note.GNU-stack} section then the default behaviour is target
+specific.  For some targets, then absence of such a section implies
+that an executable stack @emph{is} required.  This is often a problem
+for hand crafted assembler files.
+
+@kindex --error-execstack
+@item --error-execstack
+@itemx --no-error-execstack
+If the linker is going to generate a warning message about an
+executable stack then the @option{--error-execstack} option will
+instead change that warning into an error.  Note - this option does
+not change the linker's execstack warning generation state.  Use
+@option{--warn-execstack} or @option{--warn-execstack-objects} to set
+a specific warning state.
+
+The @option{--no-error-execstack} option will restore the default
+behaviour of generating warning messages.
 
 @kindex --warn-multiple-gp
 @item --warn-multiple-gp
@@ -2832,6 +2941,20 @@ not it has the read and/or write flags set.
 These warnings are enabled by default.  They can be disabled via the
 @option{--no-warn-rwx-segments} option and re-enabled via the
 @option{--warn-rwx-segments} option.
+
+@kindex --error-rwx-segments
+@item --error-rwx-segments
+@itemx --no-error-rwx-segments
+If the linker is going to generate a warning message about an
+executable, writeable segment, or an executable TLS segment, then the
+@option{--error-rwx-segments} option will turn this warning into an
+error instead.  The @option{--no-error-rwx-segments} option will
+restore the default behaviour of just generating a warning message.
+
+Note - the @option{--error-rwx-segments} option does not by itself
+turn on warnings about these segments.  These warnings are either
+enabled by default, if the linker was configured that way, or via the
+@option{--warn-rwx-segments} command line option.
 
 @kindex --warn-section-align
 @cindex warnings, on section alignment
@@ -3067,7 +3190,7 @@ specification.  For more information see:
 https://systemd.io/ELF_PACKAGE_METADATA/
 If the JSON argument is missing/empty then this will disable the
 creation of the metadata note, if one had been enabled by an earlier
-occurrence of the --package-metdata option.
+occurrence of the --package-metadata option.
 If the linker has been built with libjansson, then the JSON string
 will be validated.
 @end table
@@ -5263,6 +5386,35 @@ the init_priority.  In @code{.ctors.NNNNN} and @code{.dtors.NNNNN},
 @cindex SORT
 @code{SORT} is an alias for @code{SORT_BY_NAME}.
 
+@cindex REVERSE
+@code{REVERSE} indicates that the sorting should be reversed.  If used
+on its own then @code{REVERSE} implies @code{SORT_BY_NAME}, otherwise
+it reverses the enclosed @code{SORT..} command.  Note - reverse
+sorting of alignment is not currently supported.
+
+Note - the sorting commands only accept a single wildcard pattern.  So
+for example the following will not work:
+@smallexample
+  *(REVERSE(.text* .init*))
+@end smallexample
+To resolve this problem list the patterns individually, like this:
+@smallexample
+  *(REVERSE(.text*))
+  *(REVERSE(.init*))
+@end smallexample
+
+Note - you can put the @code{EXCLUDE_FILE} command inside a sorting
+command, but not the other way around.  So for example:
+@smallexample
+  *(SORT_BY_NAME(EXCLUDE_FILE(foo) .text*))
+@end smallexample
+will work, but:
+@smallexample
+  *(EXCLUDE_FILE(foo) SORT_BY_NAME(.text*))
+@end smallexample
+will not.
+
+
 When there are nested section sorting commands in linker script, there
 can be at most 1 level of nesting for section sorting commands.
 
@@ -5281,6 +5433,15 @@ treated the same as @code{SORT_BY_NAME} (wildcard section pattern).
 @item
 @code{SORT_BY_ALIGNMENT} (@code{SORT_BY_ALIGNMENT} (wildcard section pattern))
 is treated the same as @code{SORT_BY_ALIGNMENT} (wildcard section pattern).
+@item
+@code{SORT_BY_NAME} (@code{REVERSE} (wildcard section pattern))
+reverse sorts by name.
+@item
+@code{REVERSE} (@code{SORT_BY_NAME} (wildcard section pattern))
+reverse sorts by name.
+@item
+@code{SORT_BY_INIT_PRIORITY} (@code{REVERSE} (wildcard section pattern))
+reverse sorts by init priority.
 @item
 All other nested section sorting commands are invalid.
 @end enumerate
@@ -5514,12 +5675,42 @@ entire section.  If both are used, the @code{FILL} command takes
 precedence.  @xref{Output Section Fill}, for details on the fill
 expression.
 
+Note - normally the value of @code{expression} is zero extended to 4
+bytes when used to fill gaps.  Thus @samp{FILL(144)} will fill a
+region with repeats of the pattern @samp{0 0 0 144}.  The value is
+treated as a big-endian number, so for example
+@samp{FILL(22 * 256 + 23)} will fill the region with repeats of the
+pattern @samp{0 0 22 23}.  If the expression results in a value with
+more than 4 significant bytes only the least 4 bytes of the value will
+be used.
+
+The above rules do not apply when the @code{expression} is a simple
+hexadecimal number.  In this case zero extension is not performed and
+all bytes are significant.  So @samp{FILL(0x90)} will fill a region with
+repeats of @samp{0x90} with no zero bytes, and @samp{FILL(0x9192)}
+will fill the region with repeats of @samp{0x91 0x92}.  Zero bytes
+in a hexadecimal expression are significant even at the start, so
+@samp{FILL(0x0090)} will fill a region with repeats of @samp{0x00 0x90}.
+
+Hexadecimal numbers can be longer than 4 bytes, and all of the bytes
+are significant, so @samp{FILL(0x123456789a)} will fill a region with
+repeats of the 5 byte sequence @samp{0x12 0x34 0x56 0x78 0x9a}.
+Excess bytes in a hexadecimal value beyond the size of a region will 
+be silently ignored.
+
+The above only applies to hexadecimal numbers specified as
+@samp{0x[0-9][a-f][A-F]}.  Hexadecimal numbers specified with a
+@samp{$} prefix, or a @samp{h}, @samp{H}, @samp{x} or @samp{X} suffix
+will follow the normal fill value rules.  This also applies to
+expressions that involve hexadecimal numbers, and hexadecimal numbers
+that have a magnitude suffix.
+
 @kindex LINKER_VERSION
 @cindex LINKER_VERSION
-Inserts a string containing the version of the linker at the current
-point.  Note - by default this directive is disabled and will do
-nothing.  It only becomes active if the
-@option{--enable-linker-version} command line option is used.
+The @code{LINKER_VERSION} command inserts a string containing the
+version of the linker at the current point.  Note - by default this
+directive is disabled and will do nothing.  It only becomes active if
+the @option{--enable-linker-version} command line option is used.
 
 Built-in linker scripts for ELF based targets already include this
 directive in their @samp{.comment} section.
@@ -5928,7 +6119,15 @@ an arbitrarily long sequence of hex digits can be used to specify the
 fill pattern;  Leading zeros become part of the pattern too.  For all
 other cases, including extra parentheses or a unary @code{+}, the fill
 pattern is the four least significant bytes of the value of the
-expression.  In all cases, the number is big-endian.
+expression.  If the value is less than four bytes in size then it will
+be zero extended to four bytes.  In all cases, the number is big-endian.
+
+@smallexample
+Fill Value     Fill Pattern
+0x90           90 90 90 90
+0x0090         00 90 00 90
+144            00 00 00 90
+@end smallexample
 
 You can also change the fill value with a @code{FILL} command in the
 output section commands; (@pxref{Output Section Data}).
@@ -7400,6 +7599,51 @@ the @samp{__.LIBDEP} member of @file{libssl.a} would contain
 @smallexample
 -L/usr/local/lib -lcrypto
 @end smallexample
+
+@node Special Sections
+@chapter Special Sections
+When linking ELF format object files @command{ld} treats some sections
+in a special, non standard manner.  This part of the manual describes
+these sections.
+
+@table @gcctabopt
+@item .gnu.warning
+The contents of any section with this name are assumed to be an ascii
+format warning message.  The contents will be displayed to the user if
+the sections appears in any input file, but the section will not be
+copied into the output image.  If the @option{--fatal-warnings} option
+is enabled then the warnings - if any are encountered - will also stop
+the link from completing.
+
+Note - the @samp{.gnu.warning} section is not subject to linker
+garbage collection or orphan handling.
+
+@item .gnu.warning.@var{SYM}
+The contents of any section whoes name starts with the prefix
+@samp{.gnu.warning.} and then finishes with the name of a symbol is
+treated in a similar fashion to the @samp{.gnu.warning} section, but
+only if the named symbol is referenced.  So for example the contents
+of a section called @samp{.gnu.warning.foo} will be displayed as
+warning message if, and only if, the symbol @samp{foo} is referenced
+by one or more of the input files.  This includes object files pulled
+in from static libraries, shared objects needed to complete the link
+and so on.
+
+Note - because these warning messages are generated before the linker
+performs garbage collection (if enabled) it is possible for a warning
+to be displayed for a symbol that is later removed and then never
+appears in the final output.
+
+@item .note.gnu.property
+When the linker combines sections of this name it will merge them
+together according to various rules encoded into the notes
+themselves.  Therefore the contents of the output .note.gnu.property
+section may not correspond to a simple concatenation of the input
+sections.  If the @option{-Map} option has been used to request a
+linker map then details of any property merging will be included in
+the map.
+
+@end table
 
 @ifset GENERIC
 @node Machine Dependent

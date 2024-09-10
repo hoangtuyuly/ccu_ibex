@@ -3,7 +3,7 @@
    Run "make headers" in your build bfd/ to regenerate.  */
 
 /* BFD COFF object file private structure.
-   Copyright (C) 1990-2023 Free Software Foundation, Inc.
+   Copyright (C) 1990-2024 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -638,9 +638,6 @@ extern bool bfd_coff_gc_sections
   (bfd *, struct bfd_link_info *);
 extern const char *bfd_coff_group_name
   (bfd *, const asection *);
-
-#define coff_get_section_contents_in_window \
-  _bfd_generic_get_section_contents_in_window
 
 /* Functions in xcofflink.c.  */
 

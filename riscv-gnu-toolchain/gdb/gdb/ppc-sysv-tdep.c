@@ -1,7 +1,7 @@
 /* Target-dependent code for PowerPC systems using the SVR4 ABI
    for GDB, the GNU debugger.
 
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,7 +18,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "language.h"
 #include "gdbcore.h"
 #include "inferior.h"
@@ -1127,7 +1127,11 @@ ppc64_aggregate_candidate (struct type *type,
 
 	  if (!get_array_bounds (type, &low_bound, &high_bound))
 	    return -1;
-	  count *= high_bound - low_bound;
+
+	  LONGEST nr_array_elements = (low_bound > high_bound
+				       ? 0
+				       : (high_bound - low_bound + 1));
+	  count *= nr_array_elements;
 
 	  /* There must be no padding.  */
 	  if (count == 0)
@@ -2159,7 +2163,8 @@ ppc64_sysv_abi_return_value (struct gdbarch *gdbarch, struct value *function,
 }
 
 CORE_ADDR
-ppc_sysv_get_return_buf_addr (struct type *val_type, frame_info_ptr cur_frame)
+ppc_sysv_get_return_buf_addr (struct type *val_type,
+			      const frame_info_ptr &cur_frame)
 {
   /* The PowerPC ABI specifies aggregates that are not returned by value
      are returned in a storage buffer provided by the caller.  The

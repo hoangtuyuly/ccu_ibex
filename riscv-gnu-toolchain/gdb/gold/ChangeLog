@@ -1,3 +1,27 @@
+2024-01-15  Nick Clifton  <nickc@redhat.com>
+
+	* po/gold.pot: Regenerate.
+
+2024-01-15  Nick Clifton  <nickc@redhat.com>
+
+	* 2.42 branch point.
+
+2023-11-17  YunQiang Su  <yunqiang.su@cipunited.com>
+
+	* configure.tgt (mips targets): Set targ_extra_size=64.
+
+2023-11-15  Arsen Arsenović  <arsen@aarsen.me>
+
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
+	* po/Make-in ($(srcdir)/$(PACKAGE).pot): Output to a .pot
+	temporary file, to suppress xgettext checking charset names.
+
+2023-11-10  YunQiang Su  <yunqiang.su@cipunited.com>
+
+	* configure.tgt (mips targets): Set targ_machine to EM_MIPS for
+	little endian mips targets.
+
 2023-09-05  Roland McGrath  <mcgrathr@google.com>
 
 	The std::basic_string template type is only specified for
@@ -277,7 +301,7 @@
 
 For older changes see ChangeLog-2020
 
-Copyright (C) 2021-2023 Free Software Foundation, Inc.
+Copyright (C) 2021-2024 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

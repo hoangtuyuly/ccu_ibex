@@ -1,5 +1,5 @@
 /* bfd back-end for HP PA-RISC SOM objects.
-   Copyright (C) 1990-2023 Free Software Foundation, Inc.
+   Copyright (C) 1990-2024 Free Software Foundation, Inc.
 
    Contributed by the Center for Software Science at the
    University of Utah.
@@ -5146,28 +5146,30 @@ som_set_reloc_info (unsigned char *fixup,
 		     section contents.  */
 		  rptr->addend = var ('V');
 
-		  if (rptr->addend == 0 && !section->contents)
-		    {
-		      /* Got to read the damn contents first.  We don't
-			 bother saving the contents (yet).  Add it one
-			 day if the need arises.  */
-		      bfd_byte *contents;
-		      if (!bfd_malloc_and_get_section (section->owner, section,
-						       &contents))
-			{
-			  free (contents);
-			  return (unsigned) -1;
-			}
-		      section->contents = contents;
-		      deallocate_contents = 1;
-		    }
 		  if (rptr->addend == 0
-		      && offset - var ('L') <= section->size
-		      && section->size - (offset - var ('L')) >= 4)
-		    rptr->addend = bfd_get_32 (section->owner,
-					       (section->contents
-						+ offset - var ('L')));
-
+		      && (section->flags & SEC_HAS_CONTENTS) != 0)
+		    {
+		      if (!section->contents)
+			{
+			  /* Got to read the damn contents first.  We don't
+			     bother saving the contents (yet).  Add it one
+			     day if the need arises.  */
+			  bfd_byte *contents;
+			  if (!bfd_malloc_and_get_section (section->owner,
+							   section, &contents))
+			    {
+			      free (contents);
+			      return (unsigned) -1;
+			    }
+			  section->contents = contents;
+			  deallocate_contents = 1;
+			}
+		      if (offset - var ('L') <= section->size
+			  && section->size - (offset - var ('L')) >= 4)
+			rptr->addend = bfd_get_32 (section->owner,
+						   (section->contents
+						    + offset - var ('L')));
+		    }
 		}
 	      else
 		rptr->addend = var ('V');
@@ -6760,7 +6762,6 @@ som_bfd_link_split_section (bfd *abfd ATTRIBUTE_UNUSED, asection *sec)
 #define som_bfd_make_debug_symbol		_bfd_nosymbols_bfd_make_debug_symbol
 #define som_read_minisymbols			_bfd_generic_read_minisymbols
 #define som_minisymbol_to_symbol		_bfd_generic_minisymbol_to_symbol
-#define som_get_section_contents_in_window	_bfd_generic_get_section_contents_in_window
 #define som_bfd_get_relocated_section_contents	bfd_generic_get_relocated_section_contents
 #define som_bfd_relax_section			bfd_generic_relax_section
 #define som_bfd_link_hash_table_create		_bfd_generic_link_hash_table_create
@@ -6780,6 +6781,7 @@ som_bfd_link_split_section (bfd *abfd ATTRIBUTE_UNUSED, asection *sec)
 #define som_bfd_link_hide_symbol		_bfd_generic_link_hide_symbol
 #define som_bfd_define_start_stop		bfd_generic_define_start_stop
 #define som_bfd_merge_private_bfd_data		_bfd_generic_bfd_merge_private_bfd_data
+#define som_init_private_section_data		_bfd_generic_init_private_section_data
 #define som_bfd_copy_private_header_data	_bfd_generic_bfd_copy_private_header_data
 #define som_bfd_set_private_flags		_bfd_generic_bfd_set_private_flags
 #define som_find_inliner_info			_bfd_nosymbols_find_inliner_info

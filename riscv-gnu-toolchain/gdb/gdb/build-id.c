@@ -1,6 +1,6 @@
 /* build-id-related functions.
 
-   Copyright (C) 1991-2023 Free Software Foundation, Inc.
+   Copyright (C) 1991-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "bfd.h"
 #include "gdb_bfd.h"
 #include "build-id.h"
@@ -61,12 +60,13 @@ build_id_verify (bfd *abfd, size_t check_len, const bfd_byte *check)
   found = build_id_bfd_get (abfd);
 
   if (found == NULL)
-    warning (_("File \"%s\" has no build-id, file skipped"),
-	     bfd_get_filename (abfd));
-  else if (found->size != check_len
-	   || memcmp (found->data, check, found->size) != 0)
-    warning (_("File \"%s\" has a different build-id, file skipped"),
-	     bfd_get_filename (abfd));
+    warning (_("File \"%ps\" has no build-id, file skipped"),
+	     styled_string (file_name_style.style (),
+			    bfd_get_filename (abfd)));
+  else if (!build_id_equal (found, check_len, check))
+    warning (_("File \"%ps\" has a different build-id, file skipped"),
+	     styled_string (file_name_style.style (),
+			    bfd_get_filename (abfd)));
   else
     retval = 1;
 
@@ -90,7 +90,7 @@ build_id_to_debug_bfd_1 (const std::string &link, size_t build_id_len,
   /* lrealpath() is expensive even for the usually non-existent files.  */
   gdb::unique_xmalloc_ptr<char> filename_holder;
   const char *filename = nullptr;
-  if (startswith (link, TARGET_SYSROOT_PREFIX))
+  if (is_target_filename (link))
     filename = link.c_str ();
   else if (access (link.c_str (), F_OK) == 0)
     {

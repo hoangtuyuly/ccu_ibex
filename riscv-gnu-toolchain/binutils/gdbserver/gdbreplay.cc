@@ -17,8 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "gdbsupport/common-defs.h"
-
 #undef PACKAGE
 #undef PACKAGE_NAME
 #undef PACKAGE_VERSION
@@ -423,7 +421,7 @@ gdbreplay_usage (FILE *stream)
 /* Main function.  This is called by the real "main" function,
    wrapped in a TRY_CATCH that handles any uncaught exceptions.  */
 
-static void ATTRIBUTE_NORETURN
+[[noreturn]] static void
 captured_main (int argc, char *argv[])
 {
   FILE *fp;

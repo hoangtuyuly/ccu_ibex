@@ -1,6 +1,6 @@
 /* Generic symbol file reading for the GNU debugger, GDB.
 
-   Copyright (C) 1990-2023 Free Software Foundation, Inc.
+   Copyright (C) 1990-2024 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
@@ -19,9 +19,9 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "arch-utils.h"
 #include "bfdlink.h"
+#include "extract-store-integer.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "gdbcore.h"
@@ -31,7 +31,7 @@
 #include "symfile.h"
 #include "objfiles.h"
 #include "source.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "breakpoint.h"
 #include "language.h"
 #include "complaints.h"
@@ -216,7 +216,7 @@ find_lowest_section (asection *sect, asection **lowest)
    an existing section table.  */
 
 section_addr_info
-build_section_addr_info_from_section_table (const target_section_table &table)
+build_section_addr_info_from_section_table (const std::vector<target_section> &table)
 {
   section_addr_info sap;
 
@@ -790,8 +790,6 @@ read_symbols (struct objfile *objfile, symfile_add_flags add_flags)
 				    add_flags | SYMFILE_NOT_FILENAME, objfile);
 	}
     }
-  if ((add_flags & SYMFILE_NO_READ) == 0)
-    objfile->require_partial_symbols (false);
 }
 
 /* Initialize entry point information for this objfile.  */
@@ -913,7 +911,7 @@ syms_from_objfile_1 (struct objfile *objfile,
 
   /* Make sure that partially constructed symbol tables will be cleaned up
      if an error occurs during symbol reading.  */
-  gdb::optional<clear_symtab_users_cleanup> defer_clear_users;
+  std::optional<clear_symtab_users_cleanup> defer_clear_users;
 
   objfile_up objfile_holder (objfile);
 
@@ -1124,7 +1122,6 @@ symbol_file_add_with_addrs (const gdb_bfd_ref_ptr &abfd, const char *name,
 
   gdb::observers::new_objfile.notify (objfile);
 
-  bfd_cache_close_all ();
   return objfile;
 }
 
@@ -1414,8 +1411,9 @@ find_separate_debug_file (const char *dir,
      Keep backward compatibility so that DEBUG_FILE_DIRECTORY being "" will
      cause "/..." lookups.  */
 
-  bool target_prefix = startswith (dir, "target:");
-  const char *dir_notarget = target_prefix ? dir + strlen ("target:") : dir;
+  bool target_prefix = is_target_filename (dir);
+  const char *dir_notarget
+    = target_prefix ? dir + strlen (TARGET_SYSROOT_PREFIX) : dir;
   std::vector<gdb::unique_xmalloc_ptr<char>> debugdir_vec
     = dirnames_to_char_ptr_vec (debug_file_directory.c_str ());
   gdb::unique_xmalloc_ptr<char> canon_sysroot
@@ -1444,7 +1442,7 @@ find_separate_debug_file (const char *dir,
 
   for (const gdb::unique_xmalloc_ptr<char> &debugdir : debugdir_vec)
     {
-      debugfile = target_prefix ? "target:" : "";
+      debugfile = target_prefix ? TARGET_SYSROOT_PREFIX : "";
       debugfile += debugdir;
       debugfile += "/";
       debugfile += drive;
@@ -1466,7 +1464,7 @@ find_separate_debug_file (const char *dir,
 	{
 	  /* If the file is in the sysroot, try using its base path in
 	     the global debugfile directory.  */
-	  debugfile = target_prefix ? "target:" : "";
+	  debugfile = target_prefix ? TARGET_SYSROOT_PREFIX : "";
 	  debugfile += debugdir;
 	  debugfile += "/";
 	  debugfile += base_path;
@@ -1482,12 +1480,13 @@ find_separate_debug_file (const char *dir,
 	     prefix -- but if that would yield the empty string, we
 	     don't bother at all, because that would just give the
 	     same result as above.  */
-	  if (gdb_sysroot != "target:")
+	  if (gdb_sysroot != TARGET_SYSROOT_PREFIX)
 	    {
-	      debugfile = target_prefix ? "target:" : "";
-	      if (startswith (gdb_sysroot, "target:"))
+	      debugfile = target_prefix ? TARGET_SYSROOT_PREFIX : "";
+	      if (is_target_filename (gdb_sysroot))
 		{
-		  std::string root = gdb_sysroot.substr (strlen ("target:"));
+		  std::string root
+		    = gdb_sysroot.substr (strlen (TARGET_SYSROOT_PREFIX));
 		  gdb_assert (!root.empty ());
 		  debugfile += root;
 		}
@@ -1597,19 +1596,7 @@ validate_readnow_readnever (objfile_flags flags)
     error (_("-readnow and -readnever cannot be used simultaneously"));
 }
 
-/* This is the symbol-file command.  Read the file, analyze its
-   symbols, and add a struct symtab to a symtab list.  The syntax of
-   the command is rather bizarre:
-
-   1. The function buildargv implements various quoting conventions
-   which are undocumented and have little or nothing in common with
-   the way things are quoted (or not quoted) elsewhere in GDB.
-
-   2. Options are used, which are not generally used in GDB (perhaps
-   "set mapped on", "set readnow on" would be better)
-
-   3. The order of options matters, which is contrary to GNU
-   conventions (because it is confusing and inconvenient).  */
+/* See symfile.h.  */
 
 void
 symbol_file_command (const char *args, int from_tty)
@@ -1685,13 +1672,11 @@ symbol_file_command (const char *args, int from_tty)
     }
 }
 
-/* Set the initial language.  */
+/* Lazily set the initial language.  */
 
-void
-set_initial_language (void)
+static void
+set_initial_language_callback ()
 {
-  if (language_mode == language_mode_manual)
-    return;
   enum language lang = main_language ();
   /* Make C the default language.  */
   enum language default_lang = language_c;
@@ -1700,8 +1685,8 @@ set_initial_language (void)
     {
       const char *name = main_name ();
       struct symbol *sym
-	= lookup_symbol_in_language (name, NULL, VAR_DOMAIN, default_lang,
-				     NULL).symbol;
+	= lookup_symbol_in_language (name, nullptr, SEARCH_FUNCTION_DOMAIN,
+				     default_lang, nullptr).symbol;
 
       if (sym != NULL)
 	lang = sym->language ();
@@ -1714,6 +1699,16 @@ set_initial_language (void)
 
   set_language (lang);
   expected_language = current_language; /* Don't warn the user.  */
+}
+
+/* Set the initial language.  */
+
+void
+set_initial_language (void)
+{
+  if (language_mode == language_mode_manual)
+    return;
+  lazily_set_language (set_initial_language_callback);
 }
 
 /* Open the file specified by NAME and hand it off to BFD for
@@ -1959,7 +1954,8 @@ load_progress (ULONGEST bytes, void *untyped_arg)
       current_uiout->message ("Loading section %s, size %s lma %s\n",
 			      args->section_name,
 			      hex_string (args->section_size),
-			      paddress (target_gdbarch (), args->lma));
+			      paddress (current_inferior ()->arch (),
+					args->lma));
       return;
     }
 
@@ -1976,10 +1972,10 @@ load_progress (ULONGEST bytes, void *untyped_arg)
 
       if (target_read_memory (args->lma, check.data (), bytes) != 0)
 	error (_("Download verify read failed at %s"),
-	       paddress (target_gdbarch (), args->lma));
+	       paddress (current_inferior ()->arch (), args->lma));
       if (memcmp (args->buffer, check.data (), bytes) != 0)
 	error (_("Download verify compare failed at %s"),
-	       paddress (target_gdbarch (), args->lma));
+	       paddress (current_inferior ()->arch (), args->lma));
     }
   totals->data_count += bytes;
   args->lma += bytes;
@@ -2091,13 +2087,13 @@ generic_load (const char *args, int from_tty)
   steady_clock::time_point end_time = steady_clock::now ();
 
   CORE_ADDR entry = bfd_get_start_address (loadfile_bfd.get ());
-  entry = gdbarch_addr_bits_remove (target_gdbarch (), entry);
+  entry = gdbarch_addr_bits_remove (current_inferior ()->arch (), entry);
   uiout->text ("Start address ");
-  uiout->field_core_addr ("address", target_gdbarch (), entry);
+  uiout->field_core_addr ("address", current_inferior ()->arch (), entry);
   uiout->text (", load size ");
   uiout->field_unsigned ("load-size", total_progress.data_count);
   uiout->text ("\n");
-  regcache_write_pc (get_current_regcache (), entry);
+  regcache_write_pc (get_thread_regcache (inferior_thread ()), entry);
 
   /* Reset breakpoints, now that we have changed the load image.  For
      instance, breakpoints may have been set (or reset, by
@@ -2620,8 +2616,6 @@ reread_symbols (int from_tty)
 	  (*objfile->sf->sym_init) (objfile);
 	  clear_complaints ();
 
-	  objfile->flags &= ~OBJF_PSYMTABS_READ;
-
 	  /* We are about to read new symbols and potentially also
 	     DWARF information.  Some targets may want to pass addresses
 	     read from DWARF DIE's through an adjustment function before
@@ -3043,7 +3037,7 @@ section_is_mapped (struct obj_section *osect)
 	  if (osect->ovly_mapped == -1)
 	    gdbarch_overlay_update (gdbarch, osect);
 	}
-      /* fall thru */
+      [[fallthrough]];
     case ovly_on:		/* overlay debugging manual */
       return osect->ovly_mapped == 1;
     }
@@ -3079,8 +3073,7 @@ pc_in_mapped_range (CORE_ADDR pc, struct obj_section *section)
 {
   if (section_is_overlay (section))
     {
-      if (section->addr () <= pc
-	  && pc < section->endaddr ())
+      if (section->contains (pc))
 	return true;
     }
 
@@ -3763,7 +3756,7 @@ expand_symtabs_matching
    gdb::function_view<expand_symtabs_symbol_matcher_ftype> symbol_matcher,
    gdb::function_view<expand_symtabs_exp_notify_ftype> expansion_notify,
    block_search_flags search_flags,
-   enum search_domain kind)
+   domain_search_flags domain)
 {
   for (objfile *objfile : current_program_space->objfiles ())
     if (!objfile->expand_symtabs_matching (file_matcher,
@@ -3771,8 +3764,7 @@ expand_symtabs_matching
 					   symbol_matcher,
 					   expansion_notify,
 					   search_flags,
-					   UNDEF_DOMAIN,
-					   kind))
+					   domain))
       return false;
   return true;
 }

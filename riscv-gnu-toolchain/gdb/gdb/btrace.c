@@ -1,6 +1,6 @@
 /* Branch trace support for GDB, the GNU debugger.
 
-   Copyright (C) 2013-2023 Free Software Foundation, Inc.
+   Copyright (C) 2013-2024 Free Software Foundation, Inc.
 
    Contributed by Intel Corp. <markus.t.metzger@intel.com>
 
@@ -19,7 +19,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "btrace.h"
 #include "gdbthread.h"
 #include "inferior.h"
@@ -31,7 +30,7 @@
 #include "filenames.h"
 #include "regcache.h"
 #include "gdbsupport/rsp-low.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "cli/cli-utils.h"
 #include "gdbarch.h"
 
@@ -255,8 +254,8 @@ ftrace_new_function (struct btrace_thread_info *btinfo,
       insn_offset = prev->insn_offset + ftrace_call_num_insn (prev);
     }
 
-  btinfo->functions.emplace_back (mfun, fun, number, insn_offset, level);
-  return &btinfo->functions.back ();
+  return &btinfo->functions.emplace_back (mfun, fun, number, insn_offset,
+					  level);
 }
 
 /* Update the UP field of a function segment.  */
@@ -1058,11 +1057,10 @@ btrace_compute_ftrace_bts (struct thread_info *tp,
   switch_to_thread (tp);
 
   struct btrace_thread_info *btinfo;
-  struct gdbarch *gdbarch;
   unsigned int blk;
   int level;
 
-  gdbarch = target_gdbarch ();
+  gdbarch *gdbarch = current_inferior ()->arch ();
   btinfo = &tp->btrace;
   blk = btrace->blocks->size ();
 

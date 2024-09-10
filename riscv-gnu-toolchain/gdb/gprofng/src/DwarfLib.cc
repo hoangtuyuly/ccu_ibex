@@ -1,4 +1,4 @@
-/* Copyright (C) 2021-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2021-2024 Free Software Foundation, Inc.
    Contributed by Oracle.
 
    This file is part of GNU Binutils.
@@ -2034,7 +2034,10 @@ DwrCU::set_die (Dwarf_Die die)
 	  atf->u.offset = debug_infoSec->GetULEB128 ();
 	  break;
 	case DW_FORM_ref_addr:
-	  atf->u.offset = debug_infoSec->GetADDR ();
+	  if (version > 2)
+	    atf->u.offset = debug_infoSec->GetRef ();
+	  else
+	    atf->u.offset = debug_infoSec->GetADDR ();
 	  break;
 	case DW_FORM_sec_offset:
 	  atf->u.offset = debug_infoSec->GetRef ();

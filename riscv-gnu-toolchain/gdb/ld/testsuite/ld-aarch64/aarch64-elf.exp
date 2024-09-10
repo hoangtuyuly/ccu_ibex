@@ -1,5 +1,5 @@
 # Expect script for various AARCH64 ELF tests.
-# Copyright (C) 2009-2023 Free Software Foundation, Inc.
+# Copyright (C) 2009-2024 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -463,9 +463,10 @@ run_dump_test "bti-warn"
 run_dump_test "weak-tls"
 run_dump_test "undef-tls"
 
-run_dump_test "bti-far-1"
-run_dump_test "bti-far-2"
-run_dump_test "bti-far-opt"
+run_dump_test_lp64 "bti-far-1"
+run_dump_test_lp64 "bti-far-2"
+run_dump_test_lp64 "bti-far-opt"
+run_dump_test_lp64 "bti-far-3"
 
 if { ![skip_sframe_tests] } {
   run_dump_test "sframe-simple-1"

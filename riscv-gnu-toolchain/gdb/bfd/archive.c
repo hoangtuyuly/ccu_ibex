@@ -1,5 +1,5 @@
 /* BFD back-end for archive files (libraries).
-   Copyright (C) 1990-2023 Free Software Foundation, Inc.
+   Copyright (C) 1990-2024 Free Software Foundation, Inc.
    Written by Cygnus Support.  Mostly Gumby Henkel-Wallace's fault.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -2355,7 +2355,8 @@ _bfd_compute_and_write_armap (bfd *arch, unsigned int elength)
 	  long symcount;
 	  long src_count;
 
-	  if (current->lto_slim_object && report_plugin_err)
+	  if (bfd_get_lto_type (current) == lto_slim_ir_object
+	      && report_plugin_err)
 	    {
 	      report_plugin_err = false;
 	      _bfd_error_handler

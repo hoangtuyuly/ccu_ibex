@@ -1,5 +1,5 @@
 /* BFD back-end for MS-DOS executables.
-   Copyright (C) 1990-2023 Free Software Foundation, Inc.
+   Copyright (C) 1990-2024 Free Software Foundation, Inc.
    Written by Bryan Ford of the University of Utah.
 
    Contributed by the Center for Software Science at the
@@ -219,8 +219,6 @@ msdos_set_section_contents (bfd *abfd,
 #define msdos_bfd_free_cached_info _bfd_generic_bfd_free_cached_info
 #define msdos_new_section_hook _bfd_generic_new_section_hook
 #define msdos_get_section_contents _bfd_generic_get_section_contents
-#define msdos_get_section_contents_in_window \
-  _bfd_generic_get_section_contents_in_window
 #define msdos_bfd_get_relocated_section_contents \
   bfd_generic_get_relocated_section_contents
 #define msdos_bfd_relax_section bfd_generic_relax_section

@@ -1,6 +1,6 @@
 /* Call site information.
 
-   Copyright (C) 2011-2023 Free Software Foundation, Inc.
+   Copyright (C) 2011-2024 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
@@ -94,7 +94,7 @@ struct call_site_target
 
   void iterate_over_addresses (struct gdbarch *call_site_gdbarch,
 			       const struct call_site *call_site,
-			       frame_info_ptr caller_frame,
+			       const frame_info_ptr &caller_frame,
 			       iterate_ftype callback) const;
 
 private:
@@ -201,7 +201,7 @@ struct call_site
      throw NO_ENTRY_VALUE_ERROR.  */
 
   void iterate_over_addresses (struct gdbarch *call_site_gdbarch,
-			       frame_info_ptr caller_frame,
+			       const frame_info_ptr &caller_frame,
 			       call_site_target::iterate_ftype callback)
     const
   {

@@ -1,6 +1,6 @@
 /* Memory-access and commands for "inferior" process, for GDB.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "arch-utils.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -26,7 +25,7 @@
 #include "infrun.h"
 #include "gdbsupport/environ.h"
 #include "value.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "symfile.h"
 #include "gdbcore.h"
 #include "target.h"
@@ -52,10 +51,9 @@
 #include "ui.h"
 #include "interps.h"
 #include "skip.h"
-#include "gdbsupport/gdb_optional.h"
+#include <optional>
 #include "source.h"
 #include "cli/cli-style.h"
-#include "dwarf2/loc.h"
 
 /* Local functions: */
 
@@ -287,7 +285,7 @@ post_create_inferior (int from_tty)
 
 	  /* If the solist is global across processes, there's no need to
 	     refetch it here.  */
-	  if (!gdbarch_has_global_solist (target_gdbarch ()))
+	  if (!gdbarch_has_global_solist (current_inferior ()->arch ()))
 	    solib_add (nullptr, 0, auto_solib_add);
 	}
     }
@@ -496,7 +494,8 @@ run_command_1 (const char *args, int from_tty, enum run_how run_how)
 
   /* Start the target running.  Do not use -1 continuation as it would skip
      breakpoint right at the entry point.  */
-  proceed (regcache_read_pc (get_current_regcache ()), GDB_SIGNAL_0);
+  proceed (regcache_read_pc (get_thread_regcache (inferior_thread ())),
+	   GDB_SIGNAL_0);
 
   /* Since there was no error, there's no need to finish the thread
      states here.  */
@@ -975,6 +974,19 @@ prepare_one_step (thread_info *tp, struct step_command_fsm *sm)
 				 &tp->control.step_range_start,
 				 &tp->control.step_range_end);
 
+	  if (execution_direction == EXEC_REVERSE)
+	    {
+	      symtab_and_line sal = find_pc_line (pc, 0);
+	      symtab_and_line sal_start
+		= find_pc_line (tp->control.step_range_start, 0);
+
+	      if (sal.line == sal_start.line)
+		/* Executing in reverse, the step_range_start address is in
+		   the same line.  We want to stop in the previous line so
+		   move step_range_start before the current line.  */
+		tp->control.step_range_start--;
+	    }
+
 	  /* There's a problem in gcc (PR gcc/98780) that causes missing line
 	     table entries, which results in a too large stepping range.
 	     Use inlined_subroutine info to make the range more narrow.  */
@@ -1363,45 +1375,6 @@ until_next_command (int from_tty)
 
       tp->control.step_range_start = func->value_block ()->entry_pc ();
       tp->control.step_range_end = sal.end;
-
-      /* By setting the step_range_end based on the current pc, we are
-	 assuming that the last line table entry for any given source line
-	 will have is_stmt set to true.  This is not necessarily the case,
-	 there may be additional entries for the same source line with
-	 is_stmt set false.  Consider the following code:
-
-	 for (int i = 0; i < 10; i++)
-	   loop_body ();
-
-	 Clang-13, will generate multiple line table entries at the end of
-	 the loop all associated with the 'for' line.  The first of these
-	 entries is marked is_stmt true, but the other entries are is_stmt
-	 false.
-
-	 If we only use the values in SAL, then our stepping range may not
-	 extend to the end of the loop. The until command will reach the
-	 end of the range, find a non is_stmt instruction, and step to the
-	 next is_stmt instruction. This stopping point, however, will be
-	 inside the loop, which is not what we wanted.
-
-	 Instead, we now check any subsequent line table entries to see if
-	 they are for the same line.  If they are, and they are marked
-	 is_stmt false, then we extend the end of our stepping range.
-
-	 When we finish this process the end of the stepping range will
-	 point either to a line with a different line number, or, will
-	 point at an address for the same line number that is marked as a
-	 statement.  */
-
-      struct symtab_and_line final_sal
-	= find_pc_line (tp->control.step_range_end, 0);
-
-      while (final_sal.line == sal.line && final_sal.symtab == sal.symtab
-	     && !final_sal.is_stmt)
-	{
-	  tp->control.step_range_end = final_sal.end;
-	  final_sal = find_pc_line (final_sal.end, 0);
-	}
     }
   tp->control.may_range_step = 1;
 
@@ -1466,7 +1439,7 @@ advance_command (const char *arg, int from_tty)
 struct value *
 get_return_value (struct symbol *func_symbol, struct value *function)
 {
-  regcache *stop_regs = get_current_regcache ();
+  regcache *stop_regs = get_thread_regcache (inferior_thread ());
   struct gdbarch *gdbarch = stop_regs->arch ();
   struct value *value;
 
@@ -1508,23 +1481,6 @@ get_return_value (struct symbol *func_symbol, struct value *function)
 
   return value;
 }
-
-/* The captured function return value/type and its position in the
-   value history.  */
-
-struct return_value_info
-{
-  /* The captured return value.  May be NULL if we weren't able to
-     retrieve it.  See get_return_value.  */
-  struct value *value;
-
-  /* The return type.  In some cases, we'll not be able extract the
-     return value, but we always know the type.  */
-  struct type *type;
-
-  /* If we captured a value, this is the value history index.  */
-  int value_history_index;
-};
 
 /* Helper for print_return_value.  */
 
@@ -1768,7 +1724,7 @@ finish_backward (struct finish_command_fsm *sm)
    frame that called the function we're about to step out of.  */
 
 static void
-finish_forward (struct finish_command_fsm *sm, frame_info_ptr frame)
+finish_forward (struct finish_command_fsm *sm, const frame_info_ptr &frame)
 {
   struct frame_id frame_id = get_frame_id (frame);
   struct gdbarch *gdbarch = get_frame_arch (frame);
@@ -1782,9 +1738,6 @@ finish_forward (struct finish_command_fsm *sm, frame_info_ptr frame)
 					     get_stack_frame_id (frame),
 					     bp_finish);
 
-  /* set_momentary_breakpoint invalidates FRAME.  */
-  frame = nullptr;
-
   set_longjmp_breakpoint (tp, frame_id);
 
   /* We want to print return value, please...  */
@@ -1796,9 +1749,10 @@ finish_forward (struct finish_command_fsm *sm, frame_info_ptr frame)
 /* Skip frames for "finish".  */
 
 static frame_info_ptr
-skip_finish_frames (frame_info_ptr frame)
+skip_finish_frames (const frame_info_ptr &initial_frame)
 {
   frame_info_ptr start;
+  frame_info_ptr frame = initial_frame;
 
   do
     {
@@ -2015,7 +1969,7 @@ info_program_command (const char *args, int from_tty)
 
   target_files_info ();
   gdb_printf (_("Program stopped at %s.\n"),
-	      paddress (target_gdbarch (), tp->stop_pc ()));
+	      paddress (current_inferior ()->arch (), tp->stop_pc ()));
   if (tp->control.stop_step)
     gdb_printf (_("It stopped after being stepped.\n"));
   else if (stat != 0)
@@ -2284,7 +2238,7 @@ default_print_one_register_info (struct ui_file *file,
 void
 default_print_registers_info (struct gdbarch *gdbarch,
 			      struct ui_file *file,
-			      frame_info_ptr frame,
+			      const frame_info_ptr &frame,
 			      int regnum, int print_all)
 {
   int i;
@@ -2318,9 +2272,9 @@ default_print_registers_info (struct gdbarch *gdbarch,
       if (*(gdbarch_register_name (gdbarch, i)) == '\0')
 	continue;
 
-      default_print_one_register_info (file,
-				       gdbarch_register_name (gdbarch, i),
-				       value_of_register (i, frame));
+      default_print_one_register_info
+	(file, gdbarch_register_name (gdbarch, i),
+	 value_of_register (i, get_next_frame_sentinel_okay (frame)));
     }
 }
 
@@ -2444,7 +2398,7 @@ info_registers_command (const char *addr_exp, int from_tty)
 
 static void
 print_vector_info (struct ui_file *file,
-		   frame_info_ptr frame, const char *args)
+		   const frame_info_ptr &frame, const char *args)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
 
@@ -2498,7 +2452,6 @@ kill_command (const char *arg, int from_tty)
   int infnum = current_inferior ()->num;
 
   target_kill ();
-  bfd_cache_close_all ();
 
   update_previous_thread ();
 
@@ -2661,7 +2614,7 @@ attach_command (const char *args, int from_tty)
 
   scoped_disable_commit_resumed disable_commit_resumed ("attaching");
 
-  if (gdbarch_has_global_solist (target_gdbarch ()))
+  if (gdbarch_has_global_solist (current_inferior ()->arch ()))
     /* Don't complain if all processes share the same symbol
        space.  */
     ;
@@ -2790,7 +2743,7 @@ notice_new_inferior (thread_info *thr, bool leave_running, int from_tty)
   enum attach_post_wait_mode mode
     = leave_running ? ATTACH_POST_WAIT_RESUME : ATTACH_POST_WAIT_NOTHING;
 
-  gdb::optional<scoped_restore_current_thread> restore_thread;
+  std::optional<scoped_restore_current_thread> restore_thread;
 
   if (inferior_ptid != null_ptid)
     restore_thread.emplace ();
@@ -2853,14 +2806,14 @@ detach_command (const char *args, int from_tty)
   /* Hold a strong reference to the target while (maybe)
      detaching the parent.  Otherwise detaching could close the
      target.  */
-  auto target_ref
-    = target_ops_ref::new_reference (current_inferior ()->process_target ());
+  inferior *inf = current_inferior ();
+  auto target_ref = target_ops_ref::new_reference (inf->process_target ());
 
   /* Save this before detaching, since detaching may unpush the
      process_stratum target.  */
   bool was_non_stop_p = target_is_non_stop_p ();
 
-  target_detach (current_inferior (), from_tty);
+  target_detach (inf, from_tty);
 
   update_previous_thread ();
 
@@ -2869,11 +2822,11 @@ detach_command (const char *args, int from_tty)
      this within target_detach because that is also used when
      following child forks, and in that case we will want to transfer
      breakpoints to the child, not delete them.  */
-  breakpoint_init_inferior (inf_exited);
+  breakpoint_init_inferior (inf, inf_exited);
 
   /* If the solist is global across inferiors, don't clear it when we
      detach from a single inferior.  */
-  if (!gdbarch_has_global_solist (target_gdbarch ()))
+  if (!gdbarch_has_global_solist (inf->arch ()))
     no_shared_libraries (nullptr, from_tty);
 
   if (deprecated_detach_hook)
@@ -2982,7 +2935,7 @@ interrupt_command (const char *args, int from_tty)
 
 void
 default_print_float_info (struct gdbarch *gdbarch, struct ui_file *file,
-			  frame_info_ptr frame, const char *args)
+			  const frame_info_ptr &frame, const char *args)
 {
   int regnum;
   int printed_something = 0;
@@ -3123,7 +3076,7 @@ shell that will start the program (specified by the \"$SHELL\" environment\n\
 variable).  Input and output redirection with \">\", \"<\", or \">>\"\n\
 are also allowed.\n\
 \n\
-With no arguments, uses arguments last specified (with \"run\" or \n\
+With no arguments, uses arguments last specified (with \"run\" or\n\
 \"set args\").  To cancel previous arguments and run with no arguments,\n\
 use \"set args\" without arguments.\n\
 \n\
@@ -3139,10 +3092,10 @@ _initialize_infcmd ()
   /* Add the filename of the terminal connected to inferior I/O.  */
   auto tty_set_show
     = add_setshow_optional_filename_cmd ("inferior-tty", class_run, _("\
-Set terminal for future runs of program being debugged."), _("		\
-Show terminal for future runs of program being debugged."), _("		\
-Usage: set inferior-tty [TTY]\n\n					\
-If TTY is omitted, the default behavior of using the same terminal as GDB\n \
+Set terminal for future runs of program being debugged."), _("\
+Show terminal for future runs of program being debugged."), _("\
+Usage: set inferior-tty [TTY]\n\n\
+If TTY is omitted, the default behavior of using the same terminal as GDB\n\
 is restored."),
 					 set_tty_value,
 					 get_tty_value,
@@ -3163,8 +3116,8 @@ Follow this command with any number of args, to be passed to the program."),
 
   auto cwd_set_show
     = add_setshow_string_noescape_cmd ("cwd", class_run, _("\
-Set the current working directory to be used when the inferior is started.\n \
-Changing this setting does not have any effect on inferiors that are\n	\
+Set the current working directory to be used when the inferior is started.\n\
+Changing this setting does not have any effect on inferiors that are\n\
 already running."),
 				       _("\
 Show the current working directory that is used when the inferior is started."),
@@ -3349,7 +3302,7 @@ which means to set the ignore count of that breakpoint to N - 1 (so that\n\
 the breakpoint won't break until the Nth time it is reached).\n\
 \n\
 If non-stop mode is enabled, continue only the current thread,\n\
-otherwise all the threads in the program are continued.  To \n\
+otherwise all the threads in the program are continued.  To\n\
 continue all stopped threads in non-stop mode, use the -a option.\n\
 Specifying -a and an ignore count simultaneously is an error."));
   add_com_alias ("c", continue_cmd, class_run, 1);
@@ -3375,7 +3328,7 @@ RUN_ARGS_HELP));
   add_com ("interrupt", class_run, interrupt_command,
 	   _("Interrupt the execution of the debugged program.\n\
 If non-stop mode is enabled, interrupt only the current thread,\n\
-otherwise all the threads in the program are stopped.  To \n\
+otherwise all the threads in the program are stopped.  To\n\
 interrupt all running threads in non-stop mode, use the -a option."));
 
   cmd_list_element *info_registers_cmd

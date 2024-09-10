@@ -1,6 +1,6 @@
 /* Program and address space management, for GDB, the GNU debugger.
 
-   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+   Copyright (C) 2009-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,10 +17,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "objfiles.h"
-#include "arch-utils.h"
 #include "gdbcore.h"
 #include "solib.h"
 #include "solist.h"
@@ -55,10 +53,11 @@ address_space::address_space ()
    return a pointer to an existing address space, in case inferiors
    share an address space on this target system.  */
 
-struct address_space *
-maybe_new_address_space (void)
+address_space_ref_ptr
+maybe_new_address_space ()
 {
-  int shared_aspace = gdbarch_has_shared_address_space (target_gdbarch ());
+  int shared_aspace
+    = gdbarch_has_shared_address_space (current_inferior ()->arch ());
 
   if (shared_aspace)
     {
@@ -66,7 +65,7 @@ maybe_new_address_space (void)
       return program_spaces[0]->aspace;
     }
 
-  return new address_space ();
+  return new_address_space ();
 }
 
 /* Start counting over from scratch.  */
@@ -94,9 +93,9 @@ remove_program_space (program_space *pspace)
 
 /* See progspace.h.  */
 
-program_space::program_space (address_space *aspace_)
+program_space::program_space (address_space_ref_ptr aspace_)
   : num (++last_program_space_num),
-    aspace (aspace_)
+    aspace (std::move (aspace_))
 {
   program_spaces.push_back (this);
   gdb::observers::new_program_space.notify (this);
@@ -121,8 +120,6 @@ program_space::~program_space ()
   /* Defer breakpoint re-set because we don't want to create new
      locations for this pspace which we're tearing down.  */
   clear_symtab_users (SYMFILE_DEFER_BP_RESET);
-  if (!gdbarch_has_shared_address_space (target_gdbarch ()))
-    delete this->aspace;
 }
 
 /* See progspace.h.  */
@@ -131,8 +128,8 @@ void
 program_space::free_all_objfiles ()
 {
   /* Any objfile reference would become stale.  */
-  for (struct so_list *so : current_program_space->solibs ())
-    gdb_assert (so->objfile == NULL);
+  for (const solib &so : current_program_space->solibs ())
+    gdb_assert (so.objfile == NULL);
 
   while (!objfiles_list.empty ())
     objfiles_list.front ()->unlink ();
@@ -206,10 +203,11 @@ program_space::exec_close ()
     {
       /* Removing target sections may close the exec_ops target.
 	 Clear ebfd before doing so to prevent recursion.  */
+      bfd *saved_ebfd = ebfd.get ();
       ebfd.reset (nullptr);
       ebfd_mtime = 0;
 
-      remove_target_sections (&ebfd);
+      remove_target_sections (saved_ebfd);
 
       exec_filename.reset (nullptr);
     }
@@ -402,27 +400,24 @@ maintenance_info_program_spaces_command (const char *args, int from_tty)
 void
 update_address_spaces (void)
 {
-  int shared_aspace = gdbarch_has_shared_address_space (target_gdbarch ());
+  int shared_aspace
+    = gdbarch_has_shared_address_space (current_inferior ()->arch ());
 
   init_address_spaces ();
 
   if (shared_aspace)
     {
-      struct address_space *aspace = new address_space ();
+      address_space_ref_ptr aspace = new_address_space ();
 
-      delete current_program_space->aspace;
       for (struct program_space *pspace : program_spaces)
 	pspace->aspace = aspace;
     }
   else
     for (struct program_space *pspace : program_spaces)
-      {
-	delete pspace->aspace;
-	pspace->aspace = new address_space ();
-      }
+      pspace->aspace = new_address_space ();
 
   for (inferior *inf : all_inferiors ())
-    if (gdbarch_has_global_solist (target_gdbarch ()))
+    if (gdbarch_has_global_solist (current_inferior ()->arch ()))
       inf->aspace = maybe_new_address_space ();
     else
       inf->aspace = inf->pspace->aspace;
@@ -439,10 +434,10 @@ program_space::clear_solib_cache ()
   deleted_solibs.clear ();
 }
 
-
+/* See progspace.h.  */
 
 void
-initialize_progspace (void)
+initialize_progspace ()
 {
   add_cmd ("program-spaces", class_maintenance,
 	   maintenance_info_program_spaces_command,
@@ -456,5 +451,5 @@ initialize_progspace (void)
      modules have done that.  Do this before
      initialize_current_architecture, because that accesses the ebfd
      of current_program_space.  */
-  current_program_space = new program_space (new address_space ());
+  current_program_space = new program_space (new_address_space ());
 }

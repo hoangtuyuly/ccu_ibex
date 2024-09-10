@@ -1,6 +1,6 @@
 /* Target-dependent code for the Xtensa port of GDB, the GNU debugger.
 
-   Copyright (C) 2003-2023 Free Software Foundation, Inc.
+   Copyright (C) 2003-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "frame.h"
 #include "solib-svr4.h"
 #include "symtab.h"
@@ -37,7 +37,7 @@
 #include "gdbarch.h"
 
 #include "command.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 
 #include "xtensa-isa.h"
 #include "xtensa-tdep.h"
@@ -161,7 +161,8 @@ xtensa_read_register (int regnum)
 {
   ULONGEST value;
 
-  regcache_raw_read_unsigned (get_current_regcache (), regnum, &value);
+  regcache_raw_read_unsigned (get_thread_regcache (inferior_thread ()), regnum,
+			      &value);
   return (unsigned long) value;
 }
 
@@ -169,7 +170,8 @@ xtensa_read_register (int regnum)
 static void
 xtensa_write_register (int regnum, ULONGEST value)
 {
-  regcache_raw_write_unsigned (get_current_regcache (), regnum, value);
+  regcache_raw_write_unsigned (get_thread_regcache (inferior_thread ()), regnum,
+			       value);
 }
 
 /* Return the window size of the previous call to the function from which we
@@ -1024,7 +1026,7 @@ xtensa_frame_align (struct gdbarch *gdbarch, CORE_ADDR address)
 
 
 static CORE_ADDR
-xtensa_unwind_pc (struct gdbarch *gdbarch, frame_info_ptr next_frame)
+xtensa_unwind_pc (struct gdbarch *gdbarch, const frame_info_ptr &next_frame)
 {
   gdb_byte buf[8];
   CORE_ADDR pc;
@@ -1042,7 +1044,7 @@ xtensa_unwind_pc (struct gdbarch *gdbarch, frame_info_ptr next_frame)
 
 
 static struct frame_id
-xtensa_dummy_id (struct gdbarch *gdbarch, frame_info_ptr this_frame)
+xtensa_dummy_id (struct gdbarch *gdbarch, const frame_info_ptr &this_frame)
 {
   CORE_ADDR pc, fp;
   xtensa_gdbarch_tdep *tdep = gdbarch_tdep<xtensa_gdbarch_tdep> (gdbarch);
@@ -1215,16 +1217,16 @@ done:
 	cache->prev_sp = SP of the previous frame.  */
 
 static void
-call0_frame_cache (frame_info_ptr this_frame,
+call0_frame_cache (const frame_info_ptr &this_frame,
 		   xtensa_frame_cache_t *cache, CORE_ADDR pc);
 
 static void
-xtensa_window_interrupt_frame_cache (frame_info_ptr this_frame,
+xtensa_window_interrupt_frame_cache (const frame_info_ptr &this_frame,
 				     xtensa_frame_cache_t *cache,
 				     CORE_ADDR pc);
 
 static struct xtensa_frame_cache *
-xtensa_frame_cache (frame_info_ptr this_frame, void **this_cache)
+xtensa_frame_cache (const frame_info_ptr &this_frame, void **this_cache)
 {
   xtensa_frame_cache_t *cache;
   CORE_ADDR ra, wb, ws, pc, sp, ps;
@@ -1390,7 +1392,7 @@ This message will not be repeated in this session.\n"));
 
 
 static void
-xtensa_frame_this_id (frame_info_ptr this_frame,
+xtensa_frame_this_id (const frame_info_ptr &this_frame,
 		      void **this_cache,
 		      struct frame_id *this_id)
 {
@@ -1404,7 +1406,7 @@ xtensa_frame_this_id (frame_info_ptr this_frame,
 }
 
 static struct value *
-xtensa_frame_prev_register (frame_info_ptr this_frame,
+xtensa_frame_prev_register (const frame_info_ptr &this_frame,
 			    void **this_cache,
 			    int regnum)
 {
@@ -1507,7 +1509,7 @@ xtensa_unwind =
 };
 
 static CORE_ADDR
-xtensa_frame_base_address (frame_info_ptr this_frame, void **this_cache)
+xtensa_frame_base_address (const frame_info_ptr &this_frame, void **this_cache)
 {
   struct xtensa_frame_cache *cache =
     xtensa_frame_cache (this_frame, this_cache);
@@ -2541,7 +2543,7 @@ done:
 /* Initialize frame cache for the current frame in CALL0 ABI.  */
 
 static void
-call0_frame_cache (frame_info_ptr this_frame,
+call0_frame_cache (const frame_info_ptr &this_frame,
 		   xtensa_frame_cache_t *cache, CORE_ADDR pc)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
@@ -2890,7 +2892,7 @@ execute_code (struct gdbarch *gdbarch, CORE_ADDR current_pc, CORE_ADDR wb)
 /* Handle Window Overflow / Underflow exception frames.  */
 
 static void
-xtensa_window_interrupt_frame_cache (frame_info_ptr this_frame,
+xtensa_window_interrupt_frame_cache (const frame_info_ptr &this_frame,
 				     xtensa_frame_cache_t *cache,
 				     CORE_ADDR pc)
 {
@@ -3174,7 +3176,8 @@ xtensa_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Pseudo-Register read/write.  */
   set_gdbarch_pseudo_register_read (gdbarch, xtensa_pseudo_register_read);
-  set_gdbarch_pseudo_register_write (gdbarch, xtensa_pseudo_register_write);
+  set_gdbarch_deprecated_pseudo_register_write (gdbarch,
+						xtensa_pseudo_register_write);
 
   /* Set target information.  */
   set_gdbarch_num_regs (gdbarch, tdep->num_regs);

@@ -1,6 +1,6 @@
 /* Target-dependent code for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,13 +17,13 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "frame.h"
 #include "inferior.h"
 #include "symtab.h"
 #include "target.h"
 #include "gdbcore.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "symfile.h"
 #include "objfiles.h"
 #include "regcache.h"
@@ -63,6 +63,7 @@
 #include <ctype.h>
 #include "elf-bfd.h"
 #include "producer.h"
+#include "target-float.h"
 
 #include "features/rs6000/powerpc-32l.c"
 #include "features/rs6000/powerpc-altivec32l.c"
@@ -83,9 +84,10 @@
 #include "features/rs6000/powerpc-isa207-vsx64l.c"
 #include "features/rs6000/powerpc-isa207-htm-vsx64l.c"
 #include "features/rs6000/powerpc-e500l.c"
+#include "dwarf2/frame.h"
 
 /* Shared library operations for PowerPC-Linux.  */
-static struct target_so_ops powerpc_so_ops;
+static solib_ops powerpc_so_ops;
 
 /* The syscall's XML filename for PPC and PPC64.  */
 #define XML_SYSCALL_FILENAME_PPC "syscalls/ppc-linux.xml"
@@ -336,7 +338,7 @@ powerpc_linux_in_dynsym_resolve_code (CORE_ADDR pc)
    stub sequence.  */
 
 static CORE_ADDR
-ppc_skip_trampoline_code (frame_info_ptr frame, CORE_ADDR pc)
+ppc_skip_trampoline_code (const frame_info_ptr &frame, CORE_ADDR pc)
 {
   unsigned int insnbuf[POWERPC32_PLT_CHECK_LEN];
   struct gdbarch *gdbarch = get_frame_arch (frame);
@@ -1167,7 +1169,7 @@ ppc_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
 }
 
 static void
-ppc_linux_sigtramp_cache (frame_info_ptr this_frame,
+ppc_linux_sigtramp_cache (const frame_info_ptr &this_frame,
 			  struct trad_frame_cache *this_cache,
 			  CORE_ADDR func, LONGEST offset,
 			  int bias)
@@ -1239,7 +1241,7 @@ ppc_linux_sigtramp_cache (frame_info_ptr this_frame,
 
 static void
 ppc32_linux_sigaction_cache_init (const struct tramp_frame *self,
-				  frame_info_ptr this_frame,
+				  const frame_info_ptr &this_frame,
 				  struct trad_frame_cache *this_cache,
 				  CORE_ADDR func)
 {
@@ -1251,7 +1253,7 @@ ppc32_linux_sigaction_cache_init (const struct tramp_frame *self,
 
 static void
 ppc64_linux_sigaction_cache_init (const struct tramp_frame *self,
-				  frame_info_ptr this_frame,
+				  const frame_info_ptr &this_frame,
 				  struct trad_frame_cache *this_cache,
 				  CORE_ADDR func)
 {
@@ -1263,7 +1265,7 @@ ppc64_linux_sigaction_cache_init (const struct tramp_frame *self,
 
 static void
 ppc32_linux_sighandler_cache_init (const struct tramp_frame *self,
-				   frame_info_ptr this_frame,
+				   const frame_info_ptr &this_frame,
 				   struct trad_frame_cache *this_cache,
 				   CORE_ADDR func)
 {
@@ -1275,7 +1277,7 @@ ppc32_linux_sighandler_cache_init (const struct tramp_frame *self,
 
 static void
 ppc64_linux_sighandler_cache_init (const struct tramp_frame *self,
-				   frame_info_ptr this_frame,
+				   const frame_info_ptr &this_frame,
 				   struct trad_frame_cache *this_cache,
 				   CORE_ADDR func)
 {
@@ -1609,7 +1611,7 @@ ppc_linux_core_read_description (struct gdbarch *gdbarch,
   if (vsx)
     features.vsx = true;
 
-  gdb::optional<gdb::byte_vector> auxv = target_read_auxv_raw (target);
+  std::optional<gdb::byte_vector> auxv = target_read_auxv_raw (target);
   CORE_ADDR hwcap = linux_get_hwcap (auxv, target, gdbarch);
 
   features.isa205 = ppc_linux_has_isa205 (hwcap);
@@ -2080,12 +2082,58 @@ ppc_linux_displaced_step_prepare  (gdbarch *arch, thread_info *thread,
     {
       /* Figure out where the displaced step buffer is.  */
       CORE_ADDR disp_step_buf_addr
-	= linux_displaced_step_location (thread->inf->gdbarch);
+	= linux_displaced_step_location (thread->inf->arch ());
 
       per_inferior->disp_step_buf.emplace (disp_step_buf_addr);
     }
 
   return per_inferior->disp_step_buf->prepare (thread, displaced_pc);
+}
+
+/* Convert a Dwarf 2 register number to a GDB register number for Linux.  */
+
+static int
+rs6000_linux_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
+{
+  ppc_gdbarch_tdep *tdep = gdbarch_tdep<ppc_gdbarch_tdep>(gdbarch);
+
+  if (0 <= num && num <= 31)
+    return tdep->ppc_gp0_regnum + num;
+  else if (32 <= num && num <= 63)
+    /* Map dwarf register numbers for floating point, double, IBM double and
+       IEEE 128-bit floating point to the fpr range.  Will have to fix the
+       mapping for the IEEE 128-bit register numbers later.  */
+    return tdep->ppc_fp0_regnum + (num - 32);
+  else if (77 <= num && num < 77 + 32)
+    return tdep->ppc_vr0_regnum + (num - 77);
+  else
+    switch (num)
+      {
+      case 65:
+	return tdep->ppc_lr_regnum;
+      case 66:
+	return tdep->ppc_ctr_regnum;
+      case 76:
+	return tdep->ppc_xer_regnum;
+      case 109:
+	return tdep->ppc_vrsave_regnum;
+      case 110:
+	return tdep->ppc_vrsave_regnum - 1; /* vscr */
+      }
+
+  /* Unknown DWARF register number.  */
+  return -1;
+}
+
+/* Translate a .eh_frame register to DWARF register, or adjust a
+   .debug_frame register.  */
+
+static int
+rs6000_linux_adjust_frame_regnum (struct gdbarch *gdbarch, int num,
+				  int eh_frame_p)
+{
+  /* Linux uses the same numbering for .debug_frame numbering as .eh_frame.  */
+  return num;
 }
 
 static void
@@ -2135,6 +2183,15 @@ ppc_linux_init_abi (struct gdbarch_info info,
   set_gdbarch_stap_is_single_operand (gdbarch, ppc_stap_is_single_operand);
   set_gdbarch_stap_parse_special_token (gdbarch,
 					ppc_stap_parse_special_token);
+  /* Linux DWARF register mapping is different from the other OSes.  */
+  set_gdbarch_dwarf2_reg_to_regnum (gdbarch,
+				    rs6000_linux_dwarf2_reg_to_regnum);
+  /* Note on Linux the mapping for the DWARF registers and the stab registers
+     use the same numbers.  Install rs6000_linux_dwarf2_reg_to_regnum for the
+     stab register mappings as well.  */
+  set_gdbarch_stab_reg_to_regnum (gdbarch,
+				    rs6000_linux_dwarf2_reg_to_regnum);
+  dwarf2_frame_set_adjust_regnum (gdbarch, rs6000_linux_adjust_frame_regnum);
 
   if (tdep->wordsize == 4)
     {

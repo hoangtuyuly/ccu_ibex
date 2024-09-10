@@ -1,6 +1,6 @@
 /* PPC GNU/Linux native support.
 
-   Copyright (C) 1988-2023 Free Software Foundation, Inc.
+   Copyright (C) 1988-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "frame.h"
 #include "inferior.h"
 #include "gdbthread.h"
@@ -464,7 +464,7 @@ private:
     };
 
   /* The interface option.  Initialized if has_value () returns true.  */
-  gdb::optional<enum debug_reg_interface> m_interface;
+  std::optional<enum debug_reg_interface> m_interface;
 
   /* The info returned by the kernel with PPC_PTRACE_GETHWDBGINFO.  Only
      valid if we determined that the interface is HWDEBUG.  */
@@ -485,7 +485,7 @@ struct ppc_linux_process_info
   /* The watchpoint value that GDB requested for this process.
 
      Only used when the interface is DEBUGREG.  */
-  gdb::optional<long> requested_wp_val;
+  std::optional<long> requested_wp_val;
 };
 
 struct ppc_linux_nat_target final : public linux_nat_target
@@ -544,6 +544,8 @@ struct ppc_linux_nat_target final : public linux_nat_target
   void low_new_fork (struct lwp_info *, pid_t) override;
 
   void low_new_clone (struct lwp_info *, pid_t) override;
+
+  void low_init_process (pid_t pid) override;
 
   void low_forget_process (pid_t pid) override;
 
@@ -1914,13 +1916,15 @@ ppc_linux_nat_target::auxv_parse (const gdb_byte **readptr,
 				  const gdb_byte *endptr, CORE_ADDR *typep,
 				  CORE_ADDR *valp)
 {
+  gdb_assert (inferior_ptid != null_ptid);
+
   int tid = inferior_ptid.lwp ();
   if (tid == 0)
     tid = inferior_ptid.pid ();
 
   int sizeof_auxv_field = ppc_linux_target_wordsize (tid);
 
-  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  bfd_endian byte_order = gdbarch_byte_order (current_inferior ()->arch ());
   const gdb_byte *ptr = *readptr;
 
   if (endptr == ptr)
@@ -2356,8 +2360,8 @@ ppc_linux_nat_target::can_use_watchpoint_cond_accel (void)
 
   auto process_it = m_process_info.find (inferior_ptid.pid ());
 
-  /* No breakpoints or watchpoints have been requested for this process,
-     we have at least one free DVC register.  */
+  /* No breakpoints, watchpoints, tracepoints, or catchpoints have been
+     requested for this process, we have at least one free DVC register.  */
   if (process_it == m_process_info.end ())
     return true;
 
@@ -2701,6 +2705,19 @@ ppc_linux_nat_target::remove_watchpoint (CORE_ADDR addr, int len,
     }
 
   return 0;
+}
+
+/* Implement the "low_init_process" target_ops method.  */
+
+void
+ppc_linux_nat_target::low_init_process (pid_t pid)
+{
+  /* Set the hardware debug register capacity.  This requires the process to be
+     ptrace-stopped, otherwise detection will fail and software watchpoints will
+     be used instead of hardware.  If we allow this to be done lazily, we
+     cannot guarantee that it's called when the process is ptrace-stopped, so
+     do it now.  */
+  m_dreg_interface.detect (ptid_t (pid, pid));
 }
 
 /* Clean up the per-process info associated with PID.  When using the

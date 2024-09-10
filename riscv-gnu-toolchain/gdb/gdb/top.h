@@ -1,6 +1,6 @@
 /* Top level stuff for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -46,6 +46,30 @@ extern void quit_force (int *, int) ATTRIBUTE_NORETURN;
 extern void quit_command (const char *, int);
 extern void quit_cover (void);
 extern void execute_command (const char *, int);
+
+/* Run FN.  Capture its output into the returned string, do not display it
+   to the screen.  The global BATCH_FLAG will temporarily be set to true.
+   When TERM_OUT is true the output is collected with terminal behaviour
+   (e.g. with styling).  When TERM_OUT is false raw output will be collected
+   (e.g. no styling).  */
+
+extern void execute_fn_to_string (std::string &res,
+				  std::function<void(void)> fn, bool term_out);
+
+/* As execute_fn_to_ui_file, but run execute_command for P and FROM_TTY.  */
+
+extern void execute_command_to_ui_file (struct ui_file *file,
+					const char *p, int from_tty);
+
+/* As execute_fn_to_string, but run execute_command for P and FROM_TTY.  */
+
+extern void execute_command_to_string (std::string &res, const char *p,
+				       int from_tty, bool term_out);
+
+/* Same as the above, but ignore resulting string.  */
+
+extern void execute_command_to_string (const char *p,
+				       int from_tty, bool term_out);
 
 /* If the interpreter is in sync mode (we're running a user command's
    list, running command hooks or similars), and we just ran a

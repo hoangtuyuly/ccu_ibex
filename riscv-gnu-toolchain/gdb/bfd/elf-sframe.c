@@ -1,5 +1,5 @@
 /* .sframe section processing.
-   Copyright (C) 2022-2023 Free Software Foundation, Inc.
+   Copyright (C) 2022-2024 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -208,7 +208,7 @@ _bfd_elf_parse_sframe (bfd *abfd,
     }
 
   /* Read the SFrame stack trace information from abfd.  */
-  if (!bfd_malloc_and_get_section (abfd, sec, &sfbuf))
+  if (!_bfd_elf_mmap_section_contents (abfd, sec, &sfbuf))
     goto fail_no_free;
 
   /* Decode the buffer and keep decoded contents for later use.
@@ -241,7 +241,7 @@ fail_no_free:
     abfd, sec);
   return false;
 success:
-  free (sfbuf);
+  _bfd_elf_munmap_section_contents (sec, sfbuf);
   return true;
 }
 

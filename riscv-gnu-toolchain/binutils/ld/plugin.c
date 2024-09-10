@@ -506,7 +506,9 @@ add_symbols (void *handle, int nsyms, const struct ld_plugin_symbol *syms)
   int n;
 
   ASSERT (called_plugin);
-  symptrs = xmalloc (nsyms * sizeof *symptrs);
+  symptrs = bfd_alloc (abfd, nsyms * sizeof *symptrs);
+  if (symptrs == NULL)
+    return LDPS_ERR;
   for (n = 0; n < nsyms; n++)
     {
       enum ld_plugin_status rv;
@@ -514,6 +516,8 @@ add_symbols (void *handle, int nsyms, const struct ld_plugin_symbol *syms)
 
       bfdsym = bfd_make_empty_symbol (abfd);
       symptrs[n] = bfdsym;
+      if (bfdsym == NULL)
+	return LDPS_ERR;
       rv = asymbol_from_plugin_symbol (abfd, bfdsym, syms + n);
       if (rv != LDPS_OK)
 	return rv;
@@ -773,14 +777,19 @@ get_symbols (const void *handle, int nsyms, struct ld_plugin_symbol *syms,
       if (syms[n].def != LDPK_UNDEF && syms[n].def != LDPK_WEAKUNDEF)
 	{
 	  blhe = h;
-	  if (blhe && link_info.wrap_hash != NULL)
+	  /* Check if a symbol is a wrapper symbol.  */
+	  if (blhe)
 	    {
-	      /* Check if a symbol is a wrapper symbol.  */
-	      struct bfd_link_hash_entry *unwrap
-		= unwrap_hash_lookup (&link_info, (bfd *) abfd, blhe);
-	      if (unwrap && unwrap != h)
+	      if (blhe->wrapper_symbol)
 		wrap_status = wrapper;
-	     }
+	      else if (link_info.wrap_hash != NULL)
+		{
+		  struct bfd_link_hash_entry *unwrap
+		    = unwrap_hash_lookup (&link_info, (bfd *) abfd, blhe);
+		  if (unwrap != NULL && unwrap != h)
+		    wrap_status = wrapper;
+		}
+	    }
 	}
       else
 	{
@@ -924,7 +933,7 @@ add_input_file (const char *pathname)
 			    NULL);
   if (!is)
     return LDPS_ERR;
-  is->flags.lto_output = 1;
+  is->plugin = called_plugin;
   return LDPS_OK;
 }
 
@@ -939,17 +948,23 @@ add_input_library (const char *pathname)
 			    NULL);
   if (!is)
     return LDPS_ERR;
-  is->flags.lto_output = 1;
+  is->plugin = called_plugin;
   return LDPS_OK;
 }
 
 /* Set the extra library path to be used by libraries added via
    add_input_library.  */
+
 static enum ld_plugin_status
 set_extra_library_path (const char *path)
 {
+  search_dirs_type * sdt;
+
   ASSERT (called_plugin);
-  ldfile_add_library_path (xstrdup (path), false);
+  sdt = ldfile_add_library_path (xstrdup (path), search_dir_plugin);
+  if (sdt == NULL)
+    return LDPS_ERR;
+  sdt->plugin = called_plugin;
   return LDPS_OK;
 }
 
@@ -1159,10 +1174,11 @@ plugin_load_plugins (void)
 /* Call 'claim file' hook for all plugins.  */
 static int
 plugin_call_claim_file (const struct ld_plugin_input_file *file, int *claimed,
-			bool known_used)
+			int *claim_file_handler_v2, bool known_used)
 {
   plugin_t *curplug = plugins_list;
   *claimed = false;
+  *claim_file_handler_v2 = false;
   while (curplug && !*claimed)
     {
       if (curplug->claim_file_handler)
@@ -1171,7 +1187,11 @@ plugin_call_claim_file (const struct ld_plugin_input_file *file, int *claimed,
 
 	  called_plugin = curplug;
 	  if (curplug->claim_file_handler_v2)
-	    rv = (*curplug->claim_file_handler_v2) (file, claimed, known_used);
+	    {
+	      rv = (*curplug->claim_file_handler_v2) (file, claimed,
+						      known_used);
+	      *claim_file_handler_v2 = true;
+	    }
 	  else
 	    rv = (*curplug->claim_file_handler) (file, claimed);
 	  called_plugin = NULL;
@@ -1207,7 +1227,7 @@ plugin_cleanup (bfd *abfd ATTRIBUTE_UNUSED)
 static bfd_cleanup
 plugin_object_p (bfd *ibfd, bool known_used)
 {
-  int claimed;
+  int claimed, claim_file_handler_v2;
   plugin_input_file_t *input;
   struct ld_plugin_input_file file;
   bfd *abfd;
@@ -1216,12 +1236,17 @@ plugin_object_p (bfd *ibfd, bool known_used)
   if ((ibfd->flags & BFD_PLUGIN) != 0)
     return NULL;
 
-  if (ibfd->plugin_format != bfd_plugin_unknown)
+  /* When KNOWN_USED is false, we call plugin claim_file if plugin_format
+     is bfd_plugin_unknown and set plugin_format to bfd_plugin_yes_unused
+     on LTO object.  When KNOWN_USED is true, we call plugin claim_file
+     if plugin_format is bfd_plugin_unknown or bfd_plugin_yes_unused.  */
+  if (ibfd->plugin_format != bfd_plugin_unknown
+      && (!known_used || ibfd->plugin_format != bfd_plugin_yes_unused))
     {
-      if (ibfd->plugin_format == bfd_plugin_yes)
-	return plugin_cleanup;
-      else
+      if (ibfd->plugin_format == bfd_plugin_no)
 	return NULL;
+      else
+	return plugin_cleanup;
     }
 
   /* We create a dummy BFD, initially empty, to house whatever symbols
@@ -1257,7 +1282,8 @@ plugin_object_p (bfd *ibfd, bool known_used)
 
   claimed = 0;
 
-  if (plugin_call_claim_file (&file, &claimed, known_used))
+  if (plugin_call_claim_file (&file, &claimed, &claim_file_handler_v2,
+			      known_used))
     einfo (_("%F%P: %s: plugin reported error claiming file\n"),
 	   plugin_error_plugin ());
 
@@ -1277,7 +1303,13 @@ plugin_object_p (bfd *ibfd, bool known_used)
 
   if (claimed)
     {
-      ibfd->plugin_format = bfd_plugin_yes;
+      /* Set plugin_format to bfd_plugin_yes_unused if KNOWN_USED is
+	 false for plugin claim_file_v2 to avoid including the unused
+	 LTO archive members in linker output.  */
+      if (known_used || !claim_file_handler_v2)
+	ibfd->plugin_format = bfd_plugin_yes;
+      else
+	ibfd->plugin_format = bfd_plugin_yes_unused;
       ibfd->plugin_dummy_bfd = abfd;
       bfd_make_readable (abfd);
       abfd->no_export = ibfd->no_export;
@@ -1363,14 +1395,17 @@ plugin_call_cleanup (void)
     {
       if (curplug->cleanup_handler && !curplug->cleanup_done)
 	{
-	  enum ld_plugin_status rv;
-	  curplug->cleanup_done = true;
-	  called_plugin = curplug;
-	  rv = (*curplug->cleanup_handler) ();
-	  called_plugin = NULL;
-	  if (rv != LDPS_OK)
-	    info_msg (_("%P: %s: error in plugin cleanup: %d (ignored)\n"),
-		      curplug->name, rv);
+	  if (!config.plugin_save_temps)
+	    {
+	      enum ld_plugin_status rv;
+	      curplug->cleanup_done = true;
+	      called_plugin = curplug;
+	      rv = (*curplug->cleanup_handler) ();
+	      called_plugin = NULL;
+	      if (rv != LDPS_OK)
+		info_msg (_("%P: %s: error in plugin cleanup: %d (ignored)\n"),
+			  curplug->name, rv);
+	    }
 	  dlclose (curplug->dlhandle);
 	}
       curplug = curplug->next;

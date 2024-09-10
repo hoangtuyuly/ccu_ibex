@@ -1,5 +1,5 @@
 /* i387-specific utility functions, for the remote server for GDB.
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,7 +16,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "server.h"
 #include "i387-fp.h"
 #include "gdbsupport/x86-xstate.h"
 #include "nat/x86-xstate.h"
@@ -83,7 +82,7 @@ struct i387_fxsave
   unsigned char xmm_space[256];
 };
 
-gdb_static_assert (sizeof(i387_fxsave) == 416);
+static_assert (sizeof(i387_fxsave) == 416);
 
 struct i387_xsave : public i387_fxsave
 {
@@ -147,7 +146,7 @@ public:
   { return xsave () + xsave_layout.pkru_offset; }
 };
 
-gdb_static_assert (sizeof(i387_xsave) == 576);
+static_assert (sizeof(i387_xsave) == 576);
 
 void
 i387_cache_to_fsave (struct regcache *regcache, void *buf)

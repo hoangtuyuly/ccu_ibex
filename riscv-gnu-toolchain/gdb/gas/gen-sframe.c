@@ -1,5 +1,5 @@
 /* gen-sframe.c - Support for generating SFrame section.
-   Copyright (C) 2022-2023 Free Software Foundation, Inc.
+   Copyright (C) 2022-2024 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -407,7 +407,7 @@ sframe_get_fre_offset_size (struct sframe_row_entry *sframe_fre)
 
 #if SFRAME_FRE_TYPE_SELECTION_OPT
 
-/* Create a composite exression CEXP (for SFrame FRE start address) such that:
+/* Create a composite expression CEXP (for SFrame FRE start address) such that:
 
       exp = <val> OP_absent <width>, where,
 
@@ -449,7 +449,7 @@ create_fre_start_addr_exp (expressionS *cexp, symbolS *fre_pc_begin,
   cexp->X_add_number = 0;
 }
 
-/* Create a composite exression CEXP (for SFrame FDE function info) such that:
+/* Create a composite expression CEXP (for SFrame FDE function info) such that:
 
       exp = <rest_of_func_info> OP_modulus <width>, where,
 
@@ -458,7 +458,7 @@ create_fre_start_addr_exp (expressionS *cexp, symbolS *fre_pc_begin,
     used to stash away the func_info.  The upper 4-bits of the func_info are copied
     back to the resulting byte by the fragment fixup logic.
     - <width> stores the expression when evaluated gives the size of the
-    funtion in number of bytes.
+    function in number of bytes.
 
    The use of OP_modulus as the X_op_symbol helps identify this expression
    later when fragments are fixed up.  */
@@ -625,13 +625,13 @@ output_sframe_internal (void)
   struct sframe_func_entry *sframe_fde;
   struct sframe_row_entry *sframe_fre;
   unsigned char abi_arch = 0;
-  int fixed_bp_offset = SFRAME_CFA_FIXED_FP_INVALID;
+  int fixed_fp_offset = SFRAME_CFA_FIXED_FP_INVALID;
   int fixed_ra_offset = SFRAME_CFA_FIXED_RA_INVALID;
   unsigned int addr_size;
 
   addr_size = SFRAME_RELOC_SIZE;
 
-  /* The function desciptor entries as dumped by the assembler are not
+  /* The function descriptor entries as dumped by the assembler are not
      sorted on PCs.  */
   unsigned char sframe_flags = 0;
   sframe_flags |= !SFRAME_F_FDE_SORTED;
@@ -658,12 +658,12 @@ output_sframe_internal (void)
   gas_assert (abi_arch);
   out_one (abi_arch);
 
-  /* Offset for the BP register from CFA.  Neither of the AMD64 or AAPCS64
-     ABIs have a fixed offset for the BP register from the CFA.  This may be
+  /* Offset for the FP register from CFA.  Neither of the AMD64 or AAPCS64
+     ABIs have a fixed offset for the FP register from the CFA.  This may be
      useful in future (but not without additional support in the toolchain)
      for specialized handling/encoding for cases where, for example,
      -fno-omit-frame-pointer is used.  */
-  out_one (fixed_bp_offset);
+  out_one (fixed_fp_offset);
 
   /* Offset for the return address from CFA is fixed for some ABIs
      (e.g., AMD64), output a SFRAME_CFA_FIXED_RA_INVALID otherwise.  */
@@ -673,10 +673,10 @@ output_sframe_internal (void)
 #endif
   out_one (fixed_ra_offset);
 
-  /* None of the AMD64, or AARCH64 ABIs need the auxilliary header.
+  /* None of the AMD64, or AARCH64 ABIs need the auxiliary header.
      When the need does arise to use this field, the appropriate backend
      must provide this information.  */
-  out_one (0); /* Auxilliary SFrame header length.  */
+  out_one (0); /* Auxiliary SFrame header length.  */
 
   out_four (num_fdes); /* Number of FDEs.  */
   out_four (num_fres); /* Number of FREs.  */
@@ -846,6 +846,8 @@ sframe_xlate_ctx_cleanup (struct sframe_xlate_ctx *xlate_ctx)
 	  fre = fre_next;
 	}
     }
+
+  XDELETE (xlate_ctx->cur_fre);
 
   sframe_xlate_ctx_init (xlate_ctx);
 }
@@ -1085,7 +1087,7 @@ sframe_xlate_do_val_offset (struct sframe_xlate_ctx *xlate_ctx ATTRIBUTE_UNUSED,
 {
   /* Previous value of register is CFA + offset.  However, if the specified
      register is not interesting (FP or RA reg), the current DW_CFA_val_offset
-     instruction can be safely skipped without sacrificing the asynchonicity of
+     instruction can be safely skipped without sacrificing the asynchronicity of
      stack trace information.  */
   if (cfi_insn->u.r == SFRAME_CFA_FP_REG)
     return SFRAME_XLATE_ERR_NOTREPRESENTED; /* Not represented.  */
@@ -1247,24 +1249,32 @@ sframe_do_cfi_insn (struct sframe_xlate_ctx *xlate_ctx,
     case DW_CFA_GNU_window_save:
       err = sframe_xlate_do_gnu_window_save (xlate_ctx, cfi_insn);
       break;
+    /* Other CFI opcodes are not processed at this time.
+       These do not impact the coverage of the basic stack tracing
+       information as conveyed in the SFrame format.
+	- DW_CFA_register,
+	- etc.  */
+    case DW_CFA_register:
+      if (cfi_insn->u.rr.reg1 == SFRAME_CFA_SP_REG
+#ifdef SFRAME_FRE_RA_TRACKING
+	  || cfi_insn->u.rr.reg1 == SFRAME_CFA_RA_REG
+#endif
+	  || cfi_insn->u.rr.reg1 == SFRAME_CFA_FP_REG)
+	err = SFRAME_XLATE_ERR_NOTREPRESENTED;
+      break;
     case DW_CFA_undefined:
     case DW_CFA_same_value:
       break;
     default:
-      {
-	/* Other CFI opcodes are not processed at this time.
-	   These do not impact the coverage of the basic stack tracing
-	   information as conveyed in the SFrame format.
-	    - DW_CFA_register,
-	    - ...
-
-	   Following skipped operations do, however, impact the asynchronicity:
-	     - CFI_escape  */
-
-	err = SFRAME_XLATE_ERR_NOTREPRESENTED;
-	// printf (_("SFrame Unsupported or unknown Dwarf CFI number: %#x\n"), op);
-      }
+      /* Following skipped operations do, however, impact the asynchronicity:
+	  - CFI_escape.  */
+      err = SFRAME_XLATE_ERR_NOTREPRESENTED;
     }
+
+  /* An error here will cause no SFrame FDE later.  Warn the user because this
+     will affect the overall coverage and hence, asynchronicity.  */
+  if (err)
+    as_warn (_("skipping SFrame FDE due to DWARF CFI op %#x"), op);
 
   return err;
 }
@@ -1352,6 +1362,8 @@ create_sframe_all (void)
 	  sframe_fde_link (sframe_fde);
 	}
     }
+
+  XDELETE (xlate_ctx);
 }
 
 void

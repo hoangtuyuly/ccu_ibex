@@ -1,5 +1,5 @@
 /* Support for GDB maintenance commands.
-   Copyright (C) 2013-2023 Free Software Foundation, Inc.
+   Copyright (C) 2013-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,6 +25,10 @@
 extern void set_per_command_time (int);
 
 extern void set_per_command_space (int);
+
+/* Update the thread pool for the desired number of threads.  */
+
+extern void update_thread_pool_size ();
 
 /* Records a run time and space usage to be used as a base for
    reporting elapsed time or change in space.  */

@@ -1,5 +1,5 @@
 /* tc-arc.c -- Assembler for the ARC
-   Copyright (C) 1994-2023 Free Software Foundation, Inc.
+   Copyright (C) 1994-2024 Free Software Foundation, Inc.
 
    Contributor: Claudiu Zissulescu <claziss@synopsys.com>
 
@@ -109,6 +109,7 @@ enum arc_rlx_types
 				  || (op)->insn_class == BBIT0		\
 				  || (op)->insn_class == BBIT1		\
 				  || (op)->insn_class == BI		\
+				  || (op)->insn_class == DBNZ		\
 				  || (op)->insn_class == EI		\
 				  || (op)->insn_class == ENTER		\
 				  || (op)->insn_class == JLI		\

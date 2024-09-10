@@ -1,6 +1,6 @@
 
 /* YACC parser for Fortran expressions, for GDB.
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    Contributed by Motorola.  Adapted from the C parser by Farooq Butt
    (fmbutt@engage.sps.mot.com).
@@ -42,7 +42,6 @@
    
 %{
 
-#include "defs.h"
 #include "expression.h"
 #include "value.h"
 #include "parser-defs.h"
@@ -1503,7 +1502,7 @@ yylex (void)
       /* Might be a floating point number.  */
       if (pstate->lexptr[1] < '0' || pstate->lexptr[1] > '9')
 	goto symbol;		/* Nope, must be a symbol.  */
-      /* FALL THRU.  */
+      [[fallthrough]];
       
     case '0':
     case '1':
@@ -1558,20 +1557,15 @@ yylex (void)
 				got_dot|got_e|got_d,
 				&yylval);
 	if (toktype == ERROR)
-	  {
-	    char *err_copy = (char *) alloca (p - tokstart + 1);
-	    
-	    memcpy (err_copy, tokstart, p - tokstart);
-	    err_copy[p - tokstart] = 0;
-	    error (_("Invalid number \"%s\"."), err_copy);
-	  }
+	  error (_("Invalid number \"%.*s\"."), (int) (p - tokstart),
+		 tokstart);
 	pstate->lexptr = p;
 	return toktype;
       }
 
     case '%':
       last_was_structop = true;
-      /* Fall through.  */
+      [[fallthrough]];
     case '+':
     case '-':
     case '*':
@@ -1640,11 +1634,11 @@ yylex (void)
   {
     std::string tmp = copy_name (yylval.sval);
     struct block_symbol result;
-    const domain_enum lookup_domains[] =
+    const domain_search_flags lookup_domains[] =
     {
-      STRUCT_DOMAIN,
-      VAR_DOMAIN,
-      MODULE_DOMAIN
+      SEARCH_STRUCT_DOMAIN,
+      SEARCH_VFT,
+      SEARCH_MODULE_DOMAIN
     };
     int hextype;
 
@@ -1736,8 +1730,5 @@ f_language::parser (struct parser_state *par_state) const
 static void
 yyerror (const char *msg)
 {
-  if (pstate->prev_lexptr)
-    pstate->lexptr = pstate->prev_lexptr;
-
-  error (_("A %s in expression, near `%s'."), msg, pstate->lexptr);
+  pstate->parse_error (msg);
 }

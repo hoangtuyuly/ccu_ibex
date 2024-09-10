@@ -1,5 +1,5 @@
 /* MIPS Simulator definition.
-   Copyright (C) 1997-2023 Free Software Foundation, Inc.
+   Copyright (C) 1997-2024 Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of the MIPS sim.
@@ -1038,7 +1038,7 @@ extern int DSPLO_REGNUM[4];
 extern int DSPHI_REGNUM[4];
 
 INLINE_SIM_MAIN (void) pending_tick (SIM_DESC sd, sim_cpu *cpu, address_word cia);
-extern SIM_CORE_SIGNAL_FN mips_core_signal;
+extern SIM_CORE_SIGNAL_FN mips_core_signal ATTRIBUTE_NORETURN;
 
 char* pr_addr (address_word addr);
 char* pr_uword64 (uword64 addr);

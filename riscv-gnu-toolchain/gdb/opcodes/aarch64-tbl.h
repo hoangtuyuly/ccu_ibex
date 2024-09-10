@@ -1,6 +1,6 @@
 /* aarch64-tbl.h -- AArch64 opcode description table and instruction
    operand description table.
-   Copyright (C) 2012-2023 Free Software Foundation, Inc.
+   Copyright (C) 2012-2024 Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -34,6 +34,7 @@
 #define OP3(a,b,c) {OPND(a), OPND(b), OPND(c)}
 #define OP4(a,b,c,d) {OPND(a), OPND(b), OPND(c), OPND(d)}
 #define OP5(a,b,c,d,e) {OPND(a), OPND(b), OPND(c), OPND(d), OPND(e)}
+#define OP6(a,b,c,d,e,f) {OPND(a), OPND(b), OPND(c), OPND(d), OPND(e), OPND(f)}
 
 #define QLF(x) AARCH64_OPND_QLF_##x
 #define QLF1(a) {QLF(a)}
@@ -41,6 +42,7 @@
 #define QLF3(a,b,c) {QLF(a), QLF(b), QLF(c)}
 #define QLF4(a,b,c,d) {QLF(a), QLF(b), QLF(c), QLF(d)}
 #define QLF5(a,b,c,d,e) {QLF(a), QLF(b), QLF(c), QLF(d), QLF(e)}
+#define QLF6(a,b,c,d,e,f) {QLF(a), QLF(b), QLF(c), QLF(d), QLF(e), QLF(f)}
 
 /* Qualifiers list.  */
 
@@ -50,10 +52,22 @@
   QLF2(NIL,X),			\
 }
 
+/* e.g. MSRR <systemreg>, <Xt>, <Xt2>.  */
+#define QL_SRC_X2		\
+{				\
+  QLF3(NIL,X,X),		\
+}
+
 /* e.g. MRS <Xt>, <systemreg>.  */
 #define QL_DST_X		\
 {				\
   QLF2(X,NIL),			\
+}
+
+/* e.g. MRRS <Xt>, <Xt2>, <systemreg>.  */
+#define QL_DST_X2		\
+{				\
+  QLF3(X,X,NIL),		\
 }
 
 /* e.g. SYS #<op1>, <Cn>, <Cm>, #<op2>{, <Xt>}.  */
@@ -66,6 +80,12 @@
 #define QL_SYSL			\
 {				\
   QLF5(X,NIL,CR,CR,NIL),	\
+}
+
+/* e.g. SYSP #<op1>, <Cn>, <Cm>, #<op2>{, <Xt>, <Xt+1>}.  */
+#define QL_SYSP		\
+{				\
+  QLF6(NIL,CR,CR,NIL,X,X),	\
 }
 
 /* e.g. ADRP <Xd>, <label>.  */
@@ -217,6 +237,12 @@
 #define QL_I4SAMER		\
 {				\
   QLF4(W,W,W,W),		\
+  QLF4(X,X,X,X),		\
+}
+
+/* e.g. MADDPT <Xd>, <Xn>, <Xm>, <Xa>.  */
+#define QL_I4SAMEX		\
+{				\
   QLF4(X,X,X,X),		\
 }
 
@@ -1169,6 +1195,12 @@
   QLF5(X, X, X, X, NIL),	\
 }
 
+/* e.g. RCWCASP <Xt1>, <Xt1+1>, <Xt2>, <Xt2+1>, [<Xn|SP>{,#0}].  */
+#define QL_X4NIL		\
+{				\
+  QLF5(X, X, X, X, NIL),	\
+}
+
 /* e.g. STXP <Ws>, <Xt1>, <Xt2>, [<Xn|SP>{,#0}].  */
 #define QL_R3_LDST_EXC		\
 {				\
@@ -1461,6 +1493,10 @@
    - P: the operand has a /[ZM] suffix and the choice of suffix is not
      the same for all variants.
 
+   - v: the operand has a V_[16B|8H|4S|2D] qualifier and the choice of
+     qualifier suffix is not the same for all variants.  This is used for
+     the same kinds of operands as [BHSD] above.
+
    The _<sizes>, if present, give the subset of [BHSD] that are accepted
    by the V entries in <operands>.  */
 #define OP_SVE_B                                        \
@@ -1470,6 +1506,10 @@
 #define OP_SVE_BB                                       \
 {                                                       \
   QLF2(S_B,S_B),                                        \
+}
+#define OP_SVE_HH					\
+{							\
+  QLF2(S_H,S_H),					\
 }
 #define OP_SVE_BBU                                      \
 {                                                       \
@@ -1604,6 +1644,14 @@
 {                                                       \
   QLF2(S_H,S_B),                                        \
 }
+#define OP_SVE_BH                                       \
+{                                                       \
+  QLF2(S_B,S_H),                                        \
+}
+#define OP_SVE_BS                                       \
+{                                                       \
+  QLF2(S_B,S_S),                                        \
+}
 #define OP_SVE_HHH                                      \
 {                                                       \
   QLF3(S_H,S_H,S_H),                                    \
@@ -1735,6 +1783,10 @@
 {                                                       \
   QLF3(S_S,NIL,S_S),                                    \
 }
+#define OP_SVE_SMSS				     \
+{						       \
+  QLF4(S_H,P_M,S_H,S_H),				\
+}
 #define OP_SVE_SUU                                      \
 {                                                       \
   QLF3(S_S,NIL,NIL),                                    \
@@ -1742,6 +1794,14 @@
 #define OP_SVE_SZS                                      \
 {                                                       \
   QLF3(S_S,P_Z,S_S),                                    \
+}
+#define OP_SVE_SZS_QD                                   \
+{                                                       \
+  QLF3(S_Q,P_Z,S_D),                                    \
+}
+#define OP_SVE_SUS_QD                                   \
+{                                                       \
+  QLF3(S_Q,NIL,S_D),                                    \
 }
 #define OP_SVE_SBB                                      \
 {                                                       \
@@ -1833,6 +1893,10 @@
   QLF4(S_S,P_M,S_S,S_S),                                \
   QLF4(S_D,P_M,S_D,S_D),                                \
 }
+#define OP_SVE_VMVV_D                                  	\
+{                                                       \
+  QLF4(S_D,P_M,S_D,S_D),                                \
+}
 #define OP_SVE_VMVVU_HSD                                \
 {                                                       \
   QLF5(S_H,P_M,S_H,S_H,NIL),                            \
@@ -1876,6 +1940,19 @@
   QLF3(S_H,S_B,NIL),                                    \
   QLF3(S_S,S_H,NIL),                                    \
   QLF3(S_D,S_S,NIL),                                    \
+}
+#define OP_SVE_vUS_BHSD_BHSD				\
+{							\
+  QLF3(V_16B,NIL,S_B),					\
+  QLF3(V_8H,NIL,S_H),					\
+  QLF3(V_4S,NIL,S_S),					\
+  QLF3(V_2D,NIL,S_D),					\
+}
+#define OP_SVE_vUS_HSD_HSD				\
+{							\
+  QLF3(V_8H,NIL,S_H),					\
+  QLF3(V_4S,NIL,S_S),					\
+  QLF3(V_2D,NIL,S_D),					\
 }
 #define OP_SVE_VMV_SD                                   \
 {                                                       \
@@ -2299,6 +2376,34 @@
   QLF3(X,X,NIL),                                        \
 }
 
+#define QL_V3_BSS_LOWER    \
+{			   \
+  QLF3(V_8B, V_4S, V_4S),  \
+}
+
+#define QL_V3_BSS_FULL	   \
+{			   \
+  QLF3(V_16B, V_4S, V_4S), \
+}
+
+#define QL_V3_BHH	   \
+{			   \
+  QLF3(V_8B, V_4H, V_4H),  \
+  QLF3(V_16B, V_8H, V_8H), \
+}
+
+/* e.g. BF1CVTL <Vd>.8H, <Vn>.8B.  */
+#define QL_V2FP8B8H	   \
+{			   \
+  QLF2(V_8H, V_8B),	   \
+}
+
+/* e.g. BF1CVTL2 <Vd>.8H, <Vn>.16B.  */
+#define QL_V28H16B	   \
+{			   \
+  QLF2(V_8H, V_16B),	   \
+}
+
 /* e.g. UDOT <Vd>.2S, <Vn>.8B, <Vm>.8B.  */
 #define QL_V3DOT	   \
 {			   \
@@ -2470,44 +2575,40 @@ static const aarch64_feature_set aarch64_feature_crc =
   AARCH64_FEATURE (CRC);
 static const aarch64_feature_set aarch64_feature_lse =
   AARCH64_FEATURE (LSE);
+static const aarch64_feature_set aarch64_feature_lse128 =
+  AARCH64_FEATURES (2, LSE, LSE128);
 static const aarch64_feature_set aarch64_feature_lor =
   AARCH64_FEATURE (LOR);
 static const aarch64_feature_set aarch64_feature_rdma =
   AARCH64_FEATURE (RDMA);
-static const aarch64_feature_set aarch64_feature_v8_2a =
-  AARCH64_FEATURE (V8_2A);
 static const aarch64_feature_set aarch64_feature_fp_f16 =
   AARCH64_FEATURES (2, F16, FP);
 static const aarch64_feature_set aarch64_feature_simd_f16 =
   AARCH64_FEATURES (2, F16, SIMD);
 static const aarch64_feature_set aarch64_feature_sve =
   AARCH64_FEATURE (SVE);
-static const aarch64_feature_set aarch64_feature_v8_3a =
-  AARCH64_FEATURE (V8_3A);
-static const aarch64_feature_set aarch64_feature_fp_v8_3a =
-  AARCH64_FEATURES (2, V8_3A, FP);
-static const aarch64_feature_set aarch64_feature_pac =
-  AARCH64_FEATURE (PAC);
+static const aarch64_feature_set aarch64_feature_pauth =
+  AARCH64_FEATURE (PAUTH);
 static const aarch64_feature_set aarch64_feature_compnum =
   AARCH64_FEATURE (COMPNUM);
+static const aarch64_feature_set aarch64_feature_jscvt =
+  AARCH64_FEATURE (JSCVT);
 static const aarch64_feature_set aarch64_feature_rcpc =
   AARCH64_FEATURE (RCPC);
+static const aarch64_feature_set aarch64_feature_rcpc2 =
+  AARCH64_FEATURE (RCPC2);
 static const aarch64_feature_set aarch64_feature_dotprod =
   AARCH64_FEATURE (DOTPROD);
 static const aarch64_feature_set aarch64_feature_sha2 =
   AARCH64_FEATURES (2, V8, SHA2);
 static const aarch64_feature_set aarch64_feature_aes =
   AARCH64_FEATURES (2, V8, AES);
-static const aarch64_feature_set aarch64_feature_v8_4a =
-  AARCH64_FEATURE (V8_4A);
 static const aarch64_feature_set aarch64_feature_sm4 =
   AARCH64_FEATURES (3, SM4, SIMD, FP);
 static const aarch64_feature_set aarch64_feature_sha3 =
   AARCH64_FEATURES (4, SHA2, SHA3, SIMD, FP);
 static const aarch64_feature_set aarch64_feature_fp_16_v8_2a =
   AARCH64_FEATURES (3, F16_FML, F16, FP);
-static const aarch64_feature_set aarch64_feature_v8_5a =
-  AARCH64_FEATURE (V8_5A);
 static const aarch64_feature_set aarch64_feature_flagmanip =
   AARCH64_FEATURE (FLAGMANIP);
 static const aarch64_feature_set aarch64_feature_frintts =
@@ -2516,6 +2617,8 @@ static const aarch64_feature_set aarch64_feature_sb =
   AARCH64_FEATURE (SB);
 static const aarch64_feature_set aarch64_feature_predres =
   AARCH64_FEATURE (PREDRES);
+static const aarch64_feature_set aarch64_feature_predres2 =
+  AARCH64_FEATURES (2, PREDRES, PREDRES2);
 static const aarch64_feature_set aarch64_feature_memtag =
   AARCH64_FEATURE (MEMTAG);
 static const aarch64_feature_set aarch64_feature_bfloat16 =
@@ -2546,10 +2649,6 @@ static const aarch64_feature_set aarch64_feature_sme2_i16i64 =
   AARCH64_FEATURES (2, SME2, SME_I16I64);
 static const aarch64_feature_set aarch64_feature_sme2_f64f64 =
   AARCH64_FEATURES (2, SME2, SME_F64F64);
-static const aarch64_feature_set aarch64_feature_v8_6a =
-  AARCH64_FEATURE (V8_6A);
-static const aarch64_feature_set aarch64_feature_v8_7a =
-  AARCH64_FEATURE (V8_7A);
 static const aarch64_feature_set aarch64_feature_i8mm =
   AARCH64_FEATURE (I8MM);
 static const aarch64_feature_set aarch64_feature_i8mm_sve =
@@ -2564,6 +2663,10 @@ static const aarch64_feature_set aarch64_feature_ls64 =
   AARCH64_FEATURE (LS64);
 static const aarch64_feature_set aarch64_feature_flagm =
   AARCH64_FEATURE (FLAGM);
+static const aarch64_feature_set aarch64_feature_xs =
+  AARCH64_FEATURE (XS);
+static const aarch64_feature_set aarch64_feature_wfxt =
+  AARCH64_FEATURE (WFXT);
 static const aarch64_feature_set aarch64_feature_mops =
   AARCH64_FEATURE (MOPS);
 static const aarch64_feature_set aarch64_feature_mops_memtag =
@@ -2572,35 +2675,71 @@ static const aarch64_feature_set aarch64_feature_hbc =
   AARCH64_FEATURE (HBC);
 static const aarch64_feature_set aarch64_feature_cssc =
   AARCH64_FEATURE (CSSC);
+static const aarch64_feature_set aarch64_feature_chk =
+  AARCH64_FEATURE (CHK);
+static const aarch64_feature_set aarch64_feature_gcs =
+  AARCH64_FEATURE (GCS);
+static const aarch64_feature_set aarch64_feature_ite =
+  AARCH64_FEATURE (ITE);
+static const aarch64_feature_set aarch64_feature_d128 =
+  AARCH64_FEATURE (D128);
+static const aarch64_feature_set aarch64_feature_the =
+  AARCH64_FEATURE (THE);
+static const aarch64_feature_set aarch64_feature_d128_the =
+  AARCH64_FEATURES (2, D128, THE);
+static const aarch64_feature_set aarch64_feature_b16b16 =
+  AARCH64_FEATURE (B16B16);
+static const aarch64_feature_set aarch64_feature_sme2p1 =
+  AARCH64_FEATURE (SME2p1);
+static const aarch64_feature_set aarch64_feature_sve2p1 =
+  AARCH64_FEATURE (SVE2p1);
+static const aarch64_feature_set aarch64_feature_rcpc3 =
+  AARCH64_FEATURE (RCPC3);
+static const aarch64_feature_set aarch64_feature_cpa =
+  AARCH64_FEATURE (CPA);
+static const aarch64_feature_set aarch64_feature_cpa_sve =
+  AARCH64_FEATURES (2, CPA, SVE);
+static const aarch64_feature_set aarch64_feature_faminmax =
+  AARCH64_FEATURE (FAMINMAX);
+static const aarch64_feature_set aarch64_feature_faminmax_sve2 =
+  AARCH64_FEATURES (2, FAMINMAX, SVE2);
+static const aarch64_feature_set aarch64_feature_faminmax_sme2 =
+  AARCH64_FEATURES (3, SVE2, FAMINMAX, SME2);
+static const aarch64_feature_set aarch64_feature_fp8 =
+  AARCH64_FEATURE (FP8);
+static const aarch64_feature_set aarch64_feature_fp8_sve2 =
+  AARCH64_FEATURES (2, FP8, SVE2);
+static const aarch64_feature_set aarch64_feature_fp8_sme2 =
+  AARCH64_FEATURES (2, FP8, SME2);
+
 
 #define CORE		&aarch64_feature_v8
 #define FP		&aarch64_feature_fp
 #define SIMD		&aarch64_feature_simd
 #define CRC		&aarch64_feature_crc
 #define LSE		&aarch64_feature_lse
+#define LSE128		&aarch64_feature_lse128
 #define LOR		&aarch64_feature_lor
 #define RDMA		&aarch64_feature_rdma
 #define FP_F16		&aarch64_feature_fp_f16
 #define SIMD_F16	&aarch64_feature_simd_f16
-#define ARMV8_2A	&aarch64_feature_v8_2a
 #define SVE		&aarch64_feature_sve
-#define ARMV8_3A	&aarch64_feature_v8_3a
-#define FP_V8_3A	&aarch64_feature_fp_v8_3a
-#define PAC		&aarch64_feature_pac
+#define PAUTH		&aarch64_feature_pauth
 #define COMPNUM		&aarch64_feature_compnum
+#define JSCVT		&aarch64_feature_jscvt
 #define RCPC		&aarch64_feature_rcpc
+#define RCPC2		&aarch64_feature_rcpc2
 #define SHA2		&aarch64_feature_sha2
 #define AES		&aarch64_feature_aes
-#define ARMV8_4A	&aarch64_feature_v8_4a
 #define SHA3		&aarch64_feature_sha3
 #define SM4		&aarch64_feature_sm4
 #define FP_F16_V8_2A	&aarch64_feature_fp_16_v8_2a
 #define DOTPROD		&aarch64_feature_dotprod
-#define ARMV8_5A	&aarch64_feature_v8_5a
 #define FLAGMANIP	&aarch64_feature_flagmanip
 #define FRINTTS		&aarch64_feature_frintts
 #define SB		&aarch64_feature_sb
 #define PREDRES		&aarch64_feature_predres
+#define PREDRES2	&aarch64_feature_predres2
 #define MEMTAG		&aarch64_feature_memtag
 #define TME		&aarch64_feature_tme
 #define SVE2		&aarch64_feature_sve2
@@ -2614,8 +2753,6 @@ static const aarch64_feature_set aarch64_feature_cssc =
 #define SME2		&aarch64_feature_sme2
 #define SME2_I16I64	&aarch64_feature_sme2_i16i64
 #define SME2_F64F64	&aarch64_feature_sme2_f64f64
-#define ARMV8_6A		&aarch64_feature_v8_6a
-#define ARMV8_6A_SVE		&aarch64_feature_v8_6a
 #define BFLOAT16_SVE	&aarch64_feature_bfloat16_sve
 #define BFLOAT16	&aarch64_feature_bfloat16
 #define I8MM_SVE      &aarch64_feature_i8mm_sve
@@ -2623,13 +2760,32 @@ static const aarch64_feature_set aarch64_feature_cssc =
 #define F64MM_SVE     &aarch64_feature_f64mm_sve
 #define I8MM      &aarch64_feature_i8mm
 #define ARMV8R	  &aarch64_feature_v8r
-#define ARMV8_7A  &aarch64_feature_v8_7a
 #define LS64	  &aarch64_feature_ls64
 #define FLAGM	  &aarch64_feature_flagm
+#define XS	  &aarch64_feature_xs
+#define WFXT	  &aarch64_feature_wfxt
 #define MOPS	  &aarch64_feature_mops
 #define MOPS_MEMTAG &aarch64_feature_mops_memtag
 #define HBC	  &aarch64_feature_hbc
 #define CSSC	  &aarch64_feature_cssc
+#define CHK	  &aarch64_feature_chk
+#define GCS	  &aarch64_feature_gcs
+#define ITE	  &aarch64_feature_ite
+#define D128	  &aarch64_feature_d128
+#define THE	  &aarch64_feature_the
+#define D128_THE  &aarch64_feature_d128_the
+#define B16B16  &aarch64_feature_b16b16
+#define SME2p1  &aarch64_feature_sme2p1
+#define SVE2p1  &aarch64_feature_sve2p1
+#define RCPC3	  &aarch64_feature_rcpc3
+#define CPA	  &aarch64_feature_cpa
+#define CPA_SVE   &aarch64_feature_cpa_sve
+#define FAMINMAX  &aarch64_feature_faminmax
+#define FAMINMAX_SVE2  &aarch64_feature_faminmax_sve2
+#define FAMINMAX_SME2  &aarch64_feature_faminmax_sme2
+#define FP8	  &aarch64_feature_fp8
+#define FP8_SVE2   &aarch64_feature_fp8_sve2
+#define FP8_SME2   &aarch64_feature_fp8_sme2
 
 #define CORE_INSN(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, CLASS, OP, CORE, OPS, QUALS, FLAGS, 0, 0, NULL }
@@ -2643,6 +2799,8 @@ static const aarch64_feature_set aarch64_feature_cssc =
   { NAME, OPCODE, MASK, CLASS, 0, CRC, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define _LSE_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, CLASS, 0, LSE, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define _LSE128_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
+  { NAME, OPCODE, MASK, CLASS, 0, LSE128, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define _LOR_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, CLASS, 0, LOR, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define RDMA_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
@@ -2651,28 +2809,26 @@ static const aarch64_feature_set aarch64_feature_cssc =
   { NAME, OPCODE, MASK, CLASS, 0, FP_F16, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define SF16_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS)		\
   { NAME, OPCODE, MASK, CLASS, 0, SIMD_F16, OPS, QUALS, FLAGS, 0, 0, NULL }
-#define V8_2A_INSN(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS) \
-  { NAME, OPCODE, MASK, CLASS, OP, ARMV8_2A, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define _SVE_INSN(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS,TIED) \
   { NAME, OPCODE, MASK, CLASS, OP, SVE, OPS, QUALS, \
     FLAGS | F_STRICT, 0, TIED, NULL }
 #define _SVE_INSNC(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS,CONSTRAINTS,TIED) \
   { NAME, OPCODE, MASK, CLASS, OP, SVE, OPS, QUALS, \
     FLAGS | F_STRICT, CONSTRAINTS, TIED, NULL }
-#define V8_3A_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
-  { NAME, OPCODE, MASK, CLASS, 0, ARMV8_3A, OPS, QUALS, FLAGS, 0, 0, NULL }
-#define PAC_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
-  { NAME, OPCODE, MASK, CLASS, 0, PAC, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define PAUTH_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
+  { NAME, OPCODE, MASK, CLASS, 0, PAUTH, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define CNUM_INSN(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, CLASS, OP, COMPNUM, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define JSCVT_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
+  { NAME, OPCODE, MASK, CLASS, 0, JSCVT, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define RCPC_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, CLASS, 0, RCPC, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define RCPC2_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
+  { NAME, OPCODE, MASK, CLASS, 0, RCPC2, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define SHA2_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, CLASS, 0, SHA2, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define AES_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, CLASS, 0, AES, OPS, QUALS, FLAGS, 0, 0, NULL }
-#define V8_4A_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
-  { NAME, OPCODE, MASK, CLASS, 0, ARMV8_4A, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define SHA3_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, CLASS, 0, SHA3, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define SM4_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
@@ -2681,8 +2837,6 @@ static const aarch64_feature_set aarch64_feature_cssc =
   { NAME, OPCODE, MASK, CLASS, 0, FP_F16_V8_2A, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define DOT_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, CLASS, 0, DOTPROD, OPS, QUALS, FLAGS, 0, 0, NULL }
-#define V8_5A_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
-  { NAME, OPCODE, MASK, CLASS, 0, ARMV8_5A, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define FLAGMANIP_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, CLASS, 0, FLAGMANIP, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define FRINTTS_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
@@ -2698,8 +2852,23 @@ static const aarch64_feature_set aarch64_feature_cssc =
 #define SVE2_INSN(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS,TIED) \
   { NAME, OPCODE, MASK, CLASS, OP, SVE2, OPS, QUALS, \
     FLAGS | F_STRICT, 0, TIED, NULL }
+#define SME2p1_INSN(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS,TIED) \
+  { NAME, OPCODE, MASK, CLASS, OP, SME2p1, OPS, QUALS, \
+    FLAGS | F_STRICT, 0, TIED, NULL }
 #define SVE2_INSNC(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS,CONSTRAINTS,TIED) \
   { NAME, OPCODE, MASK, CLASS, OP, SVE2, OPS, QUALS, \
+    FLAGS | F_STRICT, CONSTRAINTS, TIED, NULL }
+#define B16B16_INSN(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS,TIED) \
+  { NAME, OPCODE, MASK, CLASS, OP, B16B16, OPS, QUALS, \
+    FLAGS | F_STRICT, 0, TIED, NULL }
+#define B16B16_INSNC(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS,CONSTRAINTS,TIED) \
+  { NAME, OPCODE, MASK, CLASS, OP, B16B16, OPS, QUALS, \
+    FLAGS | F_STRICT, CONSTRAINTS, TIED, NULL }
+#define SVE2p1_INSN(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS,TIED) \
+  { NAME, OPCODE, MASK, CLASS, OP, SVE2p1, OPS, QUALS, \
+    FLAGS | F_STRICT, 0, TIED, NULL }
+#define SVE2p1_INSNC(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS,CONSTRAINTS,TIED) \
+  { NAME, OPCODE, MASK, CLASS, OP, SVE2p1, OPS, QUALS, \
     FLAGS | F_STRICT, CONSTRAINTS, TIED, NULL }
 #define SVE2AES_INSN(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS,TIED) \
   { NAME, OPCODE, MASK, CLASS, OP, SVE2_AES, OPS, QUALS, \
@@ -2740,8 +2909,6 @@ static const aarch64_feature_set aarch64_feature_cssc =
 #define SVE2BITPERM_INSN(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS,TIED) \
   { NAME, OPCODE, MASK, CLASS, OP, SVE2_BITPERM, OPS, QUALS, \
     FLAGS | F_STRICT, 0, TIED, NULL }
-#define V8_6A_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
-  { NAME, OPCODE, MASK, CLASS, 0, ARMV8_6A, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define BFLOAT16_SVE_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, CLASS, 0, BFLOAT16_SVE, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define BFLOAT16_SVE_INSNC(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS, CONSTRAINTS, TIED) \
@@ -2761,8 +2928,10 @@ static const aarch64_feature_set aarch64_feature_cssc =
   { NAME, OPCODE, MASK, CLASS, 0, F32MM_SVE, OPS, QUALS, FLAGS, CONSTRAINTS, TIED, NULL }
 #define V8R_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, CLASS, 0, ARMV8R, OPS, QUALS, FLAGS, 0, 0, NULL }
-#define V8_7A_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
-  { NAME, OPCODE, MASK, CLASS, 0, ARMV8_7A, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define XS_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
+  { NAME, OPCODE, MASK, CLASS, 0, XS, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define WFXT_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
+  { NAME, OPCODE, MASK, CLASS, 0, WFXT, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define _LS64_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, CLASS, 0, LS64, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define FLAGM_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
@@ -2777,6 +2946,39 @@ static const aarch64_feature_set aarch64_feature_cssc =
   { NAME, OPCODE, MASK, CLASS, 0, HBC, OPS, QUALS, FLAGS, 0, 0, NULL }
 #define CSSC_INSN(NAME,OPCODE,MASK,OPS,QUALS,FLAGS) \
   { NAME, OPCODE, MASK, cssc, 0, CSSC, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define CHK_INSN(NAME, OPCODE, MASK, OPS, QUALS, FLAGS) \
+  { NAME, OPCODE, MASK, ic_system, 0, CHK, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define GCS_INSN(NAME, OPCODE, MASK, OPS, QUALS, FLAGS) \
+  { NAME, OPCODE, MASK, gcs, 0, GCS, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define D128_INSN(NAME,OPCODE,MASK,OPS,QUALS,FLAGS) \
+  { NAME, OPCODE, MASK, ic_system, 0, D128, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define THE_INSN(NAME,OPCODE,MASK,OPS,QUALS,FLAGS) \
+  { NAME, OPCODE, MASK, the, 0, THE, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define D128_THE_INSN(NAME,OPCODE,MASK,OPS,QUALS,FLAGS) \
+  { NAME, OPCODE, MASK, the, 0, D128_THE, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define RCPC3_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
+  { NAME, OPCODE, MASK, CLASS, 0, RCPC3, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define CPA_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS) \
+  { NAME, OPCODE, MASK, CLASS, 0, CPA, OPS, QUALS, 0, 0, 0, NULL }
+#define CPA_SVE_INSNC(NAME,OPCODE,MASK,CLASS,OPS,QUALS,CONSTRAINTS,TIED) \
+  { NAME, OPCODE, MASK, CLASS, 0, CPA_SVE, OPS, QUALS, \
+    F_STRICT, CONSTRAINTS, TIED, NULL }
+#define FAMINMAX_INSN(NAME,OPCODE,MASK,OPS,QUALS,FLAGS)	\
+  { NAME, OPCODE, MASK, asimdsame, 0, FAMINMAX, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define FAMINMAX_SVE2_INSN(NAME,OPCODE,MASK,OPS,QUALS,CONSTRAINTS) \
+  { NAME, OPCODE, MASK, sve_size_hsd, 0, FAMINMAX_SVE2, OPS, QUALS, \
+    0 | F_STRICT, CONSTRAINTS, 2, NULL }
+#define FAMINMAX_SME2_INSN(NAME,OPCODE,MASK,OPS,QUALS) \
+  { NAME, OPCODE, MASK, sme_size_22_hsd, 0, FAMINMAX_SME2, OPS, QUALS, \
+    F_STRICT | 0, 0, 1, NULL }
+#define FP8_INSN(NAME, OPCODE, MASK, CLASS, OPS, QUALS, FLAGS) \
+  { NAME, OPCODE, MASK, CLASS, 0, FP8, OPS, QUALS, FLAGS, 0, 0, NULL }
+#define FP8_SVE2_INSN(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS,TIED) \
+  { NAME, OPCODE, MASK, CLASS, OP, FP8_SVE2, OPS, QUALS, \
+    FLAGS | F_STRICT, 0, TIED, NULL }
+#define FP8_SME2_INSN(NAME,OPCODE,MASK,CLASS,OP,OPS,QUALS,FLAGS,TIED) \
+  { NAME, OPCODE, MASK, CLASS, OP, FP8_SME2, OPS, QUALS,	      \
+    F_STRICT | FLAGS, 0, TIED, NULL }
 
 #define MOPS_CPY_OP1_OP2_PME_INSN(NAME, OPCODE, MASK, FLAGS, CONSTRAINTS) \
   MOPS_INSN (NAME, OPCODE, MASK, 0, \
@@ -2825,6 +3027,12 @@ static const aarch64_feature_set aarch64_feature_cssc =
   MOPS_SET_OP1_OP2_INSN (NAME, "t", OPCODE | 0x1000, MASK, ISA), \
   MOPS_SET_OP1_OP2_INSN (NAME, "n", OPCODE | 0x2000, MASK, ISA), \
   MOPS_SET_OP1_OP2_INSN (NAME, "tn", OPCODE | 0x3000, MASK, ISA)
+
+#define PREDRES2_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
+  { NAME, OPCODE, MASK, CLASS, 0, PREDRES2, OPS, QUALS, FLAGS, 0, 0, NULL }
+
+#define ITE_INSN(NAME,OPCODE,MASK,CLASS,OPS,QUALS,FLAGS) \
+  { NAME, OPCODE, MASK, CLASS, 0, ITE, OPS, QUALS, FLAGS, 0, 0, NULL }
 
 const struct aarch64_opcode aarch64_opcode_table[] =
 {
@@ -3484,7 +3692,7 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   CORE_INSN ("asr", 0x13000000, 0x7f800000, bitfield, OP_ASR_IMM, OP3 (Rd, Rn, IMM), QL_SHIFT, F_ALIAS | F_P2 | F_CONV),
   CORE_INSN ("bfm", 0x33000000, 0x7f800000, bitfield, 0, OP4 (Rd, Rn, IMMR, IMMS), QL_BF, F_HAS_ALIAS | F_SF | F_N),
   CORE_INSN ("bfi", 0x33000000, 0x7f800000, bitfield, OP_BFI, OP4 (Rd, Rn, IMM, WIDTH), QL_BF2, F_ALIAS | F_P1 | F_CONV),
-  V8_2A_INSN ("bfc", 0x330003e0, 0x7f8003e0, bitfield, OP_BFC, OP3 (Rd, IMM, WIDTH), QL_BF1, F_ALIAS | F_P2 | F_CONV),
+  CORE_INSN ("bfc", 0x330003e0, 0x7f8003e0, bitfield, OP_BFC, OP3 (Rd, IMM, WIDTH), QL_BF1, F_ALIAS | F_P2 | F_CONV),
   CORE_INSN ("bfxil", 0x33000000, 0x7f800000, bitfield, OP_BFXIL, OP4 (Rd, Rn, IMM, WIDTH), QL_BF2, F_ALIAS | F_P1 | F_CONV),
   CORE_INSN ("ubfm", 0x53000000, 0x7f800000, bitfield, 0, OP4 (Rd, Rn, IMMR, IMMS), QL_BF, F_HAS_ALIAS | F_SF | F_N),
   CORE_INSN ("ubfiz", 0x53000000, 0x7f800000, bitfield, OP_UBFIZ, OP4 (Rd, Rn, IMM, WIDTH), QL_BF2, F_ALIAS | F_P1 | F_CONV),
@@ -3502,18 +3710,18 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   CORE_INSN ("ret", 0xd65f0000, 0xfffffc1f, branch_reg, 0, OP1 (Rn), QL_I1X, F_OPD0_OPT | F_DEFAULT (30)),
   CORE_INSN ("eret", 0xd69f03e0, 0xffffffff, branch_reg, 0, OP0 (), {}, 0),
   CORE_INSN ("drps", 0xd6bf03e0, 0xffffffff, branch_reg, 0, OP0 (), {}, 0),
-  PAC_INSN ("braa", 0xd71f0800, 0xfffffc00, branch_reg, OP2 (Rn, Rd_SP), QL_I2SAMEX, 0),
-  PAC_INSN ("brab", 0xd71f0c00, 0xfffffc00, branch_reg, OP2 (Rn, Rd_SP), QL_I2SAMEX, 0),
-  PAC_INSN ("blraa", 0xd73f0800, 0xfffffc00, branch_reg, OP2 (Rn, Rd_SP), QL_I2SAMEX, 0),
-  PAC_INSN ("blrab", 0xd73f0c00, 0xfffffc00, branch_reg, OP2 (Rn, Rd_SP), QL_I2SAMEX, 0),
-  PAC_INSN ("braaz", 0xd61f081f, 0xfffffc1f, branch_reg, OP1 (Rn), QL_I1X, 0),
-  PAC_INSN ("brabz", 0xd61f0c1f, 0xfffffc1f, branch_reg, OP1 (Rn), QL_I1X, 0),
-  PAC_INSN ("blraaz", 0xd63f081f, 0xfffffc1f, branch_reg, OP1 (Rn), QL_I1X, 0),
-  PAC_INSN ("blrabz", 0xd63f0c1f, 0xfffffc1f, branch_reg, OP1 (Rn), QL_I1X, 0),
-  PAC_INSN ("retaa", 0xd65f0bff, 0xffffffff, branch_reg, OP0 (), {}, 0),
-  PAC_INSN ("retab", 0xd65f0fff, 0xffffffff, branch_reg, OP0 (), {}, 0),
-  PAC_INSN ("eretaa", 0xd69f0bff, 0xffffffff, branch_reg, OP0 (), {}, 0),
-  PAC_INSN ("eretab", 0xd69f0fff, 0xffffffff, branch_reg, OP0 (), {}, 0),
+  PAUTH_INSN ("braa", 0xd71f0800, 0xfffffc00, branch_reg, OP2 (Rn, Rd_SP), QL_I2SAMEX, 0),
+  PAUTH_INSN ("brab", 0xd71f0c00, 0xfffffc00, branch_reg, OP2 (Rn, Rd_SP), QL_I2SAMEX, 0),
+  PAUTH_INSN ("blraa", 0xd73f0800, 0xfffffc00, branch_reg, OP2 (Rn, Rd_SP), QL_I2SAMEX, 0),
+  PAUTH_INSN ("blrab", 0xd73f0c00, 0xfffffc00, branch_reg, OP2 (Rn, Rd_SP), QL_I2SAMEX, 0),
+  PAUTH_INSN ("braaz", 0xd61f081f, 0xfffffc1f, branch_reg, OP1 (Rn), QL_I1X, 0),
+  PAUTH_INSN ("brabz", 0xd61f0c1f, 0xfffffc1f, branch_reg, OP1 (Rn), QL_I1X, 0),
+  PAUTH_INSN ("blraaz", 0xd63f081f, 0xfffffc1f, branch_reg, OP1 (Rn), QL_I1X, 0),
+  PAUTH_INSN ("blrabz", 0xd63f0c1f, 0xfffffc1f, branch_reg, OP1 (Rn), QL_I1X, 0),
+  PAUTH_INSN ("retaa", 0xd65f0bff, 0xffffffff, branch_reg, OP0 (), {}, 0),
+  PAUTH_INSN ("retab", 0xd65f0fff, 0xffffffff, branch_reg, OP0 (), {}, 0),
+  PAUTH_INSN ("eretaa", 0xd69f0bff, 0xffffffff, branch_reg, OP0 (), {}, 0),
+  PAUTH_INSN ("eretab", 0xd69f0fff, 0xffffffff, branch_reg, OP0 (), {}, 0),
   /* Compare & branch (immediate).  */
   CORE_INSN ("cbz", 0x34000000, 0x7f000000, compbranch, 0, OP2 (Rt, ADDR_PCREL19), QL_R_PCREL, F_SF),
   CORE_INSN ("cbnz", 0x35000000, 0x7f000000, compbranch, 0, OP2 (Rt, ADDR_PCREL19), QL_R_PCREL, F_SF),
@@ -3557,28 +3765,28 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   CORE_INSN ("rev16", 0x5ac00400, 0x7ffffc00, dp_1src, 0, OP2 (Rd, Rn), QL_I2SAME, F_SF),
   CORE_INSN ("rev",   0x5ac00800, 0xfffffc00, dp_1src, 0, OP2 (Rd, Rn), QL_I2SAMEW, 0),
   CORE_INSN ("rev",   0xdac00c00, 0xfffffc00, dp_1src, 0, OP2 (Rd, Rn), QL_I2SAMEX, F_SF | F_HAS_ALIAS | F_P1),
-  V8_2A_INSN ("rev64", 0xdac00c00, 0xfffffc00, dp_1src, 0, OP2 (Rd, Rn), QL_I2SAMEX, F_SF | F_ALIAS),
+  CORE_INSN ("rev64", 0xdac00c00, 0xfffffc00, dp_1src, 0, OP2 (Rd, Rn), QL_I2SAMEX, F_SF | F_ALIAS),
   CORE_INSN ("clz",   0x5ac01000, 0x7ffffc00, dp_1src, 0, OP2 (Rd, Rn), QL_I2SAME, F_SF),
   CORE_INSN ("cls",   0x5ac01400, 0x7ffffc00, dp_1src, 0, OP2 (Rd, Rn), QL_I2SAME, F_SF),
   CORE_INSN ("rev32", 0xdac00800, 0xfffffc00, dp_1src, 0, OP2 (Rd, Rn), QL_I2SAMEX, 0),
-  PAC_INSN ("pacia", 0xdac10000, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
-  PAC_INSN ("pacib", 0xdac10400, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
-  PAC_INSN ("pacda", 0xdac10800, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
-  PAC_INSN ("pacdb", 0xdac10c00, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
-  PAC_INSN ("autia", 0xdac11000, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
-  PAC_INSN ("autib", 0xdac11400, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
-  PAC_INSN ("autda", 0xdac11800, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
-  PAC_INSN ("autdb", 0xdac11c00, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
-  PAC_INSN ("paciza", 0xdac123e0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
-  PAC_INSN ("pacizb", 0xdac127e0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
-  PAC_INSN ("pacdza", 0xdac12be0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
-  PAC_INSN ("pacdzb", 0xdac12fe0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
-  PAC_INSN ("autiza", 0xdac133e0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
-  PAC_INSN ("autizb", 0xdac137e0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
-  PAC_INSN ("autdza", 0xdac13be0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
-  PAC_INSN ("autdzb", 0xdac13fe0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
-  PAC_INSN ("xpaci", 0xdac143e0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
-  PAC_INSN ("xpacd", 0xdac147e0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
+  PAUTH_INSN ("pacia", 0xdac10000, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
+  PAUTH_INSN ("pacib", 0xdac10400, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
+  PAUTH_INSN ("pacda", 0xdac10800, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
+  PAUTH_INSN ("pacdb", 0xdac10c00, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
+  PAUTH_INSN ("autia", 0xdac11000, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
+  PAUTH_INSN ("autib", 0xdac11400, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
+  PAUTH_INSN ("autda", 0xdac11800, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
+  PAUTH_INSN ("autdb", 0xdac11c00, 0xfffffc00, dp_1src, OP2 (Rd, Rn_SP), QL_I2SAMEX, 0),
+  PAUTH_INSN ("paciza", 0xdac123e0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
+  PAUTH_INSN ("pacizb", 0xdac127e0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
+  PAUTH_INSN ("pacdza", 0xdac12be0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
+  PAUTH_INSN ("pacdzb", 0xdac12fe0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
+  PAUTH_INSN ("autiza", 0xdac133e0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
+  PAUTH_INSN ("autizb", 0xdac137e0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
+  PAUTH_INSN ("autdza", 0xdac13be0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
+  PAUTH_INSN ("autdzb", 0xdac13fe0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
+  PAUTH_INSN ("xpaci", 0xdac143e0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
+  PAUTH_INSN ("xpacd", 0xdac147e0, 0xffffffe0, dp_1src, OP1 (Rd), QL_I1X, 0),
   /* Data-processing (2 source).  */
   CORE_INSN ("udiv",  0x1ac00800, 0x7fe0fc00, dp_2src, 0, OP3 (Rd, Rn, Rm), QL_I3SAMER, F_SF),
   CORE_INSN ("sdiv",  0x1ac00c00, 0x7fe0fc00, dp_2src, 0, OP3 (Rd, Rn, Rm), QL_I3SAMER, F_SF),
@@ -3595,7 +3803,7 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   MEMTAG_INSN ("cmpp",   0xbac0001f, 0xffe0fc1f, dp_2src, OP2 (Rn_SP, Rm_SP), QL_I2SAMEX, F_ALIAS),
   MEMTAG_INSN ("irg",    0x9ac01000, 0xffe0fc00, dp_2src, OP3 (Rd_SP, Rn_SP, Rm), QL_I3SAMEX, F_OPD2_OPT | F_DEFAULT (0x1f)),
   MEMTAG_INSN ("gmi",    0x9ac01400, 0xffe0fc00, dp_2src, OP3 (Rd, Rn_SP, Rm), QL_I3SAMEX, 0),
-  PAC_INSN ("pacga", 0x9ac03000, 0xffe0fc00, dp_2src, OP3 (Rd, Rn, Rm_SP), QL_I3SAMEX, 0),
+  PAUTH_INSN ("pacga", 0x9ac03000, 0xffe0fc00, dp_2src, OP3 (Rd, Rn, Rm_SP), QL_I3SAMEX, 0),
   /* CRC instructions.  */
   _CRC_INSN ("crc32b", 0x1ac04000, 0xffe0fc00, dp_2src, OP3 (Rd, Rn, Rm), QL_I3SAMEW, 0),
   _CRC_INSN ("crc32h", 0x1ac04400, 0xffe0fc00, dp_2src, OP3 (Rd, Rn, Rm), QL_I3SAMEW, 0),
@@ -3673,7 +3881,7 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   FF16_INSN ("fcvtzu",0x1ef90000, 0x7f3ffc00, float2int, OP2 (Rd, Fn), QL_FP2INT_H, F_FPTYPE | F_SF),
   __FP_INSN ("fmov",  0x9eae0000, 0xfffffc00, float2int, 0, OP2 (Rd, VnD1), QL_XVD1, 0),
   __FP_INSN ("fmov",  0x9eaf0000, 0xfffffc00, float2int, 0, OP2 (VdD1, Rn), QL_VD1X, 0),
-  {"fjcvtzs", 0x1e7e0000, 0xfffffc00, float2int, 0, FP_V8_3A, OP2 (Rd, Fn), QL_FP2INT_W_D, 0, 0, 0, NULL },
+  JSCVT_INSN ("fjcvtzs", 0x1e7e0000, 0xfffffc00, float2int, OP2 (Rd, Fn), QL_FP2INT_W_D, 0),
   /* Floating-point conditional compare.  */
   __FP_INSN ("fccmp", 0x1e200400, 0xff200c10, floatccmp, 0, OP4 (Fn, Fm, NZCV, COND), QL_FCCMP, F_FPTYPE),
   FF16_INSN ("fccmp", 0x1ee00400, 0xff200c10, floatccmp, OP4 (Fn, Fm, NZCV, COND), QL_FCCMP_H, F_FPTYPE),
@@ -3825,8 +4033,8 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   CORE_INSN ("prfum", 0xf8800000, 0xffe00c00, ldst_unscaled, OP_PRFUM, OP2 (PRFOP, ADDR_SIMM9), QL_LDST_PRFM, 0),
   MEMTAG_INSN ("ldg",  0xd9600000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_SIMM13), QL_LDG, 0),
   /* Load/store register (scaled signed immediate).  */
-  PAC_INSN ("ldraa", 0xf8200400, 0xffa00400, ldst_imm10, OP2 (Rt, ADDR_SIMM10), QL_X1NIL, 0),
-  PAC_INSN ("ldrab", 0xf8a00400, 0xffa00400, ldst_imm10, OP2 (Rt, ADDR_SIMM10), QL_X1NIL, 0),
+  PAUTH_INSN ("ldraa", 0xf8200400, 0xffa00400, ldst_imm10, OP2 (Rt, ADDR_SIMM10), QL_X1NIL, 0),
+  PAUTH_INSN ("ldrab", 0xf8a00400, 0xffa00400, ldst_imm10, OP2 (Rt, ADDR_SIMM10), QL_X1NIL, 0),
   /* Load/store exclusive.  */
   CORE_INSN ("stxrb", 0x8007c00, 0xffe08000, ldstexcl, 0, OP3 (Rs, Rt, ADDR_SIMPLE), QL_W2_LDST_EXC, 0),
   CORE_INSN ("stlxrb", 0x800fc00, 0xffe08000, ldstexcl, 0, OP3 (Rs, Rt, ADDR_SIMPLE), QL_W2_LDST_EXC, 0),
@@ -4086,6 +4294,41 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   _LSE_INSN ("stuminlb", 0x3860701f, 0xffe0fc1f, lse_atomic, OP2 (Rs, ADDR_SIMPLE), QL_W1_LDST_EXC, F_ALIAS),
   _LSE_INSN ("stuminlh", 0x7860701f, 0xffe0fc1f, lse_atomic, OP2 (Rs, ADDR_SIMPLE), QL_W1_LDST_EXC, F_ALIAS),
   _LSE_INSN ("stuminl", 0xb860701f, 0xbfe0fc1f, lse_atomic, OP2 (Rs, ADDR_SIMPLE), QL_R1NIL, F_LSE_SZ | F_ALIAS),
+  /* LSE128 extension (atomic).  */
+  _LSE128_INSN ("ldclrp", 0x19201000, 0xffe0fc00, lse128_atomic, OP3 (LSE128_Rt, LSE128_Rt2, ADDR_SIMPLE), QL_X2NIL, 0),
+  _LSE128_INSN ("ldclrpa", 0x19a01000, 0xffe0fc00, lse128_atomic, OP3 (LSE128_Rt, LSE128_Rt2, ADDR_SIMPLE), QL_X2NIL, 0),
+  _LSE128_INSN ("ldclrpal", 0x19e01000, 0xffe0fc00, lse128_atomic, OP3 (LSE128_Rt, LSE128_Rt2, ADDR_SIMPLE), QL_X2NIL, 0),
+  _LSE128_INSN ("ldclrpl", 0x19601000, 0xffe0fc00, lse128_atomic, OP3 (LSE128_Rt, LSE128_Rt2, ADDR_SIMPLE), QL_X2NIL, 0),
+  _LSE128_INSN ("ldsetp", 0x19203000, 0xffe0fc00, lse128_atomic, OP3 (LSE128_Rt, LSE128_Rt2, ADDR_SIMPLE), QL_X2NIL, 0),
+  _LSE128_INSN ("ldsetpa", 0x19a03000, 0xffe0fc00, lse128_atomic, OP3 (LSE128_Rt, LSE128_Rt2, ADDR_SIMPLE), QL_X2NIL, 0),
+  _LSE128_INSN ("ldsetpal", 0x19e03000, 0xffe0fc00, lse128_atomic, OP3 (LSE128_Rt, LSE128_Rt2, ADDR_SIMPLE), QL_X2NIL, 0),
+  _LSE128_INSN ("ldsetpl", 0x19603000, 0xffe0fc00, lse128_atomic, OP3 (LSE128_Rt, LSE128_Rt2, ADDR_SIMPLE), QL_X2NIL, 0),
+  _LSE128_INSN ("swpp", 0x19208000, 0xffe0fc00, lse128_atomic, OP3 (LSE128_Rt, LSE128_Rt2, ADDR_SIMPLE), QL_X2NIL, 0),
+  _LSE128_INSN ("swppa", 0x19a08000, 0xffe0fc00, lse128_atomic, OP3 (LSE128_Rt, LSE128_Rt2, ADDR_SIMPLE), QL_X2NIL, 0),
+  _LSE128_INSN ("swppal", 0x19e08000, 0xffe0fc00, lse128_atomic, OP3 (LSE128_Rt, LSE128_Rt2, ADDR_SIMPLE), QL_X2NIL, 0),
+  _LSE128_INSN ("swppl", 0x19608000, 0xffe0fc00, lse128_atomic, OP3 (LSE128_Rt, LSE128_Rt2, ADDR_SIMPLE), QL_X2NIL, 0),
+  /* RCPC3 extension.  */
+  RCPC3_INSN ("ldiapp", 0x19400800, 0x3fe0ec00, rcpc3, OP3 (Rt, Rs, RCPC3_ADDR_OPT_POSTIND), QL_R2NIL, F_RCPC3_SIZE),
+  RCPC3_INSN ("stilp",  0x19000800, 0x3fe0ec00, rcpc3, OP3 (Rt, Rs, RCPC3_ADDR_OPT_PREIND_WB), QL_R2NIL, F_RCPC3_SIZE),
+  RCPC3_INSN ("ldapr", 0x19c00800, 0x3ffffc00, rcpc3, OP2 (Rt, RCPC3_ADDR_POSTIND), QL_R1NIL, F_RCPC3_SIZE),
+  RCPC3_INSN ("stlr", 0x19800800, 0x3ffffc00, rcpc3, OP2 (Rt, RCPC3_ADDR_PREIND_WB), QL_R1NIL, F_RCPC3_SIZE),
+  RCPC3_INSN ("stl1", 0x0d018400, 0xbffffc00, rcpc3, OP2 (LEt, SIMD_ADDR_SIMPLE), QL_SIMD_IMM_D, F_OD(1)),
+  RCPC3_INSN ("ldap1", 0x0d418400, 0xbffffc00, rcpc3, OP2 (LEt, SIMD_ADDR_SIMPLE), QL_SIMD_IMM_D, F_OD(1)),
+  RCPC3_INSN ("ldapur", 0x1d400800, 0x3f600C00, rcpc3, OP2 (Ft, RCPC3_ADDR_OFFSET), QL_LDST_FP, F_RCPC3_SIZE),
+  RCPC3_INSN ("stlur", 0x1d000800, 0x3f600C00, rcpc3, OP2 (Ft, RCPC3_ADDR_OFFSET), QL_LDST_FP, F_RCPC3_SIZE),
+  /* AdvSIMD faminmax.  */
+  FAMINMAX_INSN ("famax", 0xec01c00, 0xbfe0fc00, OP3 (Vd, Vn, Vm), QL_V3SAMEH, F_SIZEQ),
+  FAMINMAX_INSN ("famax", 0xea0dc00, 0xbfa0fc00, OP3 (Vd, Vn, Vm), QL_V3SAMESD, F_SIZEQ),
+  FAMINMAX_INSN ("famin", 0x2ec01c00, 0xbfe0fc00, OP3 (Vd, Vn, Vm), QL_V3SAMEH, F_SIZEQ),
+  FAMINMAX_INSN ("famin", 0x2ea0dc00, 0xbfa0fc00, OP3 (Vd, Vn, Vm), QL_V3SAMESD, F_SIZEQ),
+  /* SVE2 faminmax.  */
+  FAMINMAX_SVE2_INSN ("famax", 0x650e8000, 0xff3fe000, OP4 (SVE_Zd, SVE_Pg3, SVE_Zd, SVE_Zm_5), OP_SVE_VMVV_HSD, C_SCAN_MOVPRFX),
+  FAMINMAX_SVE2_INSN ("famin", 0x650f8000, 0xff3fe000, OP4 (SVE_Zd, SVE_Pg3, SVE_Zd, SVE_Zm_5), OP_SVE_VMVV_HSD, C_SCAN_MOVPRFX),
+  /* SME2 faminmax.  */
+  FAMINMAX_SME2_INSN ("famax", 0xc120b140, 0xff21ffe1, OP3 (SME_Zdnx2, SME_Zdnx2, SME_Zmx2), OP_SVE_VVV_HSD),
+  FAMINMAX_SME2_INSN ("famax", 0xc120b940, 0xff23ffe3, OP3 (SME_Zdnx4, SME_Zdnx4, SME_Zmx4), OP_SVE_VVV_HSD),
+  FAMINMAX_SME2_INSN ("famin", 0xc120b141, 0xff21ffe1, OP3 (SME_Zdnx2, SME_Zdnx2, SME_Zmx2), OP_SVE_VVV_HSD),
+  FAMINMAX_SME2_INSN ("famin", 0xc120b941, 0xff23ffe3, OP3 (SME_Zdnx4, SME_Zdnx4, SME_Zmx4), OP_SVE_VVV_HSD),
   /* Move wide (immediate).  */
   CORE_INSN ("movn", 0x12800000, 0x7f800000, movewide, OP_MOVN, OP2 (Rd, HALF), QL_DST_R, F_SF | F_HAS_ALIAS),
   CORE_INSN ("mov",  0x12800000, 0x7f800000, movewide, OP_MOV_IMM_WIDEN, OP2 (Rd, IMM_MOV), QL_DST_R, F_SF | F_ALIAS | F_CONV),
@@ -4106,6 +4349,7 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   SME_INSN ("smstart", 0xd503417f, 0xfffff1ff, sme_start, 0, OP1 (SME_SM_ZA), {}, F_SYS_WRITE, 0),
   SME_INSN ("smstop",  0xd503407f, 0xfffff1ff, sme_stop,  0, OP1 (SME_SM_ZA), {}, F_SYS_WRITE, 0),
   /* System.  */
+  CHK_INSN ("chkfeat", 0xd503251f, 0xffffffff, OP1 (X16), QL_I1X, 0),
   CORE_INSN ("msr", 0xd500401f, 0xfff8f01f, ic_system, 0, OP2 (PSTATEFIELD, UIMM4), {}, F_SYS_WRITE),
   CORE_INSN ("hint",0xd503201f, 0xfffff01f, ic_system, 0, OP1 (UIMM7), {}, F_HAS_ALIAS),
   CORE_INSN ("nop", 0xd503201f, 0xffffffff, ic_system, 0, OP0 (), {}, F_ALIAS),
@@ -4128,23 +4372,37 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   CORE_INSN ("clearbhb", 0xd50322df, 0xffffffff, ic_system, 0, OP0 (), {}, F_ALIAS),
   CORE_INSN ("clrex", 0xd503305f, 0xfffff0ff, ic_system, 0, OP1 (UIMM4), {}, F_OPD0_OPT | F_DEFAULT (0xF)),
   CORE_INSN ("dsb", 0xd503309f, 0xfffff0ff, ic_system, 0, OP1 (BARRIER), {}, F_HAS_ALIAS),
-  V8_7A_INSN ("dsb", 0xd503323f, 0xfffff3ff, ic_system, OP1 (BARRIER_DSB_NXS), {}, F_HAS_ALIAS),
+  XS_INSN ("dsb", 0xd503323f, 0xfffff3ff, ic_system, OP1 (BARRIER_DSB_NXS), {}, F_HAS_ALIAS),
   V8R_INSN ("dfb", 0xd5033c9f, 0xffffffff, ic_system, OP0 (), {}, F_ALIAS),
   CORE_INSN ("ssbb", 0xd503309f, 0xffffffff, ic_system, 0, OP0 (), {}, F_ALIAS),
   CORE_INSN ("pssbb", 0xd503349f, 0xffffffff, ic_system, 0, OP0 (), {}, F_ALIAS),
   CORE_INSN ("dmb", 0xd50330bf, 0xfffff0ff, ic_system, 0, OP1 (BARRIER), {}, 0),
   CORE_INSN ("isb", 0xd50330df, 0xfffff0ff, ic_system, 0, OP1 (BARRIER_ISB), {}, F_OPD0_OPT | F_DEFAULT (0xF)),
   SB_INSN ("sb", 0xd50330ff, 0xffffffff, ic_system, OP0 (), {}, 0),
+  GCS_INSN ("gcspushx", 0xd508779f, 0xffffffff, OP0 (), {}, 0),
+  GCS_INSN ("gcspopx", 0xd50877df, 0xffffffff, OP0 (), {}, 0),
+  GCS_INSN ("gcspopcx", 0xd50877bf, 0xffffffff, OP0 (), {}, 0),
+  GCS_INSN ("gcsss1", 0xd50b7740, 0xffffffe0, OP1 (Rt), QL_I1X, 0),
+  GCS_INSN ("gcspushm", 0xd50b7700, 0xffffffe0, OP1 (Rt), QL_I1X, 0),
+  GCS_INSN ("gcsss2", 0xd52b7760, 0xffffffe0, OP1 (Rt), QL_I1X, 0),
+  GCS_INSN ("gcspopm", 0xd52b773f, 0xffffffff, OP0 (), {}, 0),
+  GCS_INSN ("gcspopm", 0xd52b7720, 0xffffffe0, OP1 (Rt), QL_I1X, 0),
+  GCS_INSN ("gcsstr", 0xd91f0c00, 0xfffffc00, OP2 (Rt, ADDR_SIMPLE), QL_DST_X, 0),
+  GCS_INSN ("gcssttr", 0xd91f1c00, 0xfffffc00, OP2 (Rt, ADDR_SIMPLE), QL_DST_X, 0),
+  CORE_INSN ("gcsb", 0xd503227f, 0xffffffff, ic_system, 0, OP1 (BARRIER_GCSB), {}, F_ALIAS),
   CORE_INSN ("sys", 0xd5080000, 0xfff80000, ic_system, 0, OP5 (UIMM3_OP1, CRn, CRm, UIMM3_OP2, Rt), QL_SYS, F_HAS_ALIAS | F_OPD4_OPT | F_DEFAULT (0x1F)),
+  D128_INSN ("sysp", 0xd5480000, 0xfff80000, OP6 (UIMM3_OP1, CRn, CRm, UIMM3_OP2, Rt, PAIRREG_OR_XZR), QL_SYSP, F_HAS_ALIAS | F_OPD_NARROW | F_OPD4_OPT | F_OPD_PAIR_OPT | F_DEFAULT (0x1f)),
   CORE_INSN ("at",  0xd5080000, 0xfff80000, ic_system, 0, OP2 (SYSREG_AT, Rt), QL_SRC_X, F_ALIAS),
   CORE_INSN ("dc",  0xd5080000, 0xfff80000, ic_system, 0, OP2 (SYSREG_DC, Rt), QL_SRC_X, F_ALIAS),
   CORE_INSN ("ic",  0xd5080000, 0xfff80000, ic_system, 0, OP2 (SYSREG_IC, Rt_SYS), QL_SRC_X, F_ALIAS | F_OPD1_OPT | F_DEFAULT (0x1F)),
   CORE_INSN ("tlbi",0xd5080000, 0xfff80000, ic_system, 0, OP2 (SYSREG_TLBI, Rt_SYS), QL_SRC_X, F_ALIAS | F_OPD1_OPT | F_DEFAULT (0x1F)),
-  V8_7A_INSN ("wfet", 0xd5031000, 0xffffffe0, ic_system, OP1 (Rd), QL_I1X, F_HAS_ALIAS),
-  V8_7A_INSN ("wfit", 0xd5031020, 0xffffffe0, ic_system, OP1 (Rd), QL_I1X, F_HAS_ALIAS),
+  D128_INSN ("tlbip",0xd5480000, 0xfff80000, OP3 (SYSREG_TLBIP, Rt_SYS, PAIRREG_OR_XZR), QL_SRC_X2, F_ALIAS| F_OPD1_OPT | F_OPD_PAIR_OPT | F_DEFAULT (0x1f)),
+  WFXT_INSN ("wfet", 0xd5031000, 0xffffffe0, ic_system, OP1 (Rd), QL_I1X, F_HAS_ALIAS),
+  WFXT_INSN ("wfit", 0xd5031020, 0xffffffe0, ic_system, OP1 (Rd), QL_I1X, F_HAS_ALIAS),
   PREDRES_INSN ("cfp", 0xd50b7380, 0xffffffe0, ic_system, OP2 (SYSREG_SR, Rt), QL_SRC_X, F_ALIAS),
   PREDRES_INSN ("dvp", 0xd50b73a0, 0xffffffe0, ic_system, OP2 (SYSREG_SR, Rt), QL_SRC_X, F_ALIAS),
   PREDRES_INSN ("cpp", 0xd50b73e0, 0xffffffe0, ic_system, OP2 (SYSREG_SR, Rt), QL_SRC_X, F_ALIAS),
+  PREDRES2_INSN ("cosp", 0xd50b73c0, 0xffffffe0, ic_system, OP2 (SYSREG_SR, Rt), QL_SRC_X, F_ALIAS),
   /* Armv8.4-a flag setting instruction, However this encoding has an encoding clash with the msr
      below it.  Usually we can resolve this by setting an alias condition on the flags, however that
      depends on the disassembly masks to be able to quickly find the alias.  The problem is the
@@ -4156,6 +4414,8 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   CORE_INSN ("msr", 0xd5000000, 0xffe00000, ic_system, 0, OP2 (SYSREG, Rt), QL_SRC_X, F_SYS_WRITE),
   CORE_INSN ("sysl",0xd5280000, 0xfff80000, ic_system, 0, OP5 (Rt, UIMM3_OP1, CRn, CRm, UIMM3_OP2), QL_SYSL, 0),
   CORE_INSN ("mrs", 0xd5200000, 0xffe00000, ic_system, 0, OP2 (Rt, SYSREG), QL_DST_X, F_SYS_READ),
+  D128_INSN ("mrrs", 0xd5700000, 0xfff00000, OP3 (Rt, PAIRREG, SYSREG128),  QL_DST_X2, F_SYS_READ),
+  D128_INSN ("msrr", 0xd5500000, 0xfff00000, OP3 (SYSREG128, Rt, PAIRREG), QL_SRC_X2, F_SYS_WRITE),
   CORE_INSN ("paciaz",  0xd503231f, 0xffffffff, ic_system, 0, OP0 (), {}, F_ALIAS),
   CORE_INSN ("paciasp", 0xd503233f, 0xffffffff, ic_system, 0, OP0 (), {}, F_ALIAS),
   CORE_INSN ("pacibz",  0xd503235f, 0xffffffff, ic_system, 0, OP0 (), {}, F_ALIAS),
@@ -4626,7 +4886,7 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   _SVE_INSN ("ldff1sw", 0xc540a000, 0xffe0e000, sve_misc, 0, OP3 (SVE_ZtxN, SVE_Pg3, SVE_ADDR_RZ), OP_SVE_DZD, F_OD(1), 0),
   _SVE_INSN ("ldff1sw", 0xc560a000, 0xffe0e000, sve_misc, 0, OP3 (SVE_ZtxN, SVE_Pg3, SVE_ADDR_RZ_LSL2), OP_SVE_DZD, F_OD(1), 0),
   _SVE_INSN ("ldff1sw", 0xc520a000, 0xffe0e000, sve_misc, 0, OP3 (SVE_ZtxN, SVE_Pg3, SVE_ADDR_ZI_U5x4), OP_SVE_DZD, F_OD(1), 0),
-  
+
   _SVE_INSN ("ldff1w", 0x85006000, 0xffa0e000, sve_misc, 0, OP3 (SVE_ZtxN, SVE_Pg3, SVE_ADDR_RZ_XTW_22), OP_SVE_SZS, F_OD(1), 0),
   _SVE_INSN ("ldff1w", 0x85206000, 0xffa0e000, sve_misc, 0, OP3 (SVE_ZtxN, SVE_Pg3, SVE_ADDR_RZ_XTW2_22), OP_SVE_SZS, F_OD(1), 0),
   _SVE_INSN ("ldff1w", 0xa5406000, 0xffe0e000, sve_misc, 0, OP3 (SVE_ZtxN, SVE_Pg3, SVE_ADDR_RR_LSL2), OP_SVE_SZU, F_OD(1), 0),
@@ -5891,11 +6151,11 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   DOT_INSN ("sdot", 0xe009400,  0xbf20fc00, dotproduct, OP3 (Vd, Vn, Vm), QL_V3DOT, F_SIZEQ),
   DOT_INSN ("udot", 0x2f00e000, 0xbf00f400, dotproduct, OP3 (Vd, Vn, Em), QL_V2DOT, F_SIZEQ),
   DOT_INSN ("sdot", 0xf00e000,  0xbf00f400, dotproduct, OP3 (Vd, Vn, Em), QL_V2DOT, F_SIZEQ),
-/* Crypto SHA2 (optional in ARMv8.2-a).  */
-  SHA2_INSN ("sha512h",   0xce608000, 0xffe0fc00, cryptosha2, OP3 (Fd, Fn, Vm), QL_SHA512UPT, 0),
-  SHA2_INSN ("sha512h2",  0xce608400, 0xffe0fc00, cryptosha2, OP3 (Fd, Fn, Vm), QL_SHA512UPT, 0),
-  SHA2_INSN ("sha512su0", 0xcec08000, 0xfffffc00, cryptosha2, OP2 (Vd, Vn), QL_V2SAME2D, 0),
-  SHA2_INSN ("sha512su1", 0xce608800, 0xffe0fc00, cryptosha2, OP3 (Vd, Vn, Vm), QL_V3SAME2D, 0),
+/* Crypto SHA512 (optional in ARMv8.2-a).  */
+  SHA3_INSN ("sha512h",   0xce608000, 0xffe0fc00, cryptosha2, OP3 (Fd, Fn, Vm), QL_SHA512UPT, 0),
+  SHA3_INSN ("sha512h2",  0xce608400, 0xffe0fc00, cryptosha2, OP3 (Fd, Fn, Vm), QL_SHA512UPT, 0),
+  SHA3_INSN ("sha512su0", 0xcec08000, 0xfffffc00, cryptosha2, OP2 (Vd, Vn), QL_V2SAME2D, 0),
+  SHA3_INSN ("sha512su1", 0xce608800, 0xffe0fc00, cryptosha2, OP3 (Vd, Vn, Vm), QL_V3SAME2D, 0),
   /* Crypto SHA3 (optional in ARMv8.2-a).  */
   SHA3_INSN ("eor3",      0xce000000, 0xffe08000, cryptosha3, OP4 (Vd, Vn, Vm, Va), QL_V4SAME16B, 0),
   SHA3_INSN ("rax1",      0xce608c00, 0xffe0fc00, cryptosha3, OP3 (Vd, Vn, Vm), QL_V3SAME2D, 0),
@@ -5937,19 +6197,19 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   FLAGM_INSN ("setf8",  0x3a00080d, 0xfffffc1f, ic_system, OP1 (Rn), QL_SETF, 0),
   FLAGM_INSN ("setf16", 0x3a00480d, 0xfffffc1f, ic_system, OP1 (Rn), QL_SETF, 0),
   /* Memory access instructions ARMv8.4-a.  */
-  V8_4A_INSN ("stlurb" ,  0x19000000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
-  V8_4A_INSN ("ldapurb",  0x19400000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
-  V8_4A_INSN ("ldapursb", 0x19c00000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
-  V8_4A_INSN ("ldapursb", 0x19800000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLX, 0),
-  V8_4A_INSN ("stlurh",   0x59000000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
-  V8_4A_INSN ("ldapurh",  0x59400000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
-  V8_4A_INSN ("ldapursh", 0x59c00000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
-  V8_4A_INSN ("ldapursh", 0x59800000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLX, 0),
-  V8_4A_INSN ("stlur",    0x99000000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
-  V8_4A_INSN ("ldapur",   0x99400000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
-  V8_4A_INSN ("ldapursw", 0x99800000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLX, 0),
-  V8_4A_INSN ("stlur",    0xd9000000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLX, 0),
-  V8_4A_INSN ("ldapur",   0xd9400000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLX, 0),
+  RCPC2_INSN ("stlurb" ,  0x19000000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
+  RCPC2_INSN ("ldapurb",  0x19400000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
+  RCPC2_INSN ("ldapursb", 0x19c00000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
+  RCPC2_INSN ("ldapursb", 0x19800000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLX, 0),
+  RCPC2_INSN ("stlurh",   0x59000000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
+  RCPC2_INSN ("ldapurh",  0x59400000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
+  RCPC2_INSN ("ldapursh", 0x59c00000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
+  RCPC2_INSN ("ldapursh", 0x59800000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLX, 0),
+  RCPC2_INSN ("stlur",    0x99000000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
+  RCPC2_INSN ("ldapur",   0x99400000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLW, 0),
+  RCPC2_INSN ("ldapursw", 0x99800000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLX, 0),
+  RCPC2_INSN ("stlur",    0xd9000000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLX, 0),
+  RCPC2_INSN ("ldapur",   0xd9400000, 0xffe00c00, ldst_unscaled, OP2 (Rt, ADDR_OFFSET), QL_STLX, 0),
 
   /* Matrix Multiply instructions.  */
   INT8MATMUL_SVE_INSNC ("smmla",  0x45009800, 0xffe0fc00, sve_misc, OP3 (SVE_Zd, SVE_Zn, SVE_Zm_16), OP_SVE_SBB, 0, C_SCAN_MOVPRFX, 0),
@@ -6066,6 +6326,231 @@ const struct aarch64_opcode aarch64_opcode_table[] =
   CSSC_INSN ("smin", 0x1ac06800, 0x7fe0fc00, OP3 (Rd, Rn, Rm), QL_I3SAMER, F_SF),
   CSSC_INSN ("umin", 0x1ac06c00, 0x7fe0fc00, OP3 (Rd, Rn, Rm), QL_I3SAMER, F_SF),
 
+  /* FEAT_CLRBHB part of the hint space and available without special
+     command-line flags.  */
+  CORE_INSN ("clrbhb", 0xd50322df, 0xffffffff, ic_system, 0, OP0 (), {}, F_ALIAS),
+
+  ITE_INSN ("trcit", 0xd50b72e0, 0xffffffe0, ic_system, OP1 (Rt), QL_I1X, F_ALIAS),
+
+/* Read check write compare and swap doubleword in memory instructions.  */
+  THE_INSN("rcwcas", 0x19200800, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwcasa", 0x19a00800, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwcasal", 0x19e00800, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwcasl", 0x19600800, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* Read check write compare and swap quadword in memory instructions.  */
+  D128_THE_INSN("rcwcasp", 0x19200c00, 0xffe0fc00, OP5 (Rs, PAIRREG, Rt, PAIRREG, ADDR_SIMPLE), QL_X4NIL, 0),
+  D128_THE_INSN("rcwcaspa", 0x19a00c00, 0xffe0fc00, OP5 (Rs, PAIRREG, Rt, PAIRREG, ADDR_SIMPLE), QL_X4NIL, 0),
+  D128_THE_INSN("rcwcaspal", 0x19e00c00, 0xffe0fc00, OP5 (Rs, PAIRREG, Rt, PAIRREG, ADDR_SIMPLE), QL_X4NIL, 0),
+  D128_THE_INSN("rcwcaspl", 0x19600c00, 0xffe0fc00, OP5 (Rs, PAIRREG, Rt, PAIRREG, ADDR_SIMPLE), QL_X4NIL, 0),
+
+/* Read check write software compare and swap doubleword in memory
+   instructions.  */
+  THE_INSN("rcwscas", 0x59200800, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwscasa", 0x59a00800, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwscasal", 0x59e00800, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwscasl", 0x59600800, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* Read check write software compare and swap quadword in memory
+   instructions.  */
+  D128_THE_INSN("rcwscasp", 0x59200c00, 0xffe0fc00, OP5 (Rs, PAIRREG, Rt, PAIRREG, ADDR_SIMPLE), QL_X4NIL, 0),
+  D128_THE_INSN("rcwscaspa", 0x59a00c00, 0xffe0fc00, OP5 (Rs, PAIRREG, Rt, PAIRREG, ADDR_SIMPLE), QL_X4NIL, 0),
+  D128_THE_INSN("rcwscaspal", 0x59e00c00, 0xffe0fc00, OP5 (Rs, PAIRREG, Rt, PAIRREG, ADDR_SIMPLE), QL_X4NIL, 0),
+  D128_THE_INSN("rcwscaspl", 0x59600c00, 0xffe0fc00, OP5 (Rs, PAIRREG, Rt, PAIRREG, ADDR_SIMPLE), QL_X4NIL, 0),
+
+/* Read check write atomic bit clear on doubleword in memory instructions.  */
+  THE_INSN("rcwclr", 0x38209000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwclra", 0x38a09000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwclral", 0x38e09000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwclrl", 0x38609000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* Read check write atomic bit clear on quadword in memory instructions.  */
+  D128_THE_INSN("rcwclrp", 0x19209000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwclrpa", 0x19a09000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwclrpal", 0x19e09000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwclrpl", 0x19609000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* Read check write software atomic bit clear on doubleword in memory
+   instructions.  */
+  THE_INSN("rcwsclr", 0x78209000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwsclra", 0x78a09000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwsclral", 0x78e09000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwsclrl", 0x78609000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* Read check write software atomic bit clear on quadword in memory
+   instructions.  */
+  D128_THE_INSN("rcwsclrp", 0x59209000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwsclrpa", 0x59a09000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwsclrpal", 0x59e09000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwsclrpl", 0x59609000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* Read check write atomic bit set on doubleword in memory instructions.  */
+  THE_INSN("rcwset", 0x3820b000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwseta", 0x38a0b000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwsetal", 0x38e0b000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwsetl", 0x3860b000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* Read check write atomic bit set on quadword in memory instructions.  */
+  D128_THE_INSN("rcwsetp", 0x1920b000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwsetpa", 0x19a0b000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwsetpal", 0x19e0b000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwsetpl", 0x1960b000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* Read check write software atomic bit set on doubleword in memory
+   instructions.  */
+  THE_INSN("rcwsset", 0x7820b000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwsseta", 0x78a0b000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwssetal", 0x78e0b000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwssetl", 0x7860b000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* Read check write software atomic bit set on quadword in memory
+   instructions.  */
+  D128_THE_INSN("rcwssetp", 0x5920b000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwssetpa", 0x59a0b000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwssetpal", 0x59e0b000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwssetpl", 0x5960b000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* Read check write swap doubleword in memory instructions.  */
+  THE_INSN("rcwswp", 0x3820a000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwswpa", 0x38a0a000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwswpal", 0x38e0a000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwswpl", 0x3860a000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* Read check write swap quadword in memory instructions.  */
+  D128_THE_INSN("rcwswpp", 0x1920a000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwswppa", 0x19a0a000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwswppal", 0x19e0a000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwswppl", 0x1960a000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* Read check write software swap doubleword in memory instructions.  */
+  THE_INSN("rcwsswp", 0x7820a000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwsswpa", 0x78a0a000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwsswpal", 0x78e0a000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+  THE_INSN("rcwsswpl", 0x7860a000, 0xffe0fc00, OP3 (Rs, Rt, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* Read check write software swap quadword in memory instructions.  */
+  D128_THE_INSN("rcwsswpp", 0x5920a000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwsswppa", 0x59a0a000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwsswppal", 0x59e0a000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+  D128_THE_INSN("rcwsswppl", 0x5960a000, 0xffe0fc00, OP3 (Rt, Rs, ADDR_SIMPLE), QL_X2NIL, 0),
+
+/* BFloat16 SVE Instructions.  */
+  B16B16_INSNC("bfadd", 0x65008000, 0xffffe000, sve_misc, 0, OP4 (SVE_Zd, SVE_Pg3, SVE_Zd, SVE_Zm_5), OP_SVE_SMSS, 0, C_SCAN_MOVPRFX, 2),
+  B16B16_INSNC("bfmax", 0x65068000, 0xffffe000, sve_misc, 0, OP4 (SVE_Zd, SVE_Pg3, SVE_Zd, SVE_Zm_5), OP_SVE_SMSS, 0, C_SCAN_MOVPRFX, 2),
+  B16B16_INSNC("bfmaxnm", 0x65048000, 0xffffe000, sve_misc, 0, OP4 (SVE_Zd, SVE_Pg3, SVE_Zd, SVE_Zm_5), OP_SVE_SMSS, 0, C_SCAN_MOVPRFX, 2),
+  B16B16_INSNC("bfmin", 0x65078000, 0xffffe000, sve_misc, 0, OP4 (SVE_Zd, SVE_Pg3, SVE_Zd, SVE_Zm_5), OP_SVE_SMSS, 0, C_SCAN_MOVPRFX, 2),
+  B16B16_INSNC("bfminnm", 0x65058000, 0xffffe000, sve_misc, 0, OP4 (SVE_Zd, SVE_Pg3, SVE_Zd, SVE_Zm_5), OP_SVE_SMSS, 0, C_SCAN_MOVPRFX, 2),
+  B16B16_INSNC("bfmla", 0x65200000, 0xffe0e000, sve_misc, 0, OP4 (SVE_Zd, SVE_Pg3, SVE_Zn, SVE_Zm_16), OP_SVE_SMSS, 0, C_SCAN_MOVPRFX, 0),
+  B16B16_INSNC("bfmls", 0x65202000, 0xffe0e000, sve_misc, 0, OP4 (SVE_Zd, SVE_Pg3, SVE_Zn, SVE_Zm_16), OP_SVE_SMSS, 0, C_SCAN_MOVPRFX, 0),
+  B16B16_INSNC("bfmul", 0x65028000, 0xffffe000, sve_misc, 0, OP4 (SVE_Zd, SVE_Pg3, SVE_Zd, SVE_Zm_5), OP_SVE_SMSS, 0, C_SCAN_MOVPRFX, 2),
+  B16B16_INSNC("bfsub", 0x65018000, 0xffffe000, sve_misc, 0, OP4 (SVE_Zd, SVE_Pg3, SVE_Zd, SVE_Zm_5), OP_SVE_SMSS, 0, C_SCAN_MOVPRFX, 2),
+  B16B16_INSN("bfadd", 0x65000000, 0xffe0fc00, sve_misc, 0, OP3 (SVE_Zd, SVE_Zn, SVE_Zm_16), OP_SVE_HHH, 0, 0),
+  B16B16_INSN("bfclamp", 0x64202400, 0xffe0fc00, sve_misc, 0, OP3 (SVE_Zd, SVE_Zn, SVE_Zm_16), OP_SVE_HHH, 0, 0),
+  B16B16_INSN("bfmul", 0x65000800, 0xffe0fc00, sve_misc, 0, OP3 (SVE_Zd, SVE_Zn, SVE_Zm_16), OP_SVE_HHH, 0, 0),
+  B16B16_INSN("bfsub", 0x65000400, 0xffe0fc00, sve_misc, 0, OP3 (SVE_Zd, SVE_Zn, SVE_Zm_16), OP_SVE_HHH, 0, 0),
+  B16B16_INSN("bfmla", 0x64200800, 0xffa0fc00, sve_misc, 0, OP3 (SVE_Zd, SVE_Zn, SVE_Zm3_22_INDEX), OP_SVE_VVV_H, 0, 0),
+  B16B16_INSN("bfmls", 0x64200c00, 0xffa0fc00, sve_misc, 0, OP3 (SVE_Zd, SVE_Zn, SVE_Zm3_22_INDEX), OP_SVE_VVV_H, 0, 0),
+  B16B16_INSN("bfmul", 0x64202800, 0xffa0fc00, sve_misc, 0, OP3 (SVE_Zd, SVE_Zn, SVE_Zm3_22_INDEX), OP_SVE_VVV_H, 0, 0),
+
+/* SME2.1 movaz instructions.  */
+  SME2p1_INSN ("movaz", 0xc0060600, 0xffff1f83, sme2_movaz, 0, OP2 (SME_Zdnx4, SME_ZA_array_vrsb_2), OP_SVE_BB, 0, 0),
+  SME2p1_INSN ("movaz", 0xc0460600, 0xffff1f83, sme2_movaz, 0, OP2 (SME_Zdnx4, SME_ZA_array_vrsh_2), OP_SVE_HH, 0, 0),
+  SME2p1_INSN ("movaz", 0xc0860600, 0xffff1f83, sme2_movaz, 0, OP2 (SME_Zdnx4, SME_ZA_array_vrss_2), OP_SVE_SS, 0, 0),
+  SME2p1_INSN ("movaz", 0xc0c60600, 0xffff1f03, sme2_movaz, 0, OP2 (SME_Zdnx4, SME_ZA_array_vrsd_2), OP_SVE_DD, 0, 0),
+
+  SME2p1_INSN ("movaz", 0xc0060200, 0xffff1f01, sme2_movaz, 0, OP2 (SME_Zdnx2, SME_ZA_array_vrsb_1), OP_SVE_BB, 0, 0),
+  SME2p1_INSN ("movaz", 0xc0460200, 0xffff1f01, sme2_movaz, 0, OP2 (SME_Zdnx2, SME_ZA_array_vrsh_1), OP_SVE_HH, 0, 0),
+  SME2p1_INSN ("movaz", 0xc0860200, 0xffff1f01, sme2_movaz, 0, OP2 (SME_Zdnx2, SME_ZA_array_vrss_1), OP_SVE_SS, 0, 0),
+  SME2p1_INSN ("movaz", 0xc0c60200, 0xffff1f01, sme2_movaz, 0, OP2 (SME_Zdnx2, SME_ZA_array_vrsd_1), OP_SVE_DD, 0, 0),
+
+/* SVE2p1 Instructions.  */
+  SVE2p1_INSNC("addqv",0x04052000, 0xff3fe000, sve2_urqvs, 0, OP3 (Vd, SVE_Pg3, SVE_Zn), OP_SVE_vUS_BHSD_BHSD, F_OPD_SIZE, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("andqv",0x041e2000, 0xff3fe000, sve2_urqvs, 0, OP3 (Vd, SVE_Pg3, SVE_Zn), OP_SVE_vUS_BHSD_BHSD, F_OPD_SIZE, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("smaxqv",0x040c2000, 0xff3fe000, sve2_urqvs, 0, OP3 (Vd, SVE_Pg3, SVE_Zn), OP_SVE_vUS_BHSD_BHSD, F_OPD_SIZE, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("sminqv",0x040e2000, 0xff3fe000, sve2_urqvs, 0, OP3 (Vd, SVE_Pg3, SVE_Zn), OP_SVE_vUS_BHSD_BHSD, F_OPD_SIZE, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("umaxqv",0x040d2000, 0xff3fe000, sve2_urqvs, 0, OP3 (Vd, SVE_Pg3, SVE_Zn), OP_SVE_vUS_BHSD_BHSD, F_OPD_SIZE, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("uminqv",0x040f2000, 0xff3fe000, sve2_urqvs, 0, OP3 (Vd, SVE_Pg3, SVE_Zn), OP_SVE_vUS_BHSD_BHSD, F_OPD_SIZE, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("eorqv",0x041d2000, 0xff3fe000, sve2_urqvs, 0, OP3 (Vd, SVE_Pg3, SVE_Zn), OP_SVE_vUS_BHSD_BHSD, F_OPD_SIZE, C_SCAN_MOVPRFX, 0),
+
+  SVE2p1_INSNC("faddqv",0x6410a000, 0xff3fe000, sve2_urqvs, 0, OP3 (Vd, SVE_Pg3, SVE_Zn), OP_SVE_vUS_HSD_HSD, F_OPD_SIZE, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("fmaxnmqv",0x6414a000, 0xff3fe000, sve2_urqvs, 0, OP3 (Vd, SVE_Pg3, SVE_Zn), OP_SVE_vUS_HSD_HSD, F_OPD_SIZE, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("fmaxqv",0x6416a000, 0xff3fe000, sve2_urqvs, 0, OP3 (Vd, SVE_Pg3, SVE_Zn), OP_SVE_vUS_HSD_HSD, F_OPD_SIZE, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("fminnmqv",0x6415a000, 0xff3fe000, sve2_urqvs, 0, OP3 (Vd, SVE_Pg3, SVE_Zn), OP_SVE_vUS_HSD_HSD, F_OPD_SIZE, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("fminqv",0x6417a000, 0xff3fe000, sve2_urqvs, 0, OP3 (Vd, SVE_Pg3, SVE_Zn), OP_SVE_vUS_HSD_HSD, F_OPD_SIZE, C_SCAN_MOVPRFX, 0),
+
+  SVE2p1_INSN("dupq",0x05202400, 0xffe0fc00, sve_index1, 0, OP2 (SVE_Zd, SVE_Zn_5_INDEX), OP_SVE_VV_BHSD, 0, 0),
+  SVE2p1_INSN("extq",0x05602400, 0xfff0fc00, sve_misc, 0, OP3 (SVE_Zd, SVE_Zd, SVE_Zm_imm4), OP_SVE_BBB, 0, 1),
+  SVE2p1_INSNC("ld1q",0xc400a000, 0xffe0e000, sve_misc, 0, OP3 (SVE_Zt, SVE_Pg3, SVE_ADDR_ZX), OP_SVE_SZS_QD, 0, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("ld2q",0xa490e000, 0xfff0e000, sve_misc, 0, OP3 (SME_Zt2, SVE_Pg3, SVE_ADDR_RI_S4x2xVL), OP_SVE_QZU, 0, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("ld3q",0xa510e000, 0xfff0e000, sve_misc, 0, OP3 (SME_Zt3, SVE_Pg3, SVE_ADDR_RI_S4x3xVL), OP_SVE_QZU, 0, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("ld4q",0xa590e000, 0xfff0e000, sve_misc, 0, OP3 (SME_Zt4, SVE_Pg3, SVE_ADDR_RI_S4x4xVL), OP_SVE_QZU, 0, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("ld2q",0xa4a08000, 0xffe0e000, sve_misc, 0, OP3 (SME_Zt2, SVE_Pg3, SVE_ADDR_RR_LSL4), OP_SVE_QZU, 0, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("ld3q",0xa5208000, 0xffe0e000, sve_misc, 0, OP3 (SME_Zt3, SVE_Pg3, SVE_ADDR_RR_LSL4), OP_SVE_QZU, 0, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("ld4q",0xa5a08000, 0xffe0e000, sve_misc, 0, OP3 (SME_Zt4, SVE_Pg3, SVE_ADDR_RR_LSL4), OP_SVE_QZU, 0, C_SCAN_MOVPRFX, 0),
+
+  SVE2p1_INSNC("st1q",0xe4202000, 0xffe0e000, sve_misc, 0, OP3 (SVE_Zt, SVE_Pg3, SVE_ADDR_ZX), OP_SVE_SUS_QD, 0, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("st2q",0xe4400000, 0xfff0e000, sve_misc, 0, OP3 (SME_Zt2, SVE_Pg3, SVE_ADDR_RI_S4x2xVL), OP_SVE_QUU, 0, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("st3q",0xe4800000, 0xfff0e000, sve_misc, 0, OP3 (SME_Zt3, SVE_Pg3, SVE_ADDR_RI_S4x3xVL), OP_SVE_QUU, 0, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("st4q",0xe4c00000, 0xfff0e000, sve_misc, 0, OP3 (SME_Zt4, SVE_Pg3, SVE_ADDR_RI_S4x4xVL), OP_SVE_QUU, 0, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("st2q",0xe4600000, 0xffe0e000, sve_misc, 0, OP3 (SME_Zt2, SVE_Pg3, SVE_ADDR_RR_LSL4), OP_SVE_QUU, 0, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("st3q",0xe4a00000, 0xffe0e000, sve_misc, 0, OP3 (SME_Zt3, SVE_Pg3, SVE_ADDR_RR_LSL4), OP_SVE_QUU, 0, C_SCAN_MOVPRFX, 0),
+  SVE2p1_INSNC("st4q",0xe4e00000, 0xffe0e000, sve_misc, 0, OP3 (SME_Zt4, SVE_Pg3, SVE_ADDR_RR_LSL4), OP_SVE_QUU, 0, C_SCAN_MOVPRFX, 0),
+  FP8_INSN("bf1cvtl", 0x2ea17800, 0xfffffc00, asimdmisc, OP2 (Vd, Vn), QL_V2FP8B8H, 0),
+  FP8_INSN("bf1cvtl2", 0x6ea17800, 0xfffffc00, asimdmisc, OP2 (Vd, Vn), QL_V28H16B, 0),
+  FP8_INSN("bf2cvtl", 0x2ee17800, 0xfffffc00, asimdmisc, OP2 (Vd, Vn), QL_V2FP8B8H, 0),
+  FP8_INSN("bf2cvtl2", 0x6ee17800, 0xfffffc00, asimdmisc, OP2 (Vd, Vn), QL_V28H16B, 0),
+  FP8_INSN("f1cvtl", 0x2e217800, 0xfffffc00, asimdmisc, OP2 (Vd, Vn), QL_V2FP8B8H, 0),
+  FP8_INSN("f1cvtl2", 0x6e217800, 0xfffffc00, asimdmisc, OP2 (Vd, Vn), QL_V28H16B, 0),
+  FP8_INSN("f2cvtl", 0x2e617800, 0xfffffc00, asimdmisc, OP2 (Vd, Vn), QL_V2FP8B8H, 0),
+  FP8_INSN("f2cvtl2", 0x6e617800, 0xfffffc00, asimdmisc, OP2 (Vd, Vn), QL_V28H16B, 0),
+  FP8_INSN("fcvtn",  0xe00f400, 0xffe0fc00, asimdmisc, OP3 (Vd, Vn, Vm), QL_V3_BSS_LOWER, 0),
+  FP8_INSN("fcvtn2", 0x4e00f400, 0xffe0fc00, asimdmisc, OP3 (Vd, Vn, Vm), QL_V3_BSS_FULL, 0),
+  FP8_INSN("fcvtn", 0xe40f400,  0xbfe0fc00, asimdmisc, OP3 (Vd, Vn, Vm), QL_V3_BHH, F_SIZEQ),
+  FP8_INSN("fscale", 0x2ec03c00, 0xbfe0fc00, asimdmisc, OP3 (Vd, Vn, Vm), QL_VSHIFT_H, F_SIZEQ),
+  FP8_INSN("fscale", 0x2ea0fc00, 0xbfa0fc00, asimdmisc, OP3 (Vd, Vn, Vm), QL_V3SAMESD, F_SIZEQ),
+  FP8_SVE2_INSN ("bf1cvt", 0x65083800, 0xfffffc00, sve_misc, 0, OP2 (SVE_Zd, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SVE2_INSN ("bf2cvt", 0x65083c00, 0xfffffc00, sve_misc, 0, OP2 (SVE_Zd, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SVE2_INSN ("bf1cvtlt", 0x65093800, 0xfffffc00, sve_misc, 0, OP2 (SVE_Zd, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SVE2_INSN ("bf2cvtlt", 0x65093c00, 0xfffffc00, sve_misc, 0, OP2 (SVE_Zd, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SVE2_INSN ("f1cvt", 0x65083000, 0xfffffc00, sve_misc, 0, OP2 (SVE_Zd, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SVE2_INSN ("f2cvt", 0x65083400, 0xfffffc00, sve_misc, 0, OP2 (SVE_Zd, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SVE2_INSN ("f1cvtlt", 0x65093000, 0xfffffc00, sve_misc, 0, OP2 (SVE_Zd, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SVE2_INSN ("f2cvtlt", 0x65093400, 0xfffffc00, sve_misc, 0, OP2 (SVE_Zd, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SVE2_INSN ("bfcvtn", 0x650a3800, 0xfffffc20, sve_misc, 0, OP2 (SVE_Zd, SME_Znx2), OP_SVE_BH, 0, 0),
+  FP8_SVE2_INSN ("fcvtn", 0x650a3000, 0xfffffc20, sve_misc, 0, OP2 (SVE_Zd, SME_Znx2), OP_SVE_BH, 0, 0),
+  FP8_SVE2_INSN ("fcvtnb", 0x650a3400, 0xfffffc20, sve_misc, 0, OP2 (SVE_Zd, SME_Znx2), OP_SVE_BS, 0, 0),
+  FP8_SVE2_INSN ("fcvtnt", 0x650a3c00, 0xfffffc20, sve_misc, 0, OP2 (SVE_Zd, SME_Znx2), OP_SVE_BS, 0, 0),
+  FP8_SME2_INSN ("bf1cvt", 0xc166e000, 0xfffffc01, sme_misc, 0, OP2 (SME_Zdnx2, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SME2_INSN ("bf2cvt", 0xc1e6e000, 0xfffffc01, sme_misc, 0, OP2 (SME_Zdnx2, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SME2_INSN ("bf1cvtl", 0xc166e001, 0xfffffc01, sme_misc, 0, OP2 (SME_Zdnx2, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SME2_INSN ("bf2cvtl", 0xc1e6e001, 0xfffffc01, sme_misc, 0, OP2 (SME_Zdnx2, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SME2_INSN ("bfcvt", 0xc164e000, 0xfffffc20, sme_misc, 0, OP2 (SVE_Zd, SME_Znx2), OP_SVE_BH, 0, 0),
+  FP8_SME2_INSN ("f1cvt", 0xc126e000, 0xfffffc01, sme_misc, 0, OP2 (SME_Zdnx2, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SME2_INSN ("f2cvt", 0xc1a6e000, 0xfffffc01, sme_misc, 0, OP2 (SME_Zdnx2, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SME2_INSN ("f1cvtl", 0xc126e001, 0xfffffc01, sme_misc, 0, OP2 (SME_Zdnx2, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SME2_INSN ("f2cvtl", 0xc1a6e001, 0xfffffc01, sme_misc, 0, OP2 (SME_Zdnx2, SVE_Zn), OP_SVE_HB, 0, 0),
+  FP8_SME2_INSN ("fcvt", 0xc124e000, 0xfffffc20, sme_misc, 0, OP2 (SVE_Zd, SME_Znx2), OP_SVE_BH, 0, 0),
+  FP8_SME2_INSN ("fcvt", 0xc134e000, 0xfffffc60, sme_misc, 0, OP2 (SVE_Zd, SME_Znx4), OP_SVE_BS, 0, 0),
+  FP8_SME2_INSN ("fcvtn", 0xc134e020, 0xfffffc60, sme_misc, 0, OP2 (SVE_Zd, SME_Znx4), OP_SVE_BS, 0, 0),
+  FP8_SME2_INSN ("fscale", 0xc120a180, 0xff30ffe1, sme_size_22_hsd, 0, OP3 (SME_Zdnx2, SME_Zdnx2, SME_Zm), OP_SVE_VVV_HSD, 0, 1),
+  FP8_SME2_INSN ("fscale", 0xc120a980, 0xff30ffe3, sme_size_22_hsd, 0, OP3 (SME_Zdnx4, SME_Zdnx4, SME_Zm), OP_SVE_VVV_HSD, 0, 1),
+  FP8_SME2_INSN ("fscale", 0xc120b180, 0xff21ffe1, sme_size_22_hsd, 0, OP3 (SME_Zdnx2, SME_Zdnx2, SME_Zmx2), OP_SVE_VVV_HSD, 0, 1),
+  FP8_SME2_INSN ("fscale", 0xc120b980, 0xff23ffe3, sme_size_22_hsd, 0, OP3 (SME_Zdnx4, SME_Zdnx4, SME_Zmx4), OP_SVE_VVV_HSD, 0, 1),
+
+/* Checked Pointer Arithmetic Instructions.  */
+  CPA_INSN ("addpt",  0x9a002000, 0xffe0e000, aarch64_misc, OP3 (Rd_SP, Rn_SP, Rm_LSL), QL_I3SAMEX),
+  CPA_INSN ("subpt",  0xda002000, 0xffe0e000, aarch64_misc, OP3 (Rd_SP, Rn_SP, Rm_LSL), QL_I3SAMEX),
+  CPA_INSN ("maddpt", 0x9b600000, 0xffe08000, aarch64_misc, OP4 (Rd, Rn, Rm, Ra), QL_I4SAMEX),
+  CPA_INSN ("msubpt", 0x9b608000, 0xffe08000, aarch64_misc, OP4 (Rd, Rn, Rm, Ra), QL_I4SAMEX),
+
+  CPA_SVE_INSNC ("addpt", 0x04c40000, 0xffffe000, sve_misc, OP4 (SVE_Zd, SVE_Pg3, SVE_Zd, SVE_Zm_5), OP_SVE_VMVV_D, C_SCAN_MOVPRFX, 2),
+  CPA_SVE_INSNC ("addpt", 0x04e00800, 0xffe0fc00, sve_misc, OP3 (SVE_Zd, SVE_Zn, SVE_Zm_16), OP_SVE_VVV_D, 0, 0),
+  CPA_SVE_INSNC ("subpt", 0x04c50000, 0xffffe000, sve_misc, OP4 (SVE_Zd, SVE_Pg3, SVE_Zd, SVE_Zm_5), OP_SVE_VMVV_D, C_SCAN_MOVPRFX, 2),
+  CPA_SVE_INSNC ("subpt", 0x04e00c00, 0xffe0fc00, sve_misc, OP3 (SVE_Zd, SVE_Zn, SVE_Zm_16), OP_SVE_VVV_D, 0, 0),
+
+  CPA_SVE_INSNC ("madpt", 0x44c0d800, 0xffe0fc00, sve_misc, OP3 (SVE_Zd, SVE_Zm_16, SVE_Za_5), OP_SVE_VVV_D, C_SCAN_MOVPRFX, 0),
+  CPA_SVE_INSNC ("mlapt", 0x44c0d000, 0xffe0fc00, sve_misc, OP3 (SVE_Zd, SVE_Zn, SVE_Zm_16), OP_SVE_VVV_D, C_SCAN_MOVPRFX, 0),
+
   {0, 0, 0, 0, 0, 0, {}, {}, 0, 0, 0, NULL},
 };
 
@@ -6092,6 +6577,7 @@ const struct aarch64_opcode aarch64_opcode_table[] =
     Y(INT_REG, regno, "Rm", 0, F(FLD_Rm), "an integer register")	\
     Y(INT_REG, regno, "Rt", 0, F(FLD_Rt), "an integer register")	\
     Y(INT_REG, regno, "Rt2", 0, F(FLD_Rt2), "an integer register")	\
+    Y(INT_REG, none, "X16", 0, F(), "X16")	\
     Y(INT_REG, regno, "Rt_LS64", 0, F(FLD_Rt), "an integer register")	\
     Y(INT_REG, regno, "Rt_SP", OPD_F_MAYBE_SP, F(FLD_Rt),		\
       "an integer or stack pointer register")				\
@@ -6107,10 +6593,14 @@ const struct aarch64_opcode aarch64_opcode_table[] =
       "an integer or stack pointer register")				\
     X(INT_REG, 0, ext_regno_pair, "PAIRREG", 0, F(),			\
       "the second reg of a pair")					\
+    X(INT_REG, 0, ext_regno_pair, "PAIRREG_OR_XZR", 0, F(),		\
+      "the second reg of a pair")					\
     Y(MODIFIED_REG, reg_extended, "Rm_EXT", 0, F(),			\
       "an integer register with optional extension")			\
     Y(MODIFIED_REG, reg_shifted, "Rm_SFT", 0, F(),			\
       "an integer register with optional shift")			\
+    Y(MODIFIED_REG, reg_lsl_shifted, "Rm_LSL", 0, F(),			\
+      "an integer register with optional LSL shift")			\
     Y(FP_REG, regno, "Fd", 0, F(FLD_Rd), "a floating-point register")	\
     Y(FP_REG, regno, "Fn", 0, F(FLD_Rn), "a floating-point register")	\
     Y(FP_REG, regno, "Fm", 0, F(FLD_Rm), "a floating-point register")	\
@@ -6253,6 +6743,7 @@ const struct aarch64_opcode aarch64_opcode_table[] =
     Y(ADDRESS, simd_addr_post, "SIMD_ADDR_POST", 0, F(),		\
       "a post-indexed address with immediate or register increment")	\
     Y(SYSTEM, sysreg, "SYSREG", 0, F(), "a system register")		\
+    Y(SYSTEM, sysreg, "SYSREG128", 0, F(), "a 128-bit system register")	\
     Y(SYSTEM, pstatefield, "PSTATEFIELD", 0, F(),			\
       "a PSTATE field name")						\
     Y(SYSTEM, sysins_op, "SYSREG_AT", 0, F(),				\
@@ -6263,6 +6754,8 @@ const struct aarch64_opcode aarch64_opcode_table[] =
       "an instruction cache maintenance operation specifier")		\
     Y(SYSTEM, sysins_op, "SYSREG_TLBI", 0, F(),				\
       "a TBL invalidation operation specifier")				\
+    Y(SYSTEM, sysins_op, "SYSREG_TLBIP", 0, F(),				\
+      "a 128-bit TBL invalidation operation specifier")			\
     Y(SYSTEM, sysins_op, "SYSREG_SR", 0, F(),				\
       "a Speculation Restriction option name (RCTX)")			\
     Y(SYSTEM, barrier, "BARRIER", 0, F(),				\
@@ -6278,8 +6771,12 @@ const struct aarch64_opcode aarch64_opcode_table[] =
       "a range prefetch operation specifier")				\
     Y(SYSTEM, none, "BARRIER_PSB", 0, F (),				\
       "the PSB/TSB option name CSYNC")					\
-    Y(SYSTEM, hint, "BTI", 0, F (),					\
+    Y(SYSTEM, none, "BARRIER_GCSB", 0, F (),				\
+      "the GCSB option name DSYNC")					\
+    Y(SYSTEM, hint, "BTI_TARGET", 0, F (),				\
       "BTI targets j/c/jc")						\
+    Y(INT_REG, regno, "LSE128_Rt", 0, F(FLD_LSE128_Rt), "an integer register") \
+    Y(INT_REG, regno, "LSE128_Rt2", 0, F(FLD_LSE128_Rt2), "an integer register") \
     Y(ADDRESS, sve_addr_ri_s4, "SVE_ADDR_RI_S4x16",			\
       4 << OPD_F_OD_LSB, F(FLD_Rn),					\
       "an address with a 4-bit signed offset, multiplied by 16")	\
@@ -6493,6 +6990,22 @@ const struct aarch64_opcode aarch64_opcode_table[] =
     Y(SIMD_REG, regno, "SVE_Vd", 0, F(FLD_SVE_Vd), "a SIMD register")	\
     Y(SIMD_REG, regno, "SVE_Vm", 0, F(FLD_SVE_Vm), "a SIMD register")	\
     Y(SIMD_REG, regno, "SVE_Vn", 0, F(FLD_SVE_Vn), "a SIMD register")	\
+    Y(ZA_ACCESS, sme_za_vrs1, "SME_ZA_array_vrsb_1", 0,			\
+      F(FLD_SME_V,FLD_SME_Rv,FLD_off3), "ZA0 tile")			\
+    Y(ZA_ACCESS, sme_za_vrs1, "SME_ZA_array_vrsh_1", 0,			\
+      F(FLD_SME_V,FLD_SME_Rv,FLD_ZAn_1,FLD_off2), "1 bit ZA tile")	\
+    Y(ZA_ACCESS, sme_za_vrs1, "SME_ZA_array_vrss_1", 0,			\
+      F(FLD_SME_V,FLD_SME_Rv,FLD_ZAn_2,FLD_ol), "2 ZA tile")		\
+    Y(ZA_ACCESS, sme_za_vrs1, "SME_ZA_array_vrsd_1", 0,			\
+      F(FLD_SME_V,FLD_SME_Rv,FLD_ZAn_3), "3 ZA tile")			\
+    Y(ZA_ACCESS, sme_za_vrs2, "SME_ZA_array_vrsb_2", 0,			\
+      F(FLD_SME_V,FLD_SME_Rv,FLD_off2), "ZA0 tile")			\
+    Y(ZA_ACCESS, sme_za_vrs2, "SME_ZA_array_vrsh_2", 0,			\
+      F(FLD_SME_V,FLD_SME_Rv,FLD_ZAn,FLD_ol), "1 bit ZA tile")		\
+    Y(ZA_ACCESS, sme_za_vrs2, "SME_ZA_array_vrss_2", 0,			\
+      F(FLD_SME_V,FLD_SME_Rv,FLD_off2), "2 bit ZA tile")		\
+    Y(ZA_ACCESS, sme_za_vrs2, "SME_ZA_array_vrsd_2", 0,			\
+      F(FLD_SME_V,FLD_SME_Rv,FLD_ZAn_3), "3 bit ZA tile")		\
     Y(SVE_REG, regno, "SVE_Za_5", 0, F(FLD_SVE_Za_5),			\
       "an SVE vector register")						\
     Y(SVE_REG, regno, "SVE_Za_16", 0, F(FLD_SVE_Za_16),			\
@@ -6518,11 +7031,17 @@ const struct aarch64_opcode aarch64_opcode_table[] =
     Y(SVE_REG, sve_quad_index, "SVE_Zm4_11_INDEX", 			\
       4 << OPD_F_OD_LSB, F(FLD_SVE_i2h, FLD_SVE_i3l, FLD_SVE_imm4),     \
       "an indexed SVE vector register")					\
+    Y(SVE_REG, sve_quad_index, "SVE_Zm_imm4",				\
+      5 << OPD_F_OD_LSB, F(FLD_SVE_Zm_5, FLD_SVE_imm4),			\
+      "an 4bit indexed SVE vector register")				\
     Y(SVE_REG, sve_quad_index, "SVE_Zm4_INDEX", 			\
       4 << OPD_F_OD_LSB, F(FLD_SVE_Zm_16),				\
       "an indexed SVE vector register")					\
     Y(SVE_REG, regno, "SVE_Zn", 0, F(FLD_SVE_Zn),			\
       "an SVE vector register")						\
+    Y(SVE_REG, sve_index_imm, "SVE_Zn_5_INDEX", 0,			\
+      F(FLD_SVE_Zn, FLD_SVE_i2h, FLD_SVE_tsz),				\
+      "a 5 bit idexed SVE vector register")				\
     Y(SVE_REG, sve_index, "SVE_Zn_INDEX", 0, F(FLD_SVE_Zn),		\
       "an indexed SVE vector register")					\
     Y(SVE_REGLIST, sve_reglist, "SVE_ZnxN", 0, F(FLD_SVE_Zn),		\
@@ -6669,4 +7188,27 @@ const struct aarch64_opcode aarch64_opcode_table[] =
     Y(IMMEDIATE, imm, "CSSC_SIMM8", OPD_F_SEXT, F(FLD_CSSC_imm8),	\
       "an 8-bit signed immediate")					\
     Y(IMMEDIATE, imm, "CSSC_UIMM8", 0, F(FLD_CSSC_imm8),		\
-      "an 8-bit unsigned immediate")
+      "an 8-bit unsigned immediate")					\
+    X(SVE_REGLIST, ins_sve_reglist, ext_sve_reglist_zt, "SME_Zt2",	\
+      2 << OPD_F_OD_LSB, F(FLD_SVE_Zt),					\
+      "a list of 2 SVE vector registers")				\
+    X(SVE_REGLIST, ins_sve_reglist, ext_sve_reglist_zt, "SME_Zt3",	\
+      3 << OPD_F_OD_LSB, F(FLD_SVE_Zt),					\
+      "a list of 3 SVE vector registers")				\
+    X(SVE_REGLIST, ins_sve_reglist, ext_sve_reglist_zt, "SME_Zt4",	\
+      4 << OPD_F_OD_LSB, F(FLD_SVE_Zt),					\
+      "a list of 4 SVE vector registers")				\
+    X(ADDRESS, ins_rcpc3_addr_opt_offset, ext_rcpc3_addr_opt_offset,		\
+      "RCPC3_ADDR_OPT_POSTIND", 0, F(FLD_opc2),				\
+      "an address with post-incrementing by ammount of loaded bytes") \
+    X(ADDRESS, ins_rcpc3_addr_opt_offset, ext_rcpc3_addr_opt_offset,	\
+      "RCPC3_ADDR_OPT_PREIND_WB", 0, F(FLD_opc2),			\
+      "an address with pre-incrementing with write-back by ammount of stored bytes") \
+    X(ADDRESS, ins_rcpc3_addr_opt_offset, ext_rcpc3_addr_opt_offset,	\
+      "RCPC3_ADDR_POSTIND", 0, F(),					\
+      "an address with post-incrementing by ammount of loaded bytes") \
+    X(ADDRESS, ins_rcpc3_addr_opt_offset, ext_rcpc3_addr_opt_offset,	\
+      "RCPC3_ADDR_PREIND_WB", 0, F(),					\
+      "an address with pre-incrementing with write-back by ammount of stored bytes") \
+    Y(ADDRESS, rcpc3_addr_offset, "RCPC3_ADDR_OFFSET", 0, F(FLD_Rn,FLD_imm9), \
+      "an address with an optional 8-bit signed immediate offset")

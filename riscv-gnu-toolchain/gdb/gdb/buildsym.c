@@ -1,5 +1,5 @@
 /* Support routines for building symbol tables in GDB's internal format.
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,7 +16,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "buildsym-legacy.h"
 #include "bfd.h"
 #include "gdbsupport/gdb_obstack.h"
@@ -643,7 +642,7 @@ buildsym_compunit::record_line (struct subfile *subfile, int line,
      anyway.  */
   if (line == 0)
     {
-      gdb::optional<int> last_line;
+      std::optional<int> last_line;
 
       while (!subfile->line_vector_entries.empty ())
 	{
@@ -661,12 +660,12 @@ buildsym_compunit::record_line (struct subfile *subfile, int line,
 	return;
     }
 
-  subfile->line_vector_entries.emplace_back ();
-  linetable_entry &e = subfile->line_vector_entries.back ();
+  linetable_entry &e = subfile->line_vector_entries.emplace_back ();
   e.line = line;
   e.is_stmt = (flags & LEF_IS_STMT) != 0;
   e.set_unrelocated_pc (pc);
   e.prologue_end = (flags & LEF_PROLOGUE_END) != 0;
+  e.epilogue_begin = (flags & LEF_EPILOGUE_BEGIN) != 0;
 }
 
 
@@ -1133,8 +1132,7 @@ buildsym_compunit::augment_type_symtab ()
 struct context_stack *
 buildsym_compunit::push_context (int desc, CORE_ADDR valu)
 {
-  m_context_stack.emplace_back ();
-  struct context_stack *newobj = &m_context_stack.back ();
+  struct context_stack *newobj = &m_context_stack.emplace_back ();
 
   newobj->depth = desc;
   newobj->locals = m_local_symbols;

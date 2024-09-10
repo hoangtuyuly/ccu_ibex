@@ -3,7 +3,7 @@
 (echo;echo;echo;echo)>e${EMULATION_NAME}.c # there, now line numbers match ;-)
 fragment <<EOF
 /* This file is part of GLD, the Gnu Linker.
-   Copyright (C) 1999-2023 Free Software Foundation, Inc.
+   Copyright (C) 1999-2024 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -40,12 +40,12 @@ fragment <<EOF
 #include "ldexp.h"
 #include "ldlang.h"
 #include "ldfile.h"
+#include "ldlex.h"
 #include "ldemul.h"
 
 static int coff_version;
 
 /* TI COFF extra command line options */
-#define OPTION_COFF_FORMAT		(300 + 1)
 
 static void
 gld${EMULATION_NAME}_add_options

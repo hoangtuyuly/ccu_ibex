@@ -1,6 +1,6 @@
 /* Multi-process/thread control for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    Contributed by Lynx Real-Time Systems, Inc.  Los Gatos, CA.
 
@@ -19,17 +19,17 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "language.h"
 #include "symtab.h"
 #include "frame.h"
 #include "inferior.h"
 #include "gdbsupport/environ.h"
+#include "top.h"
 #include "value.h"
 #include "target.h"
 #include "gdbthread.h"
 #include "command.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "regcache.h"
 #include "btrace.h"
 
@@ -46,7 +46,7 @@
 #include "thread-fsm.h"
 #include "tid-parse.h"
 #include <algorithm>
-#include "gdbsupport/gdb_optional.h"
+#include <optional>
 #include "inline-frame.h"
 #include "stack.h"
 #include "interps.h"
@@ -194,7 +194,7 @@ clear_thread_inferior_resources (struct thread_info *tp)
 /* Notify interpreters and observers that thread T has exited.  */
 
 static void
-notify_thread_exited (thread_info *t, gdb::optional<ULONGEST> exit_code,
+notify_thread_exited (thread_info *t, std::optional<ULONGEST> exit_code,
 		      int silent)
 {
   if (!silent && print_thread_events)
@@ -215,7 +215,7 @@ notify_thread_exited (thread_info *t, gdb::optional<ULONGEST> exit_code,
 /* See gdbthread.h.  */
 
 void
-set_thread_exited (thread_info *tp, gdb::optional<ULONGEST> exit_code,
+set_thread_exited (thread_info *tp, std::optional<ULONGEST> exit_code,
 		   bool silent)
 {
   /* Dead threads don't need to step-over.  Remove from chain.  */
@@ -431,6 +431,24 @@ thread_info::clear_pending_waitstatus ()
 
 /* See gdbthread.h.  */
 
+void
+thread_info::set_thread_options (gdb_thread_options thread_options)
+{
+  gdb_assert (this->state != THREAD_EXITED);
+  gdb_assert (!this->executing ());
+
+  if (m_thread_options == thread_options)
+    return;
+
+  m_thread_options = thread_options;
+
+  infrun_debug_printf ("[options for %s are now %s]",
+		       this->ptid.to_string ().c_str (),
+		       to_string (thread_options).c_str ());
+}
+
+/* See gdbthread.h.  */
+
 int
 thread_is_in_step_over_chain (struct thread_info *tp)
 {
@@ -486,7 +504,7 @@ global_thread_step_over_chain_remove (struct thread_info *tp)
 /* Helper for the different delete_thread variants.  */
 
 static void
-delete_thread_1 (thread_info *thr, gdb::optional<ULONGEST> exit_code,
+delete_thread_1 (thread_info *thr, std::optional<ULONGEST> exit_code,
 		 bool silent)
 {
   gdb_assert (thr != nullptr);
@@ -508,6 +526,8 @@ delete_thread_1 (thread_info *thr, gdb::optional<ULONGEST> exit_code,
 
   auto it = thr->inf->thread_list.iterator_to (*thr);
   thr->inf->thread_list.erase (it);
+
+  gdb::observers::thread_deleted.notify (thr);
 
   delete thr;
 }
@@ -876,6 +896,11 @@ notify_target_resumed (ptid_t ptid)
 {
   interps_notify_target_resumed (ptid);
   gdb::observers::target_resumed.notify (ptid);
+
+  /* We are about to resume the inferior.  Close all cached BFDs so that
+     when the inferior next stops, and GDB regains control, we will spot
+     any on-disk changes to the BFDs we are using.  */
+  bfd_cache_close_all ();
 }
 
 /* See gdbthread.h.  */
@@ -1064,6 +1089,107 @@ thread_target_id_str (thread_info *tp)
     return target_id;
 }
 
+/* Print thread TP.  GLOBAL_IDS indicates whether REQUESTED_THREADS
+   is a list of global or per-inferior thread ids.  */
+
+static void
+do_print_thread (ui_out *uiout, const char *requested_threads,
+		 int global_ids, int pid, int show_global_ids,
+		 int default_inf_num, thread_info *tp,
+		 thread_info *current_thread)
+{
+  int core;
+
+  /* In case REQUESTED_THREADS contains $_thread.  */
+  if (current_thread != nullptr)
+    switch_to_thread (current_thread);
+
+  if (!should_print_thread (requested_threads, default_inf_num,
+			    global_ids, pid, tp))
+    return;
+
+  ui_out_emit_tuple tuple_emitter (uiout, NULL);
+
+  if (!uiout->is_mi_like_p ())
+    {
+      if (tp == current_thread)
+	uiout->field_string ("current", "*");
+      else
+	uiout->field_skip ("current");
+
+      uiout->field_string ("id-in-tg", print_thread_id (tp));
+    }
+
+  if (show_global_ids || uiout->is_mi_like_p ())
+    uiout->field_signed ("id", tp->global_num);
+
+  /* Switch to the thread (and inferior / target).  */
+  switch_to_thread (tp);
+
+  /* For the CLI, we stuff everything into the target-id field.
+     This is a gross hack to make the output come out looking
+     correct.  The underlying problem here is that ui-out has no
+     way to specify that a field's space allocation should be
+     shared by several fields.  For MI, we do the right thing
+     instead.  */
+
+  if (uiout->is_mi_like_p ())
+    {
+      uiout->field_string ("target-id", target_pid_to_str (tp->ptid));
+
+      const char *extra_info = target_extra_thread_info (tp);
+      if (extra_info != nullptr)
+	uiout->field_string ("details", extra_info);
+
+      const char *name = thread_name (tp);
+      if (name != NULL)
+	uiout->field_string ("name", name);
+    }
+  else
+    {
+      uiout->field_string ("target-id", thread_target_id_str (tp));
+    }
+
+  if (tp->state == THREAD_RUNNING)
+    uiout->text ("(running)\n");
+  else
+    {
+      /* The switch above put us at the top of the stack (leaf
+	 frame).  */
+      print_stack_frame (get_selected_frame (NULL),
+			 /* For MI output, print frame level.  */
+			 uiout->is_mi_like_p (),
+			 LOCATION, 0);
+    }
+
+  if (uiout->is_mi_like_p ())
+    {
+      const char *state = "stopped";
+
+      if (tp->state == THREAD_RUNNING)
+	state = "running";
+      uiout->field_string ("state", state);
+    }
+
+  core = target_core_of_thread (tp->ptid);
+  if (uiout->is_mi_like_p () && core != -1)
+    uiout->field_signed ("core", core);
+}
+
+/* Redirect output to a temporary buffer for the duration
+   of do_print_thread.  */
+
+static void
+print_thread (ui_out *uiout, const char *requested_threads,
+	      int global_ids, int pid, int show_global_ids,
+	      int default_inf_num, thread_info *tp, thread_info *current_thread)
+
+{
+  do_with_buffered_output (do_print_thread, uiout, requested_threads,
+			   global_ids, pid, show_global_ids,
+			   default_inf_num, tp, current_thread);
+}
+
 /* Like print_thread_info, but in addition, GLOBAL_IDS indicates
    whether REQUESTED_THREADS is a list of global or per-inferior
    thread ids.  */
@@ -1089,8 +1215,8 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
     /* For backward compatibility, we make a list for MI.  A table is
        preferable for the CLI, though, because it shows table
        headers.  */
-    gdb::optional<ui_out_emit_list> list_emitter;
-    gdb::optional<ui_out_emit_table> table_emitter;
+    std::optional<ui_out_emit_list> list_emitter;
+    std::optional<ui_out_emit_table> table_emitter;
 
     /* We'll be switching threads temporarily below.  */
     scoped_restore_current_thread restore_thread;
@@ -1106,6 +1232,10 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 
 	for (thread_info *tp : all_threads ())
 	  {
+	    /* In case REQUESTED_THREADS contains $_thread.  */
+	    if (current_thread != nullptr)
+	      switch_to_thread (current_thread);
+
 	    if (!should_print_thread (requested_threads, default_inf_num,
 				      global_ids, pid, tp))
 	      continue;
@@ -1147,82 +1277,13 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
     for (inferior *inf : all_inferiors ())
       for (thread_info *tp : inf->threads ())
 	{
-	  int core;
-
 	  any_thread = true;
+
 	  if (tp == current_thread && tp->state == THREAD_EXITED)
 	    current_exited = true;
 
-	  if (!should_print_thread (requested_threads, default_inf_num,
-				    global_ids, pid, tp))
-	    continue;
-
-	  ui_out_emit_tuple tuple_emitter (uiout, NULL);
-
-	  if (!uiout->is_mi_like_p ())
-	    {
-	      if (tp == current_thread)
-		uiout->field_string ("current", "*");
-	      else
-		uiout->field_skip ("current");
-
-	      uiout->field_string ("id-in-tg", print_thread_id (tp));
-	    }
-
-	  if (show_global_ids || uiout->is_mi_like_p ())
-	    uiout->field_signed ("id", tp->global_num);
-
-	  /* Switch to the thread (and inferior / target).  */
-	  switch_to_thread (tp);
-
-	  /* For the CLI, we stuff everything into the target-id field.
-	     This is a gross hack to make the output come out looking
-	     correct.  The underlying problem here is that ui-out has no
-	     way to specify that a field's space allocation should be
-	     shared by several fields.  For MI, we do the right thing
-	     instead.  */
-
-	  if (uiout->is_mi_like_p ())
-	    {
-	      uiout->field_string ("target-id", target_pid_to_str (tp->ptid));
-
-	      const char *extra_info = target_extra_thread_info (tp);
-	      if (extra_info != nullptr)
-		uiout->field_string ("details", extra_info);
-
-	      const char *name = thread_name (tp);
-	      if (name != NULL)
-		uiout->field_string ("name", name);
-	    }
-	  else
-	    {
-	      uiout->field_string ("target-id", thread_target_id_str (tp));
-	    }
-
-	  if (tp->state == THREAD_RUNNING)
-	    uiout->text ("(running)\n");
-	  else
-	    {
-	      /* The switch above put us at the top of the stack (leaf
-		 frame).  */
-	      print_stack_frame (get_selected_frame (NULL),
-				 /* For MI output, print frame level.  */
-				 uiout->is_mi_like_p (),
-				 LOCATION, 0);
-	    }
-
-	  if (uiout->is_mi_like_p ())
-	    {
-	      const char *state = "stopped";
-
-	      if (tp->state == THREAD_RUNNING)
-		state = "running";
-	      uiout->field_string ("state", state);
-	    }
-
-	  core = target_core_of_thread (tp->ptid);
-	  if (uiout->is_mi_like_p () && core != -1)
-	    uiout->field_signed ("core", core);
+	  print_thread (uiout, requested_threads, global_ids, pid,
+			show_global_ids, default_inf_num, tp, current_thread);
 	}
 
     /* This end scope restores the current thread and the frame
@@ -1405,21 +1466,19 @@ scoped_restore_current_thread::restore ()
       && target_has_stack ()
       && target_has_memory ())
     restore_selected_frame (m_selected_frame_id, m_selected_frame_level);
-
-  set_language (m_lang);
 }
 
 scoped_restore_current_thread::~scoped_restore_current_thread ()
 {
-  if (!m_dont_restore)
+  if (m_dont_restore)
+    m_lang.dont_restore ();
+  else
     restore ();
 }
 
 scoped_restore_current_thread::scoped_restore_current_thread ()
 {
   m_inf = inferior_ref::new_reference (current_inferior ());
-
-  m_lang = current_language->la_language;
 
   if (inferior_ptid != null_ptid)
     {
@@ -1520,7 +1579,7 @@ tp_array_compar_descending (const thread_info_ref &a, const thread_info_ref &b)
 /* See gdbthread.h.  */
 
 void
-thread_try_catch_cmd (thread_info *thr, gdb::optional<int> ada_task,
+thread_try_catch_cmd (thread_info *thr, std::optional<int> ada_task,
 		      const char *cmd, int from_tty,
 		      const qcs_flags &flags)
 {
@@ -2182,6 +2241,8 @@ inferior_thread_count_make_value (struct gdbarch *gdbarch,
 				  struct internalvar *var, void *ignore)
 {
   int int_val = 0;
+
+  update_thread_list ();
 
   if (inferior_ptid != null_ptid)
     int_val = current_inferior ()->non_exited_threads ().size ();

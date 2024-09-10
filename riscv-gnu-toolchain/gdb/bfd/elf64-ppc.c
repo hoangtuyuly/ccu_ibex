@@ -1,5 +1,5 @@
 /* PowerPC64-specific support for 64-bit ELF.
-   Copyright (C) 1999-2023 Free Software Foundation, Inc.
+   Copyright (C) 1999-2024 Free Software Foundation, Inc.
    Written by Linus Nordberg, Swox AB <info@swox.com>,
    based on elf32-ppc.c by Ian Lance Taylor.
    Largely rewritten by Alan Modra.
@@ -119,8 +119,8 @@ static bfd_vma opd_entry_value
 #define elf_backend_adjust_dynamic_symbol     ppc64_elf_adjust_dynamic_symbol
 #define elf_backend_hide_symbol		      ppc64_elf_hide_symbol
 #define elf_backend_maybe_function_sym	      ppc64_elf_maybe_function_sym
-#define elf_backend_always_size_sections      ppc64_elf_edit
-#define elf_backend_size_dynamic_sections     ppc64_elf_size_dynamic_sections
+#define elf_backend_early_size_sections	      ppc64_elf_edit
+#define elf_backend_late_size_sections	      ppc64_elf_late_size_sections
 #define elf_backend_hash_symbol		      ppc64_elf_hash_symbol
 #define elf_backend_init_index_section	      _bfd_elf_init_2_index_sections
 #define elf_backend_action_discarded	      ppc64_elf_action_discarded
@@ -4498,7 +4498,7 @@ ppc64_elf_before_check_relocs (bfd *ibfd, struct bfd_link_info *info)
     {
       /* For input files without an explicit abiversion in e_flags
 	 we should have flagged any with symbol st_other bits set
-	 as ELFv1 and above flagged those with .opd as ELFv2.
+	 as ELFv2 and above flagged those with .opd as ELFv1.
 	 Set the output abiversion if not yet set, and for any input
 	 still ambiguous, take its abiversion from the output.
 	 Differences in ABI are reported later.  */
@@ -4747,6 +4747,24 @@ is_8byte_reloc (enum elf_ppc64_reloc_type r_type)
   return (r_type == R_PPC64_PLT_PCREL34
 	  || r_type == R_PPC64_PLT_PCREL34_NOTOC
 	  || r_type == R_PPC64_PLTCALL);
+}
+
+/* The RELR encoding doesn't allow odd addresses, so RELR_ALIGN must
+   be at least 1.  R_PPC64_RELATIVE relocs require alignment of 2**3.
+   We use 3 here to avoid complexity in relocate_section, where for a
+   value of 1 we'd need to test for not just an output RELATIVE reloc
+   near the call to maybe_relr but also UADDR64 and some conditions on
+   the symbol.  See PR30824.  */
+#define RELR_ALIGN 3
+
+static bool
+maybe_relr (enum elf_ppc64_reloc_type r_type,
+	    const Elf_Internal_Rela *rel,
+	    const asection *sec)
+{
+  return ((r_type == R_PPC64_ADDR64 || r_type == R_PPC64_TOC)
+	  && (rel->r_offset & ((1 << RELR_ALIGN) - 1)) == 0
+	  && sec->alignment_power >= RELR_ALIGN);
 }
 
 /* Like bfd_reloc_offset_in_range but without a howto.  Return true
@@ -5401,9 +5419,7 @@ ppc64_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 		  p->count += 1;
 		  if (!must_be_dyn_reloc (info, r_type))
 		    p->pc_count += 1;
-		  if ((r_type == R_PPC64_ADDR64 || r_type == R_PPC64_TOC)
-		      && rel->r_offset % 2 == 0
-		      && sec->alignment_power != 0)
+		  if (maybe_relr (r_type, rel, sec))
 		    p->rel_count += 1;
 		}
 	      else
@@ -5438,9 +5454,7 @@ ppc64_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 		      p->ifunc = is_ifunc;
 		    }
 		  p->count += 1;
-		  if ((r_type == R_PPC64_ADDR64 || r_type == R_PPC64_TOC)
-		      && rel->r_offset % 2 == 0
-		      && sec->alignment_power != 0)
+		  if (maybe_relr (r_type, rel, sec))
 		    p->rel_count += 1;
 		}
 	    }
@@ -7291,9 +7305,7 @@ dec_dynrel_count (const Elf_Internal_Rela *rel,
 	    {
 	      if (!must_be_dyn_reloc (info, r_type))
 		p->pc_count -= 1;
-	      if ((r_type == R_PPC64_ADDR64 || r_type == R_PPC64_TOC)
-		  && rel->r_offset % 2 == 0
-		  && sec->alignment_power != 0)
+	      if (maybe_relr (r_type, rel, sec))
 		p->rel_count -= 1;
 	      p->count -= 1;
 	      if (p->count == 0)
@@ -7326,9 +7338,7 @@ dec_dynrel_count (const Elf_Internal_Rela *rel,
 	{
 	  if (p->sec == sec && p->ifunc == is_ifunc)
 	    {
-	      if ((r_type == R_PPC64_ADDR64 || r_type == R_PPC64_TOC)
-		  && rel->r_offset % 2 == 0
-		  && sec->alignment_power != 0)
+	      if (maybe_relr (r_type, rel, sec))
 		p->rel_count -= 1;
 	      p->count -= 1;
 	      if (p->count == 0)
@@ -10138,7 +10148,7 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, void *inf)
   ((((v) & 0x3ffff0000ULL) << 16) | (v & 0xffff))
 #define HA34(v) ((v + (1ULL << 33)) >> 34)
 
-/* Called via elf_link_hash_traverse from ppc64_elf_size_dynamic_sections
+/* Called via elf_link_hash_traverse from ppc64_elf_late_size_sections
    to set up space for global entry stubs.  These are put in glink,
    after the branch table.  */
 
@@ -10215,8 +10225,8 @@ size_global_entry_stubs (struct elf_link_hash_entry *h, void *inf)
 /* Set the sizes of the dynamic sections.  */
 
 static bool
-ppc64_elf_size_dynamic_sections (bfd *output_bfd,
-				 struct bfd_link_info *info)
+ppc64_elf_late_size_sections (bfd *output_bfd,
+			      struct bfd_link_info *info)
 {
   struct ppc_link_hash_table *htab;
   bfd *dynobj;
@@ -10231,7 +10241,7 @@ ppc64_elf_size_dynamic_sections (bfd *output_bfd,
 
   dynobj = htab->elf.dynobj;
   if (dynobj == NULL)
-    abort ();
+    return true;
 
   if (htab->elf.dynamic_sections_created)
     {
@@ -13884,6 +13894,9 @@ ppc64_elf_size_stubs (struct bfd_link_info *info)
 		  switch (r_type)
 		    {
 		    default:
+		      if (info->enable_dt_relr
+			  && maybe_relr (r_type, irela, section))
+			break;
 		      continue;
 
 		    case R_PPC64_REL24:
@@ -13893,14 +13906,6 @@ ppc64_elf_size_stubs (struct bfd_link_info *info)
 		    case R_PPC64_REL14_BRTAKEN:
 		    case R_PPC64_REL14_BRNTAKEN:
 		      if ((section->flags & SEC_CODE) != 0)
-			break;
-		      continue;
-
-		    case R_PPC64_ADDR64:
-		    case R_PPC64_TOC:
-		      if (info->enable_dt_relr
-			  && irela->r_offset % 2 == 0
-			  && section->alignment_power != 0)
 			break;
 		      continue;
 		    }
@@ -15285,7 +15290,7 @@ ppc64_elf_build_stubs (struct bfd_link_info *info,
       while (i < htab->relr_count)
 	{
 	  bfd_vma base = relr_addr[i];
-	  BFD_ASSERT (base % 2 == 0);
+	  BFD_ASSERT ((base & ((1 << RELR_ALIGN) - 1)) == 0);
 	  bfd_put_64 (htab->elf.dynobj, base, loc);
 	  loc += 8;
 	  i++;
@@ -17517,9 +17522,8 @@ ppc64_elf_relocate_section (bfd *output_bfd,
 
 	      if (!(info->enable_dt_relr
 		    && ELF64_R_TYPE (outrel.r_info) == R_PPC64_RELATIVE
-		    && rel->r_offset % 2 == 0
-		    && input_section->alignment_power != 0
-		    && ELF64_R_TYPE (orig_rel.r_info) != R_PPC64_UADDR64))
+		    && maybe_relr (ELF64_R_TYPE (orig_rel.r_info),
+				   rel, input_section)))
 		{
 		  sreloc = elf_section_data (input_section)->sreloc;
 		  if (h != NULL
@@ -18131,8 +18135,6 @@ ppc64_elf_finish_dynamic_symbol (bfd *output_bfd,
   struct plt_entry *ent;
 
   htab = ppc_hash_table (info);
-  if (htab == NULL)
-    return false;
 
   if (!htab->opd_abi && !h->def_regular)
     for (ent = h->plt.plist; ent != NULL; ent = ent->next)

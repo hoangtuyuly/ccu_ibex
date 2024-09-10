@@ -1,6 +1,6 @@
 /* GDB routines for supporting auto-loaded scripts.
 
-   Copyright (C) 2012-2023 Free Software Foundation, Inc.
+   Copyright (C) 2012-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include <ctype.h>
 #include "auto-load.h"
 #include "progspace.h"
@@ -28,7 +27,6 @@
 #include "observable.h"
 #include "objfiles.h"
 #include "cli/cli-script.h"
-#include "gdbcmd.h"
 #include "cli/cli-cmds.h"
 #include "cli/cli-decode.h"
 #include "cli/cli-setshow.h"
@@ -914,7 +912,7 @@ source_script_file (struct auto_load_pspace_info *pspace_info,
       return;
     }
 
-  gdb::optional<open_script> opened = find_and_open_script (file,
+  std::optional<open_script> opened = find_and_open_script (file,
 							    1 /*search_path*/);
 
   if (opened)

@@ -1,5 +1,5 @@
 /* tc-mips.c -- assemble code for a MIPS chip.
-   Copyright (C) 1993-2023 Free Software Foundation, Inc.
+   Copyright (C) 1993-2024 Free Software Foundation, Inc.
    Contributed by the OSF and Ralph Campbell.
    Written by Keith Knowles and Ralph Campbell, working independently.
    Modified for ECOFF and R4000 support by Ian Lance Taylor of Cygnus
@@ -15287,7 +15287,9 @@ mips_after_parse_args (void)
   if (arch_info == 0)
     {
       arch_info = mips_parse_cpu ("default CPU", MIPS_CPU_STRING_DEFAULT);
-      gas_assert (arch_info);
+      if (!arch_info)
+	as_fatal  (_("gas doesn't understand your configure target %s"),
+		   TARGET_ALIAS);
     }
 
   if (ABI_NEEDS_64BIT_REGS (mips_abi) && !ISA_HAS_64BIT_REGS (arch_info->isa))
@@ -16435,7 +16437,7 @@ s_change_section (int ignore ATTRIBUTE_UNUSED)
     section_type = SHT_PROGBITS;
 
   obj_elf_change_section (section_name, section_type, section_flag,
-			  section_entry_size, 0, 0, 0);
+			  section_entry_size, 0, false);
 }
 
 void
@@ -19534,16 +19536,16 @@ mips_elf_final_processing (void)
     elf_elfheader (stdoutput)->e_flags |= EF_MIPS_ARCH_ASE_MDMX;
 
   /* Set the MIPS ELF ABI flags.  */
-  if (mips_abi == O32_ABI && USE_E_MIPS_ABI_O32)
-    elf_elfheader (stdoutput)->e_flags |= E_MIPS_ABI_O32;
+  if (mips_abi == O32_ABI && USE_EF_MIPS_ABI_O32)
+    elf_elfheader (stdoutput)->e_flags |= EF_MIPS_ABI_O32;
   else if (mips_abi == O64_ABI)
-    elf_elfheader (stdoutput)->e_flags |= E_MIPS_ABI_O64;
+    elf_elfheader (stdoutput)->e_flags |= EF_MIPS_ABI_O64;
   else if (mips_abi == EABI_ABI)
     {
       if (file_mips_opts.gp == 64)
-	elf_elfheader (stdoutput)->e_flags |= E_MIPS_ABI_EABI64;
+	elf_elfheader (stdoutput)->e_flags |= EF_MIPS_ABI_EABI64;
       else
-	elf_elfheader (stdoutput)->e_flags |= E_MIPS_ABI_EABI32;
+	elf_elfheader (stdoutput)->e_flags |= EF_MIPS_ABI_EABI32;
     }
 
   /* Nothing to do for N32_ABI or N64_ABI.  */

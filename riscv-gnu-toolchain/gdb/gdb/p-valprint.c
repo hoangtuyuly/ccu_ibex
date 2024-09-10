@@ -1,6 +1,6 @@
 /* Support for printing Pascal values for GDB, the GNU debugger.
 
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,14 +19,14 @@
 
 /* This file is derived from c-valprint.c */
 
-#include "defs.h"
+#include "extract-store-integer.h"
 #include "gdbsupport/gdb_obstack.h"
 #include "symtab.h"
 #include "gdbtypes.h"
 #include "expression.h"
 #include "value.h"
 #include "command.h"
-#include "gdbcmd.h"
+#include "cli/cli-cmds.h"
 #include "gdbcore.h"
 #include "demangle.h"
 #include "valprint.h"
@@ -253,7 +253,7 @@ pascal_language::value_print_inner (struct value *val,
 		{
 		  const char *search_name = msymbol.minsym->search_name ();
 		  wsym = lookup_symbol_search_name (search_name, NULL,
-						    VAR_DOMAIN).symbol;
+						    SEARCH_VFT).symbol;
 		}
 
 	      if (wsym)
@@ -298,7 +298,7 @@ pascal_language::value_print_inner (struct value *val,
 	  gdb_printf (stream, "{...}");
 	  break;
 	}
-      /* Fall through.  */
+      [[fallthrough]];
     case TYPE_CODE_STRUCT:
       if (options->vtblprint && pascal_object_is_vtbl_ptr_type (type))
 	{
@@ -604,7 +604,7 @@ pascal_object_print_value_fields (struct value *val, struct ui_file *stream,
 
 	      /* Bitfields require special handling, especially due to byte
 		 order problems.  */
-	      if (TYPE_FIELD_IGNORE (type, i))
+	      if (type->field (i).is_ignored ())
 		{
 		  fputs_styled ("<optimized out or zero length>",
 				metadata_style.style (), stream);
@@ -629,7 +629,7 @@ pascal_object_print_value_fields (struct value *val, struct ui_file *stream,
 	    }
 	  else
 	    {
-	      if (TYPE_FIELD_IGNORE (type, i))
+	      if (type->field (i).is_ignored ())
 		{
 		  fputs_styled ("<optimized out or zero length>",
 				metadata_style.style (), stream);

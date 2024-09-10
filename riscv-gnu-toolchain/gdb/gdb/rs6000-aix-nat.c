@@ -1,6 +1,6 @@
 /* IBM RS/6000 native-dependent code for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "inferior.h"
 #include "target.h"
 #include "gdbcore.h"
@@ -77,7 +76,7 @@
 #ifndef ARCH3264
 # define ARCH64() 0
 #else
-# define ARCH64() (register_size (target_gdbarch (), 0) == 8)
+# define ARCH64() (register_size (current_inferior ()->arch (), 0) == 8)
 #endif
 
 class rs6000_nat_target final : public inf_ptrace_target
@@ -103,6 +102,9 @@ public:
   void follow_fork (inferior *, ptid_t, target_waitkind, bool, bool) override;
 
   const struct target_desc *read_description ()  override;
+
+  int insert_fork_catchpoint (int) override;
+  int remove_fork_catchpoint (int) override;
 
 protected:
 
@@ -475,6 +477,19 @@ rs6000_nat_target::follow_fork (inferior *child_inf, ptid_t child_ptid,
     else
       rs6000_ptrace32 (PT_DETACH, child_ptid.pid (), 0, 0, 0);
   }
+}
+
+/* Functions for catchpoint in AIX.  */
+int
+rs6000_nat_target::insert_fork_catchpoint (int pid)
+{
+  return 0;
+}
+
+int
+rs6000_nat_target::remove_fork_catchpoint (int pid)
+{
+  return 0;
 }
 
 /* Fetch register REGNO from the inferior.  */
@@ -918,11 +933,8 @@ rs6000_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
   /* stop after load" status.  */
   if (status == 0x57c)
     ourstatus->set_loaded ();
-  /* 0x7f is signal 0.  0x17f and 0x137f are status returned
-     if we follow parent, a switch is made to a child post parent
-     execution and child continues its execution [user switches
-     to child and presses continue].  */
-  else if (status == 0x7f || status == 0x17f || status == 0x137f)
+  /* 0x7f is signal 0.  */
+  else if (status == 0x7f)
     ourstatus->set_spurious ();
   /* A normal waitstatus.  Let the usual macros deal with it.  */
   else
@@ -1040,7 +1052,8 @@ rs6000_nat_target::xfer_shared_libraries
     return TARGET_XFER_E_IO;
 
   gdb::byte_vector ldi_buf = rs6000_ptrace_ldinfo (inferior_ptid);
-  result = rs6000_aix_ld_info_to_xml (target_gdbarch (), ldi_buf.data (),
+  result = rs6000_aix_ld_info_to_xml (current_inferior ()->arch (),
+				      ldi_buf.data (),
 				      readbuf, offset, len, 1);
 
   if (result == 0)

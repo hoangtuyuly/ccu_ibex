@@ -1,7 +1,7 @@
 /* Variables that describe the inferior process running under GDB:
    Where it is, why it stopped, and how to step it.
 
-   Copyright (C) 1986-2023 Free Software Foundation, Inc.
+   Copyright (C) 1986-2024 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -156,7 +156,7 @@ extern void reopen_exec_file (void);
 
 extern void default_print_registers_info (struct gdbarch *gdbarch,
 					  struct ui_file *file,
-					  frame_info_ptr frame,
+					  const frame_info_ptr &frame,
 					  int regnum, int all);
 
 /* Default implementation of gdbarch_print_float_info.  Print
@@ -164,7 +164,7 @@ extern void default_print_registers_info (struct gdbarch *gdbarch,
 
 extern void default_print_float_info (struct gdbarch *gdbarch,
 				      struct ui_file *file,
-				      frame_info_ptr frame,
+				      const frame_info_ptr &frame,
 				      const char *args);
 
 /* Try to determine whether TTY is GDB's input terminal.  Returns
@@ -327,6 +327,9 @@ struct inferior_control_state
   enum stop_kind stop_soon;
 };
 
+/* Initialize the inferior-related global state.  */
+extern void initialize_inferiors ();
+
 /* Return a pointer to the current inferior.  */
 extern inferior *current_inferior ();
 
@@ -340,7 +343,7 @@ extern void switch_to_inferior_no_thread (inferior *inf);
 
    If the current inferior was changed, return an RAII object that will
    restore the original current context.  */
-extern gdb::optional<scoped_restore_current_thread> maybe_switch_inferior
+extern std::optional<scoped_restore_current_thread> maybe_switch_inferior
   (inferior *inf);
 
 /* Info about an inferior's target description.  There's one of these
@@ -553,6 +556,13 @@ public:
     return m_cwd;
   }
 
+  /* Set this inferior's arch.  */
+  void set_arch (gdbarch *arch);
+
+  /* Get this inferior's arch.  */
+  gdbarch *arch ()
+  { return m_gdbarch; }
+
   /* Convenient handle (GDB inferior id).  Unique across all
      inferiors.  */
   int num = 0;
@@ -577,7 +587,7 @@ public:
   bool removable = false;
 
   /* The address space bound to this inferior.  */
-  struct address_space *aspace = NULL;
+  address_space_ref_ptr aspace;
 
   /* The program space bound to this inferior.  */
   struct program_space *pspace = NULL;
@@ -648,19 +658,6 @@ public:
      user supplied description's filename, if any; etc.).  */
   target_desc_info tdesc_info;
 
-  /* The architecture associated with the inferior through the
-     connection to the target.
-
-     The architecture vector provides some information that is really
-     a property of the inferior, accessed through a particular target:
-     ptrace operations; the layout of certain RSP packets; the
-     solib_ops vector; etc.  To differentiate architecture accesses to
-     per-inferior/target properties from
-     per-thread/per-frame/per-objfile properties, accesses to
-     per-inferior/target properties should be made through
-     this gdbarch.  */
-  struct gdbarch *gdbarch = NULL;
-
   /* Data related to displaced stepping.  */
   displaced_step_inferior_state displaced_step_state;
 
@@ -687,6 +684,19 @@ private:
   /* The current working directory that will be used when starting
      this inferior.  */
   std::string m_cwd;
+
+  /* The architecture associated with the inferior through the
+     connection to the target.
+
+     The architecture vector provides some information that is really
+     a property of the inferior, accessed through a particular target:
+     ptrace operations; the layout of certain RSP packets; the
+     solib_ops vector; etc.  To differentiate architecture accesses to
+     per-inferior/target properties from
+     per-thread/per-frame/per-objfile properties, accesses to
+     per-inferior/target properties should be made through
+     this gdbarch.  */
+  gdbarch *m_gdbarch = nullptr;
 };
 
 /* Add an inferior to the inferior list, print a message that a new

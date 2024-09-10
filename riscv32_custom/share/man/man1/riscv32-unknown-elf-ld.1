@@ -133,7 +133,7 @@
 .\" ========================================================================
 .\"
 .IX Title "LD 1"
-.TH LD 1 "2024-09-04" "binutils-2.42" "GNU Development Tools"
+.TH LD 1 "2024-09-10" "binutils-2.43.1" "GNU Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -856,6 +856,28 @@ shared libraries.  Use \fB\-Bdynamic\fR for this.
 Use \fIoutput\fR as the name for the program produced by \fBld\fR; if this
 option is not specified, the name \fIa.out\fR is used by default.  The
 script command \f(CW\*(C`OUTPUT\*(C'\fR can also specify the output file name.
+.Sp
+Note \- the linker will delete the output file before it starts to
+write to it.  It will do this even if it turns out that the link
+cannot be completed due to errors.
+.Sp
+Note \- the linker will check to make sure that the output file name
+does not match the name of any of the input files, but that is all.
+In particular it will not complain if the output file might overwrite
+a source file or some other important file.  Therefore in build
+systems it is recommended to use the \fB\-o\fR option as the last
+option on the linker command line.  For example consider:
+.Sp
+.Vb 2
+\&          ld \-o $(EXE) $(OBJS)
+\&          ld $(OBJS) \-o $(EXE)
+.Ve
+.Sp
+If the \fB\s-1EXE\s0\fR variable is not defined for some reason, the first
+version of the linker command could end up deleting one of the object
+files (the first one in the \fB\s-1OBJS\s0\fR list) whereas the second
+version of the linker command will generate an error message and not
+delete anything.
 .IP "\fB\-\-dependency\-file=\fR\fIdepfile\fR" 4
 .IX Item "--dependency-file=depfile"
 Write a \fIdependency file\fR to \fIdepfile\fR.  This file contains a rule
@@ -968,6 +990,24 @@ programs.  You may use this option more than once.
 For compatibility with other \s-1ELF\s0 linkers, if the \fB\-R\fR option is
 followed by a directory name, rather than a file name, it is treated as
 the \fB\-rpath\fR option.
+.IP "\fB\-\-rosegment\fR" 4
+.IX Item "--rosegment"
+.PD 0
+.IP "\fB\-\-no\-rosegment\fR" 4
+.IX Item "--no-rosegment"
+.PD
+Attempt to ensure that only a single read-only, non-code segment is
+created.  Only useful when used in conjunction with the \fB\-z
+separate-code\fR option.  The resulting binaries should be smaller than
+if \fB\-z separate-code\fR is used on its own.  Without this option,
+or if \fB\-\-no\-rosegment\fR is specified, the \fB\-z separate-code\fR
+option will create two read-only segments, one before the code segment
+and one after it.
+.Sp
+The name of the options are misleading, but they have been chosen in
+order for the linker to be compatible with the \s-1LLD\s0 and \s-1GOLD\s0 linkers.
+.Sp
+Thse options are only supported by \s-1ELF\s0 targets.
 .IP "\fB\-s\fR" 4
 .IX Item "-s"
 .PD 0
@@ -990,6 +1030,9 @@ Omit debugger symbol information (but not all symbols) from the output file.
 .PD
 Omit (or do not omit) global symbols defined in discarded sections.
 Enabled by default.
+.IP "\fB\-plugin\-save\-temps\fR" 4
+.IX Item "-plugin-save-temps"
+Store the plugin \*(L"temporary\*(R" intermediate files permanently.
 .IP "\fB\-t\fR" 4
 .IX Item "-t"
 .PD 0
@@ -1009,12 +1052,22 @@ a linker bug report.
 .PD
 Use \fIscriptfile\fR as the linker script.  This script replaces
 \&\fBld\fR's default linker script (rather than adding to it),
-unless the script contains \f(CW\*(C`INSERT\*(C'\fR, so
-\&\fIcommandfile\fR must specify everything necessary to describe the
-output file.    If \fIscriptfile\fR does not exist in
-the current directory, \f(CW\*(C`ld\*(C'\fR looks for it in the directories
-specified by any preceding \fB\-L\fR options.  Multiple \fB\-T\fR
-options accumulate.
+unless the script contains \f(CW\*(C`INSERT\*(C'\fR, so \fIcommandfile\fR must
+specify everything necessary to describe the output file.
+.Sp
+If \fIscriptfile\fR does not exist in the current directory, \f(CW\*(C`ld\*(C'\fR
+looks for it in the directories specified by any preceding \fB\-L\fR
+options.
+.Sp
+Command line options that appear before the \fB\-T\fR option can
+affect the script, but command line options that appear after it do
+not.
+.Sp
+Multiple \fB\-T\fR options will accumulate if they are augmenting the
+current script, otherwise the last, non-augmenting, \fB\-T\fR option
+will be used.
+.Sp
+There are other ways of specifying linker scripts.  See
 .IP "\fB\-dT\fR \fIscriptfile\fR" 4
 .IX Item "-dT scriptfile"
 .PD 0
@@ -1553,6 +1606,26 @@ Specify the x86\-64 \s-1ISA\s0 level needed in .note.gnu.property section.
 \&\fBx86\-64\-v2\fR generates \f(CW\*(C`GNU_PROPERTY_X86_ISA_1_V2\*(C'\fR.
 \&\fBx86\-64\-v3\fR generates \f(CW\*(C`GNU_PROPERTY_X86_ISA_1_V3\*(C'\fR.
 \&\fBx86\-64\-v4\fR generates \f(CW\*(C`GNU_PROPERTY_X86_ISA_1_V4\*(C'\fR.
+Supported for Linux/i386 and Linux/x86_64.
+.IP "\fBisa\-level\-report=none\fR" 4
+.IX Item "isa-level-report=none"
+.PD 0
+.IP "\fBisa\-level\-report=all\fR" 4
+.IX Item "isa-level-report=all"
+.IP "\fBisa\-level\-report=needed\fR" 4
+.IX Item "isa-level-report=needed"
+.IP "\fBisa\-level\-report=used\fR" 4
+.IX Item "isa-level-report=used"
+.PD
+Specify how to report x86\-64 \s-1ISA\s0 levels in input relocatable files.
+\&\fBisa\-level\-report=none\fR, which is the default, will make the
+linker not report x86\-64 \s-1ISA\s0 levels in input files.
+\&\fBisa\-level\-report=all\fR will make the linker report needed and
+used x86\-64 \s-1ISA\s0 levels in input files.
+\&\fBisa\-level\-report=needed\fR will make the linker report needed
+x86\-64 \s-1ISA\s0 levels in input files.
+\&\fBisa\-level\-report=used\fR will make the linker report used
+x86\-64 \s-1ISA\s0 levels in input files.
 Supported for Linux/i386 and Linux/x86_64.
 .RE
 .RS 4
@@ -2164,12 +2237,13 @@ the i386 \s-1PE\s0 and \s-1ELF\s0 targetted ports of the linker.
 .IP "\fB\-\-pic\-executable\fR" 4
 .IX Item "--pic-executable"
 .PD
-Create a position independent executable.  This is currently only supported on
-\&\s-1ELF\s0 platforms.  Position independent executables are similar to shared
-libraries in that they are relocated by the dynamic linker to the virtual
-address the \s-1OS\s0 chooses for them (which can vary between invocations).  Like
-normal dynamically linked executables they can be executed and symbols
-defined in the executable cannot be overridden by shared libraries.
+Create a position independent executable.  This is currently only
+supported on \s-1ELF\s0 platforms.  Position independent executables are
+relocated by the dynamic linker to the virtual address the \s-1OS\s0 chooses
+for them, which can vary between invocations.  They are marked \s-1ET_DYN\s0
+in the \s-1ELF\s0 file header, but differ from shared libraries in a number
+of ways.  In particular, defined symbols in a \s-1PIE\s0 by default can not
+be overridden by another object as they can be in a shared library.
 .IP "\fB\-no\-pie\fR" 4
 .IX Item "-no-pie"
 Create a position dependent executable.  This is the default.
@@ -2255,11 +2329,11 @@ of the input files.
 When the linker encounters such a dependency when doing a non-shared,
 non-relocatable link, it will automatically try to locate the required
 shared library and include it in the link, if it is not included
-explicitly.  In such a case, the \fB\-rpath\-link\fR option
-specifies the first set of directories to search.  The
-\&\fB\-rpath\-link\fR option may specify a sequence of directory names
-either by specifying a list of names separated by colons, or by
-appearing multiple times.
+explicitly.  In such a case, several directories are searched as
+described below.  The \fB\-rpath\-link\fR option specifies the first
+set of directories to search.  This option may specify a sequence of
+directory names either by providing a list of names separated by
+colons, or by appearing multiple times.
 .Sp
 The tokens \fI\f(CI$ORIGIN\fI\fR and \fI\f(CI$LIB\fI\fR can appear in these search
 directories.  They will be replaced by the full path to the directory
@@ -2271,13 +2345,18 @@ The alternative form of these tokens \- \fI${\s-1ORIGIN\s0}\fR and
 \&\fI${\s-1LIB\s0}\fR can also be used.  The token \fI\f(CI$PLATFORM\fI\fR is not
 supported.
 .Sp
-This option should be used with caution as it overrides the search path
-that may have been hard compiled into a shared library. In such a case it
-is possible to use unintentionally a different search path than the
-runtime linker would do.
+The \fB\-\-rpath\-link\fR option should be used with caution as it
+overrides the search path that may have been hard compiled into a
+shared library.  In such a case it is possible to unintentionally use
+a different search path than the runtime linker would have used.
 .Sp
-The linker uses the following search paths to locate required shared
-libraries:
+When additional shared libraries are required, the linker will search
+directories in the order listed below in order to find them.  Note
+however that this only applies to additional libraries needed to
+satisfy already included shared libraries.  It does \fInot\fR
+apply to libraries that are included via the \fB\-l\fR command line
+option.  Searches for \fB\-l\fR libraries are only conducted in
+directories specified by the \fB\-L\fR option.
 .RS 4
 .IP "1." 4
 Any directories specified by \fB\-rpath\-link\fR options.
@@ -2341,6 +2420,49 @@ of the first.
 If the required shared library is not found, the linker will issue a
 warning and continue with the link.
 .RE
+.IP "\fB\-\-section\-ordering\-file=\fR\fIscript\fR" 4
+.IX Item "--section-ordering-file=script"
+This option is used to augment the current linker script with
+additional mapping of input sections to output sections.  This file
+must use the same syntax for \f(CW\*(C`SECTIONS\*(C'\fR as is used in normal
+linker scripts, but it should not do anything other than place input
+sections into output sections. \f(CW@pxref\fR{\s-1SECTIONS\s0}
+.Sp
+A second constraint on the section ordering script is that it can only
+reference output sections that are already defined by whichever linker
+script is currently in use.  (Ie the default linker script or a script
+specified on the command line).  The benefit of the section ordering
+script however is that the input sections are mapped to the start of
+the output sections, so that they can ensure the ordering of sections
+in the output section.  For example, imagine that the default linker
+script looks like this:
+.Sp
+.Vb 4
+\&        SECTIONS {
+\&          .text : { *(.text.hot) ; *(.text .text.*) }
+\&          .data : { *(.data.big) ; *(.data .data.*) }
+\&          }
+.Ve
+.Sp
+Then if a section ordering file like this is used:
+.Sp
+.Vb 2
+\&          .text : { *(.text.first) ; *(.text.z*) }
+\&          .data : { foo.o(.data.first) ; *(.data.small) }
+.Ve
+.Sp
+This would be equivalent to a linker script like this:
+.Sp
+.Vb 4
+\&        SECTIONS {
+\&          .text : { *(.text.first) ; *(.text.z*) ; *(.text.hot) ; *(.text .text.*) }
+\&          .data : { foo.o(.data.first) ; *(.data.small) ; *(.data.big) ; *(.data .data.*) }
+\&          }
+.Ve
+.Sp
+The advantage of the section ordering file is that it can be used to
+order those sections that matter to the user without having to worry
+about any other sections, or memory regions, or anything else.
 .IP "\fB\-shared\fR" 4
 .IX Item "-shared"
 .PD 0
@@ -2444,7 +2566,10 @@ Same as \fB\-\-section\-start\fR, with \f(CW\*(C`.bss\*(C'\fR, \f(CW\*(C`.data\*
 .IP "\fB\-Ttext\-segment=\fR\fIorg\fR" 4
 .IX Item "-Ttext-segment=org"
 When creating an \s-1ELF\s0 executable, it will set the address of the first
-byte of the text segment.
+byte of the text segment.  Note that when \fB\-pie\fR is used with
+\&\fB\-Ttext\-segment=\fR\fIorg\fR, the output executable is marked
+\&\s-1ET_EXEC\s0 so that the address of the first byte of the text segment will
+be guaranteed to be \fIorg\fR at run time.
 .IP "\fB\-Trodata\-segment=\fR\fIorg\fR" 4
 .IX Item "-Trodata-segment=org"
 When creating an \s-1ELF\s0 executable or shared object for a target where

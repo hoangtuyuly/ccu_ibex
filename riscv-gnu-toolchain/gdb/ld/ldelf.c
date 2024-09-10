@@ -1,5 +1,5 @@
 /* ELF emulation code for targets using elf.em.
-   Copyright (C) 1991-2023 Free Software Foundation, Inc.
+   Copyright (C) 1991-2024 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -74,7 +74,7 @@ ldelf_after_parse (void)
       && link_info.nointerp)
     {
       if (link_info.dynamic_undefined_weak > 0)
-	einfo (_("%P: warning: -z dynamic-undefined-weak ignored\n"));
+	queue_unknown_cmdline_warning ("-z dynamic-undefined-weak");
       link_info.dynamic_undefined_weak = 0;
     }
 
@@ -2244,6 +2244,7 @@ ldelf_place_orphan (asection *s, const char *secname, int constraint)
 	   set, then it has been created by the linker, possibly as a
 	   result of a --section-start command line switch.  */
 	if (os->bfd_section != NULL
+	    && !bfd_is_abs_section (os->bfd_section)
 	    && (os->bfd_section->flags == 0
 		|| (((s->flags ^ os->bfd_section->flags)
 		     & (SEC_LOAD | SEC_ALLOC)) == 0
