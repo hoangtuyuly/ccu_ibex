@@ -1,34 +1,39 @@
-This project focuses on designing and integrating a Custom Function Unit (CFU) into the Ibex core, a RISC-V-based processor, to optimize TensorFlow Lite operations for edge AI applications. The CFU is tailored to enhance performance for machine learning workloads by enabling SIMD (Single Instruction, Multiple Data) multiply-and-accumulate operations, critical for efficient deep learning inference on resource-constrained devices.
+# Custom Function Unit (CFU) Integration with Ibex Core
 
-Pull the project repository git clone https://github.com/hoangtuyuly/ccu_ibex
+This project focuses on designing and integrating a Custom Function Unit (CFU) into the Ibex core, a RISC-V-based processor, to optimize TensorFlow Lite operations for edge AI applications. The CFU enhances performance for machine learning workloads by enabling SIMD (Single Instruction, Multiple Data) multiply-and-accumulate operations, which are critical for efficient deep learning inference on resource-constrained devices.
 
-Modify the RISC-V Toolchain Clone the RISC-V GNU/GCC toolchain along with its submodules: 
+## Clone the Project Repository
+```
+git clone https://github.com/hoangtuyuly/ccu_ibex
+```
+
+## Set up RISC-V toolchain with custom instruction
+### 1. Clone the RISC-V GNU/GCC toolchain along with its submodules: 
 ```
 git clone https://github.com/riscv/riscv-gnu-toolchain.git cd riscv-gnu-toolchain
 ```
 
-Install the prerequisites (for Ubuntu): 
+### 2. Install the prerequisites (for Ubuntu): 
 ```
 sudo apt-get install autoconf automake autotools-dev curl python3 libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev libexpat-dev
 ```
 
-## Set up RISC-V toolchain with custom instruction
-### 1. Build the RISC-V GNU/GCC for RISC-V 32IMC: 
+### 3. Build the RISC-V GNU/GCC for RISC-V 32IMC: 
 ```
 export RISCV=$HOME/riscv32 export PATH=$PATH:$RISCV/bin ./configure --prefix=$RISCV --with-arch=rv32imc_zicsr_zifencei --with-abi=ilp32 --enable-multilib make
 ```
 
-### 2. Clone the RISC-V Opcodes Tool 
+### 4. Clone the RISC-V Opcodes Tool 
 ```
 git clone https://github.com/riscv/riscv-opcodes cd riscv-opcodes
 ```
 
-### 3. Define Your Custom Instruction Add the new instruction (ccu) to one of the opcodes-*.h files. Example: 
+### 5. Define Your Custom Instruction Add the new instruction (ccu) to one of the opcodes-*.h files. Example: 
 ```
 ccu rd rs1 rs2 31..25=0b1010100 14..12=0b000 6..2=0b01100 1..0=0b11
 ```
 
-### 4. Generate the MATCH and MASK values: 
+### 6. Generate the MATCH and MASK values: 
 ```
 cat | ./parse-opcodes -c > instructionInfo.h
 ```
@@ -37,7 +42,7 @@ Note Example output in `instructionInfo.h`:
 #define MATCH_CCU 0x12345678 // Example #define MASK_CCU 0xfe00707f DECLARE_INSN(ccu, MATCH_CCU, MASK_CCU)
 ```
 
-### 5. Update riscv-binutils-gdb/include/opcode/riscv-opc.h: Add the #define and DECLARE_INSN entries for your custom instruction. Update riscv-binutils-gdb/opcodes/riscv-opc.c: Add the custom instruction: 
+### 7. Update riscv-binutils-gdb/include/opcode/riscv-opc.h: Add the #define and DECLARE_INSN entries for your custom instruction. Update riscv-binutils-gdb/opcodes/riscv-opc.c: Add the custom instruction: 
 ```
 {"ccu", 0, "d,s,t", MATCH_CCU, MASK_CCU, match_opcode, 0 }, Rebuild the GNU/GCC toolchain: cd riscv-gnu-toolchain make
 ```
@@ -95,5 +100,5 @@ For more detailed information, refer to:
 - [lowRISC IBEX](https://github.com/lowRISC/ibex/tree/master/examples/simple_system)
 - [TFLite Micro Person Detection Example](https://github.com/tensorflow/tflite-micro/tree/main/tensorflow/lite/micro/examples/person_detection)
 - [Adding Custom Instructions in the RISC-V ISA](https://hsandid.github.io/posts/risc-v-custom-instruction/)
-
+- [Custom Function Units](https://cfu-playground.readthedocs.io/en/latest/crash-course/riscv.html)
 
