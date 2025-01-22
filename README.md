@@ -1,4 +1,4 @@
-# Custom Function Unit (CFU) Integration with Ibex Core
+# Custom Compute Unit (CCU) Integration with Ibex Core
 
 This project focuses on designing and integrating a Custom Function Unit (CFU) into the Ibex core, a RISC-V-based processor, to optimize TensorFlow Lite operations for edge AI applications. The CFU enhances performance for machine learning workloads by enabling SIMD (Single Instruction, Multiple Data) multiply-and-accumulate operations, which are critical for efficient deep learning inference on resource-constrained devices.
 
