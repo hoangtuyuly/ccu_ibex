@@ -20,7 +20,10 @@ sudo apt-get install autoconf automake autotools-dev curl python3 libmpc-dev lib
 
 ### 3. Build the RISC-V GNU/GCC for RISC-V 32IMC: 
 ```
-export RISCV=$HOME/riscv32 export PATH=$PATH:$RISCV/bin ./configure --prefix=$RISCV --with-arch=rv32imc_zicsr_zifencei --with-abi=ilp32 --enable-multilib make
+export RISCV=$HOME/riscv32
+export PATH=$PATH:$RISCV/bin
+./configure --prefix=$RISCV --with-arch=rv32imc_zicsr_zifencei --with-abi=ilp32 --enable-multilib
+make
 ```
 
 ### 4. Clone the RISC-V Opcodes Tool 
@@ -46,6 +49,7 @@ Note Example output in `instructionInfo.h`:
 ```
 {"ccu", 0, "d,s,t", MATCH_CCU, MASK_CCU, match_opcode, 0 }, Rebuild the GNU/GCC toolchain: cd riscv-gnu-toolchain make
 ```
+### 8. Rebuild RISC-V toolchain
 
 ## Run tensorflow lite person detection model cd tflite-micro
 
